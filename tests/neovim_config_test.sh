@@ -3,6 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
+lazy_path="${NVIM_LAZY_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy/lazy.nvim}"
 export HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/config" XDG_DATA_HOME="$tmp/data" XDG_STATE_HOME="$tmp/state"
 export DOTFILES_DIR="$ROOT" NVIM_CONFIG_CHECKOUT_DIR="$tmp/checkout"
 mkdir -p "$HOME" "$tmp/upstream/lua/config"
@@ -49,7 +50,7 @@ if DOTFILES_RELINK_ONLY=1 setup_neovim_config; then
 fi
 rmdir "$NVIM_CONFIG_CHECKOUT_DIR.install.lock"
 if command -v nvim >/dev/null; then
-    nvim --headless -u NONE -i NONE -l "$ROOT/tests/neovim_config_test.lua" "$ROOT/neovim/bootstrap.lua"
+    nvim --headless -u NONE -i NONE -l "$ROOT/tests/neovim_config_test.lua" "$ROOT/neovim/bootstrap.lua" "$lazy_path"
 else
     printf 'SKIP: Neovim Lua consumer check (nvim unavailable)\n'
 fi

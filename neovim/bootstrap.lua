@@ -19,11 +19,19 @@ return {
         zls = { "zls" },
         bashls = { "bash-language-server", "start" },
       }
-      opts.servers = { ["*"] = (opts.servers or {})["*"] }
-      opts.setup = {}
+      local existing = opts.servers or {}
+      opts.servers = { ["*"] = existing["*"] }
+      opts.setup = opts.setup or {}
+      -- LazyVim extras defer these servers to plugins disabled by this overlay.
+      opts.setup.ts_ls = function() return false end
+      opts.setup.rust_analyzer = function() return false end
       for server, cmd in pairs(commands) do
         if vim.fn.executable(cmd[1]) == 1 then
-          opts.servers[server] = { mason = false, cmd = cmd }
+          local settings = type(existing[server]) == "table" and existing[server] or {}
+          settings.enabled = true
+          settings.mason = false
+          settings.cmd = cmd
+          opts.servers[server] = settings
         end
       end
     end,
