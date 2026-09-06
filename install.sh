@@ -29,7 +29,7 @@ case "${1:-install}" in
     install|bare|preflight|bare-preflight|doctor|bare-doctor|link|codex-link|--help|-h)
         [[ $# -le 1 ]] || { printf 'This command accepts no additional arguments\n' >&2; exit 2; }
         ;;
-    languages)
+    --languages|-l)
         shift
         install_bare_languages "$@"
         exit $?
@@ -45,7 +45,8 @@ case "${1:-install}" in
     codex-link) link_codex_assets ;;
     --help|-h)
         printf '%s\n' 'Usage: ./install.sh [install|preflight|doctor|link|codex-link]' \
-            '       ./install.sh languages c cpp rust go python typescript bash elixir zig' \
+            '       ./install.sh (--languages|-l) LANGUAGE...' \
+            'Languages: c cpp rust go python typescript bash elixir zig (requires base install).' \
             'Default: user-local terminal tools, Neovim, Pi, Codex, Herdr.' \
             'Language toolchains and LSPs are opt-in; Node and Python are tool dependencies.'
         ;;

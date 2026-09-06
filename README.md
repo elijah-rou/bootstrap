@@ -48,12 +48,12 @@ launcher is retained for hosts where Headroom is installed separately.
 
 ## Add language toolchains
 
-After the base setup, select any combination:
+After the base setup, select any combination with `--languages` or `-l`:
 
 ```sh
-bash bootstrap.sh languages c
-bash bootstrap.sh languages cpp rust go
-bash bootstrap.sh languages elixir zig
+bash bootstrap.sh --languages c
+bash bootstrap.sh --languages cpp rust go
+bash bootstrap.sh -l elixir zig
 ```
 
 Each selection installs its language tools and matching LSP:

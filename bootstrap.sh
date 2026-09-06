@@ -9,15 +9,16 @@ command_name="${1:-install}"
 
 case "$command_name" in
     install|fetch|preflight|doctor|link|codex-link) [[ $# -le 1 ]] || { printf 'Unexpected arguments\n' >&2; exit 2; } ;;
-    languages)
-        [[ $# -gt 1 ]] || { printf 'Select toolchains: c cpp rust go\n' >&2; exit 2; }
+    --languages|-l)
+        [[ $# -gt 1 ]] || { printf 'Select languages: c cpp rust go python typescript bash elixir zig\n' >&2; exit 2; }
         for selection in "${@:2}"; do
             case "$selection" in c|cpp|rust|go|python|typescript|bash|elixir|zig) ;; *) printf 'Unknown toolchain: %s\n' "$selection" >&2; exit 2 ;; esac
         done
         ;;
     --help|-h)
         printf '%s\n' 'Usage: bash bootstrap.sh [install|fetch|preflight|doctor|link|codex-link]' \
-            '       bash bootstrap.sh languages c cpp rust go python typescript bash elixir zig' \
+            '       bash bootstrap.sh (--languages|-l) LANGUAGE...' \
+            'Languages: c cpp rust go python typescript bash elixir zig (requires base install).' \
             'Downloads a verified public snapshot; install is the default.'
         exit 0
         ;;

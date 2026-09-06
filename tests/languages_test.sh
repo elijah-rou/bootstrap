@@ -13,6 +13,13 @@ for arguments in '' 'unknown' 'rust --bad'; do
     if install_bare_languages $arguments; then exit 1; fi
     [[ ! -e "$DOTFILES_BARE_ROOT" ]]
 done
+for arguments in 'languages c' '--languages' '-l' '--languages rust unknown' '-l rust --bad' '--languages=rust'; do
+    status=0
+    # These fixed inputs exercise the executable parser, not just its helper.
+    # shellcheck disable=SC2086
+    bash "$ROOT_DIR/install.sh" $arguments || status=$?
+    [[ $status -eq 2 && ! -e "$DOTFILES_BARE_ROOT" ]]
+done
 if install_bare_languages c; then exit 1; fi
 [[ ! -e "$DOTFILES_BARE_ROOT" ]]
 mkdir -p "$DOTFILES_BARE_ROOT/bin" "$DOTFILES_BARE_ROOT/env/conda-meta"
@@ -22,6 +29,12 @@ printf '%s\n' "$@" > "$HOME/packages"
 exit "${MAMBA_STATUS:-0}"
 MAMBA
 chmod +x "$DOTFILES_BARE_ROOT/bin/micromamba"
+for flag in --languages -l; do
+    bash "$ROOT_DIR/install.sh" "$flag" c
+    grep -Fxq c-compiler "$HOME/packages"
+    grep -Fxq clang-tools "$HOME/packages"
+    [[ ! -d "$DOTFILES_BARE_ROOT/install.lock" ]]
+done
 install_bare_rust() { touch "$HOME/rust-installed"; }
 npm() { printf '%s\n' "$@" > "$HOME/npm-packages"; }
 go() { printf '%s\n' "$@" > "$HOME/go-args"; }
