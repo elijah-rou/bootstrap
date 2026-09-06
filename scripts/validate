@@ -24,15 +24,59 @@ for file in "${shell_files[@]}"; do bash -n "$file"; done
 for file in zshrc zshenv zprofile; do zsh -n "$file"; done
 shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"
 python3 - <<'PY'
-import json, pathlib, tomllib
+import json, pathlib, re, tomllib
 for path in pathlib.Path('.').rglob('*'):
     if '.git' in path.parts or not path.is_file():
         continue
     if path.suffix == '.json': json.loads(path.read_text())
     if path.suffix == '.toml': tomllib.loads(path.read_text())
-for name in pathlib.Path('codex/skills.txt').read_text().splitlines():
-    assert (pathlib.Path('pi/skills') / name / 'SKILL.md').is_file(), name
-print('PASS structured config and exported skill sources')
+root = pathlib.Path.cwd()
+settings = json.loads((root / "pi" / "settings.json").read_text(encoding="utf-8"))
+for package in settings.get("packages", []):
+    if package.startswith("npm:"):
+        assert re.fullmatch(r"npm:(?:@[^/@]+/)?[^@/]+@\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", package), f"mutable npm package: {package}"
+    elif package.startswith("git:"):
+        assert re.search(r"@[0-9a-f]{40}$", package), f"mutable git package: {package}"
+    else:
+        raise AssertionError(f"unsupported executable package source: {package}")
+
+skill_names = set()
+for path in sorted((root / "pi" / "skills").glob("*/SKILL.md")):
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    assert lines and lines[0] == "---", f"missing skill frontmatter: {path}"
+    try:
+        frontmatter_end = lines.index("---", 1)
+    except ValueError as error:
+        raise AssertionError(f"unterminated skill frontmatter: {path}") from error
+
+    fields = {}
+    for line in lines[1:frontmatter_end]:
+        if not line or line[0].isspace() or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        fields[key.strip()] = value.strip().strip('"\'')
+
+    name = fields.get("name", "")
+    description = fields.get("description", "")
+    assert re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name), f"invalid skill name: {path}"
+    assert len(name) <= 64, f"skill name exceeds 64 characters: {path}"
+    assert name == path.parent.name, f"skill name does not match directory: {path}"
+    assert name not in skill_names, f"duplicate skill name: {name}"
+    assert description, f"missing skill description: {path}"
+    assert len(description) <= 1024, f"skill description exceeds 1024 characters: {path}"
+    if "disable-model-invocation" in fields:
+        assert fields["disable-model-invocation"] in {"true", "false"}, f"invalid disable-model-invocation: {path}"
+
+    for reference in re.findall(r"`(references/[^`]+)`", text):
+        assert (path.parent / reference).is_file(), f"missing skill reference {reference}: {path}"
+    skill_names.add(name)
+
+codex_skills = (root / "codex/skills.txt").read_text(encoding="utf-8").splitlines()
+assert codex_skills, "empty Codex skill export manifest"
+assert len(codex_skills) == len(set(codex_skills)), "duplicate Codex skill export"
+assert set(codex_skills) <= skill_names, "Codex export names an unavailable skill"
+print("structured config and skill parsing passed")
 PY
 bash tests/bare_install_test.sh
 bash tests/languages_test.sh
@@ -40,6 +84,7 @@ bash tests/tools_test.sh
 bash tests/language_release_test.sh
 bash tests/neovim_config_test.sh
 python3 tests/configure_contract_test.py
+python3 tests/snapshot_upgrade_test.py
 bash tests/codex_link_test.sh
 bash tests/pi_package_test.sh
 python3 tests/codex_link_edges_test.py
