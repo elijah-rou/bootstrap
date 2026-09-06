@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+[[ $# -le 1 ]] || { printf 'Usage: %s [--runtime]\n' "$0" >&2; exit 2; }
+case "${1:-}" in
+    '') ;;
+    --runtime)
+        for variable in PI_BASH_OPERATIONS_TEST_RUNTIME_PATH PI_SKILLS_TEST_RUNTIME_PATH PI_FAST_RUNTIME_SOURCE PI_WEB_ACCESS_SSRF_MODULE PI_SUBAGENTS_TEST_RUNTIME_SOURCE; do
+            [[ -n "${!variable:-}" && -e "${!variable}" ]] || {
+                printf '%s must name an installed runtime path\n' "$variable" >&2; exit 2;
+            }
+        done
+        command -v bun >/dev/null || { printf 'Runtime checks require Bun\n' >&2; exit 2; }
+        command -v codex >/dev/null || { printf 'Runtime checks require Codex\n' >&2; exit 2; }
+        ;;
+    *) printf 'Usage: %s [--runtime]\n' "$0" >&2; exit 2 ;;
+esac
 git diff --check
 git diff --cached --check
 python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
-shell_files=(bootstrap.sh install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/neovim_config_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace)
+shell_files=(bootstrap.sh configure.sh install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/neovim_config_test.sh tests/codex_link_test.sh tests/pi_package_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
 for file in zshrc zshenv zprofile; do zsh -n "$file"; done
 shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"
@@ -25,8 +39,21 @@ bash tests/languages_test.sh
 bash tests/tools_test.sh
 bash tests/language_release_test.sh
 bash tests/neovim_config_test.sh
+python3 tests/configure_contract_test.py
+bash tests/codex_link_test.sh
+bash tests/pi_package_test.sh
+python3 tests/codex_link_edges_test.py
+python3 tests/control_loop_template_test.py
 python3 tests/bootstrap_test.py
 python3 tests/shell_open_test.py
 python3 tests/modelusage_test.py
 node --experimental-transform-types --test tests/lsp_test.mjs
+pi_tests=()
+while IFS= read -r -d '' pi_test; do
+    pi_tests+=("$pi_test")
+done < <(find pi/tests -maxdepth 1 -type f -name '*.test.mjs' -print0 | sort -z)
+node --test "${pi_tests[@]}"
+if [[ "${1:-}" == --runtime ]]; then
+    python3 tests/codex_runtime_test.py
+fi
 printf 'Validation passed.\n'
