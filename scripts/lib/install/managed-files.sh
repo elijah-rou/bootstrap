@@ -128,20 +128,34 @@ materialize_json_config() {
     local overlay_path="$2"
     local target_path="$3"
     local rendered_path
+    shift 3
 
     command -v python3 &>/dev/null || {
         warn "python3 is required to render JSON config: $target_path"
         return 1
     }
     rendered_path="$(mktemp)" || return 1
-    if ! python3 - "$base_path" "$overlay_path" "$rendered_path" <<'PY'
+    if ! python3 - "$base_path" "$overlay_path" "$rendered_path" "$@" <<'PY'
 import json
 import pathlib
 import sys
 
-base_path, overlay_path, output_path = map(pathlib.Path, sys.argv[1:])
-with base_path.open(encoding="utf-8") as source:
-    result = json.load(source)
+base_path, overlay_path, output_path, *additional_overlays = sys.argv[1:]
+
+
+def reject_constant(value):
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
+def read_config(path):
+    with pathlib.Path(path).open(encoding="utf-8") as source:
+        value = json.load(source, parse_constant=reject_constant)
+    if not isinstance(value, dict):
+        raise ValueError(f"Configuration must be a JSON object: {path}")
+    return value
+
+
+result = read_config(base_path)
 
 
 def merge(base, overlay):
@@ -152,10 +166,10 @@ def merge(base, overlay):
         return merged
     return overlay
 
-if overlay_path.is_file():
-    with overlay_path.open(encoding="utf-8") as source:
-        result = merge(result, json.load(source))
-with output_path.open("w", encoding="utf-8") as output:
+for path in [overlay_path, *additional_overlays]:
+    if path and pathlib.Path(path).exists():
+        result = merge(result, read_config(path))
+with pathlib.Path(output_path).open("w", encoding="utf-8") as output:
     json.dump(result, output, indent=2, sort_keys=True)
     output.write("\n")
 PY

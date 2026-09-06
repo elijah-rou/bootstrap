@@ -41,7 +41,7 @@ setup_neovim_config() (
     fi
 
     [[ -f "$checkout/init.lua" ]] || { warn "Neovim config is missing init.lua: $checkout"; return 1; }
-    if [[ -f "$checkout/lua/config/lazy.lua" ]]; then
+    if [[ "${BOOTSTRAP_WORKSTATION:-0}" != 1 && -f "$checkout/lua/config/lazy.lua" ]]; then
         local plugin="lua/plugins/zz-bootstrap-managed.lua" exclude tracked
         tracked="$(git -C "$checkout" ls-files -- "$plugin")" || return 1
         if [[ -n "$tracked" ]]; then
@@ -57,6 +57,9 @@ setup_neovim_config() (
         link_managed_file "$DOTFILES_DIR/neovim/bootstrap.lua" "$checkout/$plugin" \
             "${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap/neovim-backups" || return 1
     fi
+    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]]; then
+        remove_owned_link "$checkout/lua/plugins/zz-bootstrap-managed.lua" neovim/bootstrap.lua || return 1
+    fi
     if [[ "$(resolve_path "$checkout")" != "$(resolve_path "$target")" ]]; then
         link_managed_file "$checkout" "$target" || return 1
     fi
@@ -70,9 +73,6 @@ link_terminal_config() {
         [[ -f "$DOTFILES_DIR/$source" ]] || continue
         link_managed_file "$DOTFILES_DIR/$source" "$HOME/$target" || return 1
     done <<'LINKS'
-local/env.sh .config/dotfiles/env.sh
-local/gitconfig .gitconfig.local
-local/repos.conf .config/dotfiles/repos.conf
 zshenv .zshenv
 zshrc .zshrc
 zprofile .zprofile
@@ -80,10 +80,15 @@ bashrc .bashrc
 starship.toml .config/starship.toml
 tmux.conf .tmux.conf
 herdr/config.toml .config/herdr/config.toml
-gitconfig .gitconfig
 gitignore_global .config/git/ignore
 ripgrep/config .config/ripgrep/config
 LINKS
+    configure_terminal_overlays || return 1
+    link_managed_file "$DOTFILES_DIR/scripts/modelusage" "$HOME/.local/bin/modelusage" || return 1
+    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]]; then
+        remove_owned_link "$HOME/.config/dotfiles/bare-env.sh" scripts/bare-env.sh || return 1
+        remove_owned_link "$HOME/.local/bin/dev-shell" scripts/dev-shell || return 1
+    fi
     info "Linked terminal configuration"
 }
 
@@ -116,58 +121,18 @@ link_pi_config() {
         link_managed_file "$DOTFILES_DIR/pi/profile-router.json" "${XDG_CONFIG_HOME:-$HOME/.config}/pi/profile-router.json" || return 1
         link_managed_file "$DOTFILES_DIR/pi/strategy-router.json" "${XDG_CONFIG_HOME:-$HOME/.config}/pi/strategy-router.json" || return 1
 
-        local pi_settings_path="$HOME/.pi/agent/settings.json"
-        local pi_auth_path="$HOME/.pi/agent/auth.json"
-
-        materialize_json_config \
-            "$DOTFILES_DIR/pi/settings.json" \
-            "$DOTFILES_DIR/local/pi-settings.json" \
-            "$pi_settings_path" || return 1
-
-        if [[ "${DOTFILES_RELINK_ONLY:-0}" != "1" && "${DOTFILES_SKIP_AUTH_INSTALL:-0}" != "1" ]]; then
-            if [[ -L "$pi_auth_path" && "$(readlink "$pi_auth_path")" == "$DOTFILES_DIR/pi/auth.json" ]]; then
-                if [[ -f "$DOTFILES_DIR/pi/auth.json" ]]; then
-                    install_managed_file "$DOTFILES_DIR/pi/auth.json" "$pi_auth_path" 0600
-                    info "Migrated existing auth symlink to local file"
-                else
-                    rm -f "$pi_auth_path"
-                fi
-            fi
-            if [[ ! -f "$pi_auth_path" ]]; then
-                if [[ -f "$DOTFILES_DIR/secrets/pi-auth.json" ]]; then
-                    install_managed_file "$DOTFILES_DIR/secrets/pi-auth.json" "$pi_auth_path" 0600
-                    info "Installed Pi auth tokens"
-                else
-                    warn "No secrets/pi-auth.json found; skip Pi auth install"
-                fi
-            fi
-        fi
-
-        if [[ -f "$DOTFILES_DIR/pi/models.json" ]]; then
-            link_managed_file "$DOTFILES_DIR/pi/models.json" "$HOME/.pi/agent/models.json" || return 1
-        fi
+        materialize_pi_config settings || return 1
+        materialize_pi_config models || return 1
         link_managed_file "$DOTFILES_DIR/pi/AGENTS.md" "$HOME/.pi/agent/AGENTS.md" || return 1
-        local retired_pi_presets_link="$HOME/.pi/agent/presets.json"
-        if [[ -L "$retired_pi_presets_link" && "$(readlink "$retired_pi_presets_link")" == "$DOTFILES_DIR/pi/presets.json" ]]; then
-            rm -f "$retired_pi_presets_link"
-        fi
-        if [[ -L "$HOME/.pi/agent/interactive-shell.json" ]]; then
-            rm -f "$HOME/.pi/agent/interactive-shell.json"
-        fi
+        remove_owned_link "$HOME/.pi/agent/presets.json" pi/presets.json || return 1
+        remove_owned_link "$HOME/.pi/agent/interactive-shell.json" pi/interactive-shell.json || return 1
         link_managed_file "$DOTFILES_DIR/pi/WORKTREE_STREAMS.md" "$HOME/.pi/agent/WORKTREE_STREAMS.md" || return 1
         mkdir -p "$HOME/.pi/agent/extensions/subagent" || return 1
         link_managed_file "$DOTFILES_DIR/pi/subagent-config.json" "$HOME/.pi/agent/extensions/subagent/config.json" || return 1
 
-        # Custom extensions only (package extensions are managed by `pi install`).
-        # Remove retired router components only when they are still our managed links.
-        local legacy_route_context_link="$HOME/.pi/agent/components/legacy-route-context.ts"
-        if [[ -L "$legacy_route_context_link" && "$(readlink "$legacy_route_context_link")" == "$DOTFILES_DIR/pi/components/legacy-route-context.ts" ]]; then
-            rm -f "$legacy_route_context_link"
-        fi
-        local legacy_router_link="$HOME/.pi/agent/components/auto-router"
-        if [[ -L "$legacy_router_link" && "$(readlink "$legacy_router_link")" == "$DOTFILES_DIR/pi/components/auto-router" ]]; then
-            rm -f "$legacy_router_link"
-        fi
+        remove_owned_link "$HOME/.pi/agent/components/legacy-route-context.ts" pi/components/legacy-route-context.ts || return 1
+        remove_owned_link "$HOME/.pi/agent/components/auto-router" pi/components/auto-router || return 1
+        cleanup_legacy_pi_links || return 1
         sync_pi_links "$DOTFILES_DIR/pi/extensions" "$HOME/.pi/agent/extensions" "*.ts" || return 1
         sync_pi_links "$DOTFILES_DIR/pi/extensions" "$HOME/.pi/agent/extensions" "*.json" || return 1
         sync_pi_links "$DOTFILES_DIR/pi/agents" "$HOME/.pi/agent/agents" "*.md" || return 1
@@ -216,4 +181,102 @@ PYTHON
         fi
     done <<< "$packages"
     return "$failed"
+}
+
+remove_owned_link() {
+    local target="$1" relative="$2" current
+    [[ -L "$target" ]] || return 0
+    current="$(readlink "$target")" || return 1
+    if [[ "$current" == "$DOTFILES_DIR/$relative" ||
+          ( -n "${BOOTSTRAP_LEGACY_ROOT:-}" && "$current" == "$BOOTSTRAP_LEGACY_ROOT/$relative" ) ]]; then
+        rm -f "$target" || return 1
+    fi
+    return 0
+}
+
+cleanup_legacy_pi_links() (
+    [[ -n "${BOOTSTRAP_LEGACY_ROOT:-}" ]] || return 0
+    local directory pattern link current relative
+    shopt -s nullglob
+    while read -r directory pattern; do
+        # shellcheck disable=SC2231
+        for link in "$HOME/.pi/agent/$directory"/$pattern; do
+            [[ -L "$link" ]] || continue
+            current="$(readlink "$link")" || return 1
+            case "$current" in
+                "$BOOTSTRAP_LEGACY_ROOT/pi/$directory/$(basename "$link")")
+                    relative="${current#"$BOOTSTRAP_LEGACY_ROOT/"}"
+                    if [[ ! -e "$DOTFILES_DIR/$relative" ]]; then
+                        rm -f "$link" || return 1
+                    fi
+                    ;;
+            esac
+        done
+    done <<'LINKS'
+extensions *.ts
+extensions *.json
+agents *.md
+prompts *.md
+skills *
+themes *.json
+LINKS
+)
+
+materialize_pi_config() {
+    local name="$1" directory
+    local overlays=("$DOTFILES_DIR/local/pi-$name.json")
+    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]]; then
+        overlays=()
+        for directory in "${BOOTSTRAP_OVERLAYS[@]}"; do
+            overlays+=("$directory/pi-$name.json")
+        done
+    fi
+    materialize_json_config "$DOTFILES_DIR/pi/$name.json" "" "$HOME/.pi/agent/$name.json" "${overlays[@]}" || return 1
+}
+
+configure_terminal_overlays() (
+    local rendered directory source repos=''
+    local overlays=("$DOTFILES_DIR/local")
+    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]]; then
+        overlays=("${BOOTSTRAP_OVERLAYS[@]}")
+    fi
+    rendered="$(mktemp -d)" || return 1
+    trap 'rm -rf "$rendered"' EXIT
+    python3 - "$DOTFILES_DIR/gitconfig" "$rendered" "${overlays[@]}" <<'PYTHON' || return 1
+import json
+import pathlib
+import shlex
+import sys
+
+base, rendered, *directories = sys.argv[1:]
+output = pathlib.Path(rendered)
+paths = [pathlib.Path(directory) for directory in directories]
+git = [pathlib.Path(base), *(path / 'gitconfig' for path in paths if (path / 'gitconfig').is_file())]
+# Git's include values use double-quoted escapes, while shell hooks use shell quoting.
+(output / 'gitconfig').write_text(''.join('[include]\n    path = ' + json.dumps(str(path), ensure_ascii=False) + '\n' for path in git))
+for name, filename in [('env.sh', 'env.sh'), ('zshenv', 'workstation.zsh')]:
+    content = '# Generated by bootstrap configure; edit the overlay sources.\n'
+    for directory in paths:
+        path = directory / name
+        if path.is_file():
+            quoted = shlex.quote(str(path))
+            content += f'[ ! -f {quoted} ] || . {quoted}\n'
+    (output / filename).write_text(content)
+PYTHON
+    install_managed_file "$rendered/gitconfig" "$HOME/.gitconfig" 0644 || return 1
+    install_managed_file "$rendered/env.sh" "$HOME/.config/dotfiles/env.sh" 0644 || return 1
+    install_managed_file "$rendered/workstation.zsh" "$HOME/.config/dotfiles/workstation.zsh" 0644 || return 1
+    for directory in "${overlays[@]}"; do
+        source="$directory/repos.conf"
+        [[ ! -f "$source" ]] || repos="$source"
+    done
+    if [[ -n "$repos" ]]; then
+        link_managed_file "$repos" "$HOME/.config/dotfiles/repos.conf" || return 1
+    fi
+)
+
+link_pi_launchers() {
+    link_managed_file "$DOTFILES_DIR/scripts/pi-workspace" "$HOME/.local/bin/pi-workspace" || return 1
+    link_managed_file "$DOTFILES_DIR/scripts/pi-workspace" "$HOME/.local/bin/piw" || return 1
+    link_pi_headroom || return 1
 }

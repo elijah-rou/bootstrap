@@ -128,6 +128,9 @@ link_codex_skill() {
             if [[ "$(resolve_path "$current")" == "$(resolve_path "$source")" ]]; then
                 continue
             fi
+            if [[ -n "${BOOTSTRAP_LEGACY_ROOT:-}" && "$(readlink "$current")" == "$BOOTSTRAP_LEGACY_ROOT/pi/skills/$name" ]]; then
+                continue
+            fi
             if [[ "$name" == omarchy && "$(readlink "$current")" == /usr/share/omarchy/default/agents/skills/omarchy ]]; then
                 continue
             fi
@@ -172,6 +175,7 @@ link_codex_assets() {
     if [[ -s "$codex_home/AGENTS.override.md" ]]; then
         warn "Codex will load $codex_home/AGENTS.override.md instead of the linked AGENTS.md"
     fi
+    cleanup_legacy_codex_skills || return 1
     for source in "${sources[@]}"; do
         link_codex_skill "$source" || return 1
     done
@@ -268,3 +272,21 @@ check_pi_subagents_revision() {
     fi
     [[ $failed -eq 0 ]]
 }
+
+cleanup_legacy_codex_skills() (
+    [[ -n "${BOOTSTRAP_LEGACY_ROOT:-}" ]] || return 0
+    local root link current relative
+    shopt -s nullglob
+    for root in "$HOME/.agents/skills" "${CODEX_HOME:-$HOME/.codex}/skills"; do
+        for link in "$root"/*; do
+            [[ -L "$link" ]] || continue
+            current="$(readlink "$link")" || return 1
+            case "$current" in
+                "$BOOTSTRAP_LEGACY_ROOT/pi/skills/$(basename "$link")")
+                    relative="${current#"$BOOTSTRAP_LEGACY_ROOT/"}"
+                    [[ -f "$DOTFILES_DIR/$relative/SKILL.md" ]] || rm -f "$link" || return 1
+                    ;;
+            esac
+        done
+    done
+)

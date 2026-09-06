@@ -46,6 +46,9 @@ export RIPGREP_CONFIG_PATH="$HOME/.config/ripgrep/config"
 export PI_CURSOR_SETTING_SOURCES="${PI_CURSOR_SETTING_SOURCES:-none}"
 export PI_CURSOR_EXPOSE_BUILTIN_TOOLS="${PI_CURSOR_EXPOSE_BUILTIN_TOOLS:-1}"
 
+# Workstation additions retain this shared shell baseline.
+[[ -f "$HOME/.config/dotfiles/workstation.zsh" ]] && source "$HOME/.config/dotfiles/workstation.zsh"
+
 # Machine-specific overrides (not tracked in git)
 [[ -f ~/.zshenv.local ]] && source ~/.zshenv.local
 

@@ -5,10 +5,8 @@ link_bare_config() {
     link_terminal_config || return 1
     link_managed_file "$DOTFILES_DIR/scripts/bare-env.sh" "$HOME/.config/dotfiles/bare-env.sh" || return 1
     link_managed_file "$DOTFILES_DIR/scripts/dev-shell" "$HOME/.local/bin/dev-shell" || return 1
-    DOTFILES_SKIP_AUTH_INSTALL=1 link_pi_config || return 1
-    link_managed_file "$DOTFILES_DIR/scripts/pi-workspace" "$HOME/.local/bin/pi-workspace" || return 1
-    link_managed_file "$DOTFILES_DIR/scripts/pi-workspace" "$HOME/.local/bin/piw" || return 1
-    link_pi_headroom || return 1
+    link_pi_config || return 1
+    link_pi_launchers || return 1
 }
 
 link_bare_codex_config() {
