@@ -10,7 +10,7 @@ source "$ROOT_DIR/scripts/bare-env.sh"
 for arguments in '' 'unknown' 'rust --bad'; do
     # These are fixed test inputs, intentionally split into argv.
     # shellcheck disable=SC2086
-    if install_bare_languages $arguments; then exit 1; fi
+    if install_bare_optional languages $arguments; then exit 1; fi
     [[ ! -e "$DOTFILES_BARE_ROOT" ]]
 done
 for arguments in 'languages c' '--languages' '-l' '--languages rust unknown' '-l rust --bad' '--languages=rust'; do
@@ -20,7 +20,7 @@ for arguments in 'languages c' '--languages' '-l' '--languages rust unknown' '-l
     bash "$ROOT_DIR/install.sh" $arguments || status=$?
     [[ $status -eq 2 && ! -e "$DOTFILES_BARE_ROOT" ]]
 done
-if install_bare_languages c; then exit 1; fi
+if install_bare_optional languages c; then exit 1; fi
 [[ ! -e "$DOTFILES_BARE_ROOT" ]]
 mkdir -p "$DOTFILES_BARE_ROOT/bin" "$DOTFILES_BARE_ROOT/env/conda-meta"
 cat > "$DOTFILES_BARE_ROOT/bin/micromamba" <<'MAMBA'
@@ -42,7 +42,7 @@ install_bare_elixir_ls() { touch "$HOME/elixir-ls-installed"; }
 install_bare_zls() { touch "$HOME/zls-installed"; }
 for selection in c cpp go python typescript bash elixir zig; do
     rm -f "$HOME/npm-packages" "$HOME/packages" "$HOME/go-args"
-    install_bare_languages "$selection"
+    install_bare_optional languages "$selection"
     [[ ! -e "$HOME/rust-installed" ]]
     [[ ! -d "$DOTFILES_BARE_ROOT/install.lock" ]]
     case "$selection" in
@@ -61,22 +61,22 @@ for selection in c cpp go python typescript bash elixir zig; do
         go) grep -Fxq golang.org/x/tools/gopls@v0.23.0 "$HOME/go-args" ;;
         python) grep -Fxq basedpyright "$HOME/npm-packages" ;;
         bash) grep -Fxq bash-language-server "$HOME/npm-packages" ;;
-        elixir) [[ -f "$HOME/elixir-ls-installed" ]]; grep -Fxq erlang=29.0.6 "$HOME/packages" ;;
+        elixir) [[ -f "$HOME/elixir-ls-installed" ]]; grep -Fxq erlang=29.0.6 "$HOME/packages"; grep -Fxq unzip "$HOME/packages" ;;
         zig) [[ -f "$HOME/zls-installed" ]] ;;
     esac
 done
-install_bare_languages rust
+install_bare_optional languages rust
 [[ -e "$HOME/rust-installed" ]]
 grep -Fxq c-compiler "$HOME/packages"
 rm "$HOME/rust-installed"
 MAMBA_STATUS=17
 export MAMBA_STATUS
-if install_bare_languages rust; then exit 1; fi
+if install_bare_optional languages rust; then exit 1; fi
 [[ ! -e "$HOME/rust-installed" && ! -d "$DOTFILES_BARE_ROOT/install.lock" ]]
 unset MAMBA_STATUS
-install_bare_languages c cpp go
+install_bare_optional languages c cpp go
 mkdir "$DOTFILES_BARE_ROOT/install.lock"
-if install_bare_languages go; then exit 1; fi
+if install_bare_optional languages go; then exit 1; fi
 [[ -d "$DOTFILES_BARE_ROOT/install.lock" ]]
 rmdir "$DOTFILES_BARE_ROOT/install.lock"
 if grep -Eq '^(c-compiler|cxx-compiler|rust|rustup|cargo|go|elixir|erlang|zig|rust-analyzer|uv|ruff|shellcheck)(=|$)' "$ROOT_DIR/packages/bare.txt"; then exit 1; fi

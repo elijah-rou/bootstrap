@@ -9,6 +9,9 @@ link_bare_config() {
     link_managed_file "$DOTFILES_DIR/scripts/pi-workspace" "$HOME/.local/bin/pi-workspace" || return 1
     link_managed_file "$DOTFILES_DIR/scripts/pi-workspace" "$HOME/.local/bin/piw" || return 1
     link_pi_headroom || return 1
+}
+
+link_bare_codex_config() {
     link_codex_assets || return 1
     local codex_home="${CODEX_HOME:-$HOME/.codex}"
     if [[ ! -e "$codex_home/config.toml" && ! -L "$codex_home/config.toml" ]]; then
@@ -102,7 +105,7 @@ bare_doctor() (
         return 1
     fi
     for command in git delta gh ssh zsh tmux nvim rg fzf bat eza jq \
-        python3 node npm bun pi codex herdr; do
+        python3 node npm bun pi herdr; do
         if command -v "$command" >/dev/null 2>&1; then
             info "$command: $(command -v "$command")"
         else
@@ -144,7 +147,7 @@ install_bare() (
     install_bare_micromamba "$(bare_platform)" || return 1
     install_bare_environment || return 1
     hash -r
-    npm install --global "$PI_CLI_PACKAGE@$PI_CLI_VERSION" @openai/codex || return 1
+    npm install --global "$PI_CLI_PACKAGE@$PI_CLI_VERSION" || return 1
     [[ "$(pi --version)" == "$PI_CLI_VERSION" ]] || return 1
     HERDR_INSTALL_DIR="$DOTFILES_BARE_ROOT/bin" install_herdr || return 1
     link_bare_config || return 1
@@ -217,27 +220,35 @@ install_bare_zls() {
     link_managed_file "$destination/zls" "$DOTFILES_BARE_ROOT/bin/zls"
 }
 
-install_bare_languages() (
-    [[ $# -gt 0 ]] || { warn 'Select one or more languages: c cpp rust go python typescript bash elixir zig'; return 2; }
-    local language
+install_bare_optional() (
+    local group="${1:-}" selection choices
+    case "$group" in
+        languages) choices='c cpp rust go python typescript bash elixir zig' ;;
+        tools) choices='codex just wget unzip' ;;
+        *) warn "Unknown optional group: $group"; return 2 ;;
+    esac
+    shift
+    [[ $# -gt 0 ]] || { warn "Select one or more $group: $choices"; return 2; }
     local packages=() npm_packages=()
-    for language in "$@"; do
-        case "$language" in
-            c) packages+=(c-compiler clang-tools make pkg-config) ;;
-            cpp) packages+=(cxx-compiler clang-tools make pkg-config) ;;
-            rust) packages+=(c-compiler make pkg-config) ;;
-            go) packages+=(go) ;;
-            python) packages+=(uv ruff); npm_packages+=(basedpyright) ;;
-            typescript) npm_packages+=(typescript@6 typescript-language-server@6) ;;
-            bash) packages+=(shellcheck); npm_packages+=(bash-language-server) ;;
-            elixir) packages+=(elixir=1.20.4 erlang=29.0.6) ;;
-            zig) packages+=(zig=0.16.0) ;;
-            *) warn "Unknown toolchain: $language (choose c, cpp, rust, go, python, typescript, bash, elixir, zig)"; return 2 ;;
+    for selection in "$@"; do
+        case "$group/$selection" in
+            languages/c) packages+=(c-compiler clang-tools make pkg-config) ;;
+            languages/cpp) packages+=(cxx-compiler clang-tools make pkg-config) ;;
+            languages/rust) packages+=(c-compiler make pkg-config) ;;
+            languages/go) packages+=(go) ;;
+            languages/python) packages+=(uv ruff); npm_packages+=(basedpyright) ;;
+            languages/typescript) npm_packages+=(typescript@6 typescript-language-server@6) ;;
+            languages/bash) packages+=(shellcheck); npm_packages+=(bash-language-server) ;;
+            languages/elixir) packages+=(elixir=1.20.4 erlang=29.0.6 unzip) ;;
+            languages/zig) packages+=(zig=0.16.0) ;;
+            tools/codex) npm_packages+=(@openai/codex) ;;
+            tools/just|tools/wget|tools/unzip) packages+=("$selection") ;;
+            *) warn "Unknown $group selection: $selection (choose $choices)"; return 2 ;;
         esac
     done
     source "$DOTFILES_DIR/scripts/bare-env.sh"
     [[ -x "$DOTFILES_BARE_ROOT/bin/micromamba" && -d "$DOTFILES_BARE_ROOT/env/conda-meta" ]] || {
-        warn 'Install the bare environment before adding toolchains'
+        warn 'Install the bare environment before adding optional packages'
         return 1
     }
     if ! mkdir "$DOTFILES_BARE_ROOT/install.lock"; then
@@ -258,15 +269,16 @@ install_bare_languages() (
     if [[ ${#npm_packages[@]} -gt 0 ]]; then
         npm install --global "${npm_packages[@]}" || return 1
     fi
-    for language in "$@"; do
-        case "$language" in
-            rust) install_bare_rust || return 1 ;;
-            go) GOBIN="$DOTFILES_BARE_ROOT/bin" go install golang.org/x/tools/gopls@v0.23.0 || return 1 ;;
-            elixir) install_bare_elixir_ls || return 1 ;;
-            zig) install_bare_zls || return 1 ;;
-            c|cpp|python|typescript|bash) ;;
+    for selection in "$@"; do
+        case "$group/$selection" in
+            languages/rust) install_bare_rust || return 1 ;;
+            languages/go) GOBIN="$DOTFILES_BARE_ROOT/bin" go install golang.org/x/tools/gopls@v0.23.0 || return 1 ;;
+            languages/elixir) install_bare_elixir_ls || return 1 ;;
+            languages/zig) install_bare_zls || return 1 ;;
+            tools/codex) link_bare_codex_config || return 1 ;;
+            languages/c|languages/cpp|languages/python|languages/typescript|languages/bash|tools/just|tools/wget|tools/unzip) ;;
             *) return 2 ;;
         esac
     done
-    info 'Selected languages and LSPs installed. Run builds inside dev-shell.'
+    info "Selected $group installed. Run tools inside dev-shell."
 )

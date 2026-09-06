@@ -5,7 +5,7 @@ git diff --check
 git diff --cached --check
 python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
-shell_files=(bootstrap.sh install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh tests/language_release_test.sh tests/neovim_config_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace)
+shell_files=(bootstrap.sh install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/neovim_config_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
 for file in zshrc zshenv zprofile; do zsh -n "$file"; done
 shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"
@@ -22,6 +22,7 @@ print('PASS structured config and exported skill sources')
 PY
 bash tests/bare_install_test.sh
 bash tests/languages_test.sh
+bash tests/tools_test.sh
 bash tests/language_release_test.sh
 bash tests/neovim_config_test.sh
 python3 tests/bootstrap_test.py

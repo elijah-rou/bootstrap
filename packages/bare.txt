@@ -19,6 +19,3 @@ starship
 jq
 less
 curl
-wget
-unzip
-just

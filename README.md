@@ -33,9 +33,9 @@ authentication stay in place. If you cloned this repo over HTTPS instead, run
 | Area | Included |
 |---|---|
 | Terminal | Bash/Zsh configuration, Starship, tmux, zoxide |
-| Tools | Git, delta, gh, SSH client, ripgrep, fd, fzf, bat, eza, jq, just |
+| Tools | Git, delta, gh, SSH client, ripgrep, fd, fzf, bat, eza, jq |
 | Neovim | [My LazyVim configuration](https://github.com/elijah-rou/lazyvim-config), downloaded over HTTPS; plugins install on first launch |
-| Agents | Pi with my theme, extensions, prompts, agents and shared skills; Codex; Herdr and its Pi integration |
+| Agents | Pi with my theme, extensions, prompts, agents and shared skills; Herdr and its Pi integration |
 
 Node, Python and Bun remain in the base environment because the installer and
 agent tools use them. Language development tools and LSPs are opt-in. The managed
@@ -45,6 +45,20 @@ Prime, Meridian, Headroom, Docker, desktop apps and services are not installed.
 Local web search and desktop clipboard features need host support or separate
 setup. The optional `/usage` integration requires ccusage tools. The Headroom
 launcher is retained for hosts where Headroom is installed separately.
+
+## Add optional tools
+
+After the base setup, use `--tools` or `-t`:
+
+```sh
+bash bootstrap.sh --tools codex just wget
+bash bootstrap.sh -t unzip
+```
+
+Codex installation also links its instructions and skills, preserving existing
+preferences and authentication. `just`, `wget` and `unzip` install independently.
+The Elixir selection includes `unzip` because ElixirLS needs it. Existing copies
+of optional tools are preserved when you rerun the base install.
 
 ## Add language toolchains
 

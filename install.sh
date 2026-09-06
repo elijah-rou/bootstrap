@@ -31,7 +31,12 @@ case "${1:-install}" in
         ;;
     --languages|-l)
         shift
-        install_bare_languages "$@"
+        install_bare_optional languages "$@"
+        exit $?
+        ;;
+    --tools|-t)
+        shift
+        install_bare_optional tools "$@"
         exit $?
         ;;
     *) printf 'Unknown command: %s\n' "$1" >&2; exit 2 ;;
@@ -46,8 +51,10 @@ case "${1:-install}" in
     --help|-h)
         printf '%s\n' 'Usage: ./install.sh [install|preflight|doctor|link|codex-link]' \
             '       ./install.sh (--languages|-l) LANGUAGE...' \
+            '       ./install.sh (--tools|-t) TOOL...' \
+            'Tools: codex just wget unzip (requires base install).' \
             'Languages: c cpp rust go python typescript bash elixir zig (requires base install).' \
-            'Default: user-local terminal tools, Neovim, Pi, Codex, Herdr.' \
+            'Default: user-local terminal tools, Neovim, Pi, Herdr.' \
             'Language toolchains and LSPs are opt-in; Node and Python are tool dependencies.'
         ;;
 esac

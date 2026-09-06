@@ -20,7 +20,7 @@ link_bare_config
 [[ -L "$HOME/.zshrc" && -L "$HOME/.pi/agent/AGENTS.md" ]]
 [[ -L "$HOME/.pi/agent/themes/iroaseta.json" ]]
 [[ -L "$HOME/.config/herdr/config.toml" ]]
-[[ -L "$CODEX_HOME/AGENTS.md" ]]
+[[ ! -e "$CODEX_HOME/AGENTS.md" ]]
 [[ "$(cat "$CODEX_HOME/config.toml")" == 'model = "keep-local-choice"' ]]
 [[ ! -e "$HOME/.pi/agent/auth.json" ]]
 [[ ! -e "$HOME/.config/ghostty" && ! -e "$HOME/.config/systemd" ]]
@@ -161,7 +161,7 @@ echo 'PASS unknown bare arguments are rejected before installation'
     unset NVIM_CONFIG_REPO_URL
     install_bare
     [[ "$(cat "$HOME/nvim-source")" == https://github.com/elijah-rou/lazyvim-config.git ]]
-    [[ "$(cat "$HOME/npm-packages")" == "$(printf '%s\n' install --global "$PI_CLI_PACKAGE@$PI_CLI_VERSION" @openai/codex)" ]]
+    [[ "$(cat "$HOME/npm-packages")" == "$(printf '%s\n' install --global "$PI_CLI_PACKAGE@$PI_CLI_VERSION")" ]]
     NVIM_CONFIG_REPO_URL=https://example.invalid/custom-nvim.git install_bare
     [[ "$(cat "$HOME/nvim-source")" == https://example.invalid/custom-nvim.git ]]
     nvim_status=17

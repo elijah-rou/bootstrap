@@ -15,9 +15,17 @@ case "$command_name" in
             case "$selection" in c|cpp|rust|go|python|typescript|bash|elixir|zig) ;; *) printf 'Unknown toolchain: %s\n' "$selection" >&2; exit 2 ;; esac
         done
         ;;
+    --tools|-t)
+        [[ $# -gt 1 ]] || { printf 'Select tools: codex just wget unzip\n' >&2; exit 2; }
+        for selection in "${@:2}"; do
+            case "$selection" in codex|just|wget|unzip) ;; *) printf 'Unknown tool: %s\n' "$selection" >&2; exit 2 ;; esac
+        done
+        ;;
     --help|-h)
         printf '%s\n' 'Usage: bash bootstrap.sh [install|fetch|preflight|doctor|link|codex-link]' \
             '       bash bootstrap.sh (--languages|-l) LANGUAGE...' \
+            '       bash bootstrap.sh (--tools|-t) TOOL...' \
+            'Tools: codex just wget unzip (requires base install).' \
             'Languages: c cpp rust go python typescript bash elixir zig (requires base install).' \
             'Downloads a verified public snapshot; install is the default.'
         exit 0
