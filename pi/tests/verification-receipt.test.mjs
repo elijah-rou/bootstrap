@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -61,5 +61,5 @@ test("versioned receipts preserve immutable attempt identity and terminal facts"
   assert.equal(receipt.version, 1);
   assert.match(receipt.attemptId, /^[0-9a-f-]{36}$/);
   assert.equal(receipt.outcome, "passed");
-  assert.equal(receipt.workspace.repositoryRoot, root);
+  assert.equal(receipt.workspace.repositoryRoot, realpathSync(root));
 });
