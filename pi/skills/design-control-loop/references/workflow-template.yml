@@ -1,0 +1,176 @@
+# Safe baseline for an iterated control loop.
+# Replace every angle-bracket placeholder and pin each action to a reviewed commit SHA.
+# Start with workflow_dispatch only. Add a schedule after a reviewed manual run succeeds.
+
+name: "Agent: <task-title>"
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "<approved-cron>"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-<task-slug>
+  cancel-in-progress: false
+
+jobs:
+  run-loop:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: <trusted-ephemeral-runner>
+    timeout-minutes: <bounded-timeout>
+    steps:
+      - name: Check out immutable base
+        uses: actions/checkout@<pinned-commit-sha>
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Add only pinned runtime and dependency setup required by the repository.
+      # Do not run unreviewed lifecycle scripts before exposing the model credential.
+
+      - name: Sensor
+        shell: bash
+        run: |
+          set -euo pipefail
+          <sensor-command> > /tmp/sensor-output.json
+          test -s /tmp/sensor-output.json
+
+      - name: Controller
+        id: controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          <controller-command-writing-/tmp/controller-status.txt> /tmp/sensor-output.json > /tmp/controller-output.md
+          test -s /tmp/controller-output.md
+          selection="$(cat /tmp/controller-status.txt)"
+          case "$selection" in
+            selected|no-change|blocked) ;;
+            *) printf 'Invalid controller outcome\n' >&2; exit 1 ;;
+          esac
+          printf 'selection=%s\n' "$selection" >> "$GITHUB_OUTPUT"
+
+      - name: Build actuator prompt without shell interpolation
+        if: steps.controller.outputs.selection == 'selected'
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            cat <<'PROMPT'
+          <static-prompt-from-prompt-template.md>
+          PROMPT
+            printf '\n\n# Controller selection\n\n'
+            cat /tmp/controller-output.md
+            printf '\n\n# Reviewed agent memory\n\n'
+            cat ".github/agent-memory/<task-slug>.md"
+          } > /tmp/agent-prompt.md
+
+      - name: Run isolated actuator
+        id: actuator
+        if: steps.controller.outputs.selection == 'selected'
+        shell: bash
+        env:
+          # Use the provider-specific secret name expected by the selected runner.
+          # This must be a dedicated, spend-limited model credential.
+          MODEL_API_KEY: ${{ secrets.<MODEL_API_KEY_SECRET> }}
+        run: |
+          set -euo pipefail
+          <pinned-headless-agent-command-reading-/tmp/agent-prompt.md>
+          test -s /tmp/agent-report.md
+          outcome="$(cat /tmp/agent-status.txt)"
+          case "$outcome" in
+            changed|no-change|blocked|failed) ;;
+            *) printf 'Invalid actuator outcome\n' >&2; exit 1 ;;
+          esac
+          printf 'outcome=%s\n' "$outcome" >> "$GITHUB_OUTPUT"
+
+      - name: Validate
+        id: validation
+        if: steps.actuator.outputs.outcome == 'changed' || steps.actuator.outputs.outcome == 'no-change'
+        shell: bash
+        run: |
+          set -euo pipefail
+          <validation-command-1>
+          <validation-command-2>
+
+      - name: Capture review artifact
+        if: always()
+        shell: bash
+        env:
+          CONTROLLER_OUTCOME: ${{ steps.controller.outcome }}
+          ACTUATOR_OUTCOME: ${{ steps.actuator.outcome }}
+          VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
+        run: |
+          set -euo pipefail
+          printf 'failed\n' > /tmp/loop-status.txt
+          if [[ ! -s /tmp/agent-report.md ]]; then
+            printf 'No actuator report. Inspect controller evidence and step outcomes.\n' > /tmp/agent-report.md
+          fi
+          printf '\nController: %s\nActuator: %s\nValidation: %s\n' \
+            "$CONTROLLER_OUTCOME" "$ACTUATOR_OUTCOME" "$VALIDATION_OUTCOME" >> /tmp/agent-report.md
+          git rev-parse HEAD > /tmp/base-sha.txt
+          git add --intent-to-add --all
+          git diff --binary --no-ext-diff HEAD > /tmp/agent.patch
+          git reset --quiet
+
+          outcome=failed
+          if [[ "$CONTROLLER_OUTCOME" == success && -s /tmp/controller-output.md ]]; then
+            selection="$(cat /tmp/controller-status.txt)"
+            case "$selection" in
+              no-change|blocked) outcome="$selection" ;;
+              selected)
+                if [[ "$ACTUATOR_OUTCOME" == success && -s /tmp/agent-status.txt ]]; then
+                  outcome="$(cat /tmp/agent-status.txt)"
+                  case "$outcome" in
+                    changed|no-change)
+                      [[ "$VALIDATION_OUTCOME" == success ]] || outcome=failed
+                      ;;
+                    blocked|failed) ;;
+                    *) outcome=failed ;;
+                  esac
+                fi
+                ;;
+              *) outcome=failed ;;
+            esac
+          fi
+          case "$outcome" in
+            changed) [[ -s /tmp/agent.patch ]] || outcome=failed ;;
+            no-change) [[ ! -s /tmp/agent.patch ]] || outcome=failed ;;
+            blocked|failed) ;;
+            *) exit 1 ;;
+          esac
+          printf '%s\n' "$outcome" > /tmp/loop-status.txt
+          printf '\nLoop outcome: %s\n' "$outcome" >> /tmp/agent-report.md
+          case "$outcome" in
+            changed|no-change) exit 0 ;;
+            blocked|failed) exit 1 ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Upload patch and evidence
+        if: always()
+        uses: actions/upload-artifact@<pinned-commit-sha>
+        with:
+          name: agent-<task-slug>-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: <bounded-retention-days>
+          path: |
+            /tmp/base-sha.txt
+            /tmp/sensor-output.json
+            /tmp/controller-output.md
+            /tmp/controller-status.txt
+            /tmp/agent-report.md
+            /tmp/agent-status.txt
+            /tmp/agent.patch
+            /tmp/loop-status.txt
+
+# Automatic PR publication is intentionally not included. If approved, use three jobs:
+# 1. this credential-free agent job produces a patch;
+# 2. a credential-free validation job applies it to the exact base SHA and runs checks;
+# 3. a non-executing publisher verifies both job attestations, applies the already-validated
+#    patch with hooks disabled, and exposes a minimum-scope token only to fixed push/API calls.
+# Publish only a nonempty patch from a successful run with loop-status.txt equal to changed.
+# No-change, blocked, and failed artifacts are evidence, not publication candidates.
+# The publisher must not run repository-controlled scripts or pass its token to the agent.

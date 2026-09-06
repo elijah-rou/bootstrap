@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HEADROOM_HOST="127.0.0.1"
+HEADROOM_UPSTREAM_ANTHROPIC_URL="${HEADROOM_UPSTREAM_ANTHROPIC_URL:-http://127.0.0.1:3456}"
+HEADROOM_START_TIMEOUT_SECONDS="${HEADROOM_START_TIMEOUT_SECONDS:-60}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/pi-headroom"
+
+if ! command -v headroom >/dev/null 2>&1; then
+    printf 'pi-headroom: headroom not found; install Headroom separately before using this optional launcher\n' >&2
+    exit 127
+fi
+if ! command -v pi >/dev/null 2>&1; then
+    printf 'pi-headroom: pi not found; run ./install.sh\n' >&2
+    exit 127
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+    printf 'pi-headroom: python3 is required to allocate a loopback port\n' >&2
+    exit 127
+fi
+if ! [[ "$HEADROOM_START_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'pi-headroom: HEADROOM_START_TIMEOUT_SECONDS must be a positive integer\n' >&2
+    exit 2
+fi
+
+port="$(python3 - <<'PY'
+import socket
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+    listener.bind(("127.0.0.1", 0))
+    print(listener.getsockname()[1])
+PY
+)"
+[[ "$port" =~ ^[1-9][0-9]*$ ]] || { printf 'pi-headroom: failed to allocate a port\n' >&2; exit 1; }
+
+mkdir -p "$STATE_DIR"
+log_path="$STATE_DIR/proxy-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
+proxy_url="http://${HEADROOM_HOST}:${port}"
+proxy_pid=""
+
+cleanup() {
+    local status=$?
+    trap - EXIT INT TERM HUP
+    if [[ -n "$proxy_pid" ]] && kill -0 "$proxy_pid" 2>/dev/null; then
+        kill "$proxy_pid" 2>/dev/null || true
+        wait "$proxy_pid" 2>/dev/null || true
+    fi
+    exit "$status"
+}
+trap cleanup EXIT INT TERM HUP
+
+printf 'pi-headroom: starting proxy at %s\n' "$proxy_url" >&2
+printf 'pi-headroom: proxy log %s\n' "$log_path" >&2
+HEADROOM_SAVINGS_PROFILE="${HEADROOM_SAVINGS_PROFILE:-coding}" \
+HEADROOM_TOOL_SEARCH="${HEADROOM_TOOL_SEARCH:-0}" \
+HEADROOM_DISABLE_KOMPRESS="${HEADROOM_DISABLE_KOMPRESS:-1}" \
+HEADROOM_TELEMETRY="${HEADROOM_TELEMETRY:-off}" \
+headroom proxy \
+    --host "$HEADROOM_HOST" \
+    --port "$port" \
+    --anthropic-api-url "$HEADROOM_UPSTREAM_ANTHROPIC_URL" \
+    --no-rate-limit \
+    --request-timeout-seconds 900 \
+    >"$log_path" 2>&1 &
+proxy_pid=$!
+
+for ((attempt = 1; attempt <= HEADROOM_START_TIMEOUT_SECONDS * 4; attempt++)); do
+    if ! kill -0 "$proxy_pid" 2>/dev/null; then
+        printf 'pi-headroom: proxy exited during startup; see %s\n' "$log_path" >&2
+        wait "$proxy_pid" || true
+        exit 1
+    fi
+    if python3 - "$proxy_url/health" <<'PY' >/dev/null 2>&1
+import sys
+import urllib.request
+with urllib.request.urlopen(sys.argv[1], timeout=1) as response:
+    if response.status != 200:
+        raise SystemExit(1)
+PY
+    then
+        break
+    fi
+    if ((attempt == HEADROOM_START_TIMEOUT_SECONDS * 4)); then
+        printf 'pi-headroom: proxy did not become healthy within %ss; see %s\n' \
+            "$HEADROOM_START_TIMEOUT_SECONDS" "$log_path" >&2
+        exit 1
+    fi
+    sleep 0.25
+done
+
+export PI_HEADROOM_BASE_URL="$proxy_url"
+pi "$@"

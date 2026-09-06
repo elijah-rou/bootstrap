@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Reject publication-sensitive literals in the staged index or working tree."""
+
+from __future__ import annotations
+
+import argparse
+import ipaddress
+import pathlib
+import re
+import subprocess
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+MAX_FILE_BYTES = 2_000_000
+ALLOWED_HOME_USERS = {"linuxbrew"}
+ALLOWED_EMAIL_DOMAINS = {
+    "codeberg.org",
+    "example.com",
+    "example.invalid",
+    "github.com",
+    "users.noreply.github.com",
+}
+PRIVATE_NETWORKS = tuple(
+    ipaddress.ip_network(".".join(map(str, octets)) + f"/{prefix}")
+    for octets, prefix in (
+        ((10, 0, 0, 0), 8),
+        ((172, 16, 0, 0), 12),
+        ((192, 168, 0, 0), 16),
+        ((169, 254, 0, 0), 16),
+    )
+)
+
+
+def git(*arguments: str) -> bytes:
+    return subprocess.run(
+        ["git", "-C", str(ROOT), *arguments],
+        check=True,
+        capture_output=True,
+    ).stdout
+
+
+def index_entries() -> list[tuple[str, str, bytes]]:
+    entries: list[tuple[str, str, bytes]] = []
+    for raw in git("ls-files", "-s", "-z").split(b"\0"):
+        if not raw:
+            continue
+        metadata, path_bytes = raw.split(b"\t", 1)
+        mode, object_id, stage = metadata.decode().split()
+        path = path_bytes.decode("utf-8", errors="strict")
+        if stage != "0":
+            raise RuntimeError(f"unmerged index entry: {path}")
+        entries.append((path, mode, git("cat-file", "blob", object_id)))
+    return entries
+
+
+def worktree_entries() -> list[tuple[str, str, bytes]]:
+    entries: list[tuple[str, str, bytes]] = []
+    for raw in git("ls-files", "-z").split(b"\0"):
+        if not raw:
+            continue
+        path = raw.decode("utf-8", errors="strict")
+        absolute = ROOT / path
+        if absolute.is_symlink():
+            entries.append((path, "120000", str(absolute.readlink()).encode()))
+        elif absolute.is_file():
+            entries.append((path, "100000", absolute.read_bytes()))
+        elif absolute.exists():
+            raise RuntimeError(f"tracked working-tree path has unsupported type: {path}")
+    return entries
+
+
+def report(path: str, line: int, finding: str) -> None:
+    print(f"{path}:{line}: {finding}", file=sys.stderr)
+
+
+def scan(entries: list[tuple[str, str, bytes]], source: str) -> int:
+    failures = 0
+    for path, mode, data in entries:
+        if len(data) > MAX_FILE_BYTES:
+            report(path, 1, f"{source} blob exceeds {MAX_FILE_BYTES} byte scan limit")
+            failures += 1
+            continue
+        if mode not in {"100644", "100755", "100000", "120000"}:
+            report(path, 1, f"unsupported tracked mode {mode}")
+            failures += 1
+            continue
+        text = data.decode("utf-8", errors="replace")
+        for line_number, line in enumerate(text.splitlines(), 1):
+            for match in re.finditer(r"(?<![A-Za-z0-9_$}])/(?:Users|home)/([A-Za-z0-9._-]+)/", line):
+                if match.group(1) not in ALLOWED_HOME_USERS:
+                    report(path, line_number, "literal user home path")
+                    failures += 1
+            for match in re.finditer(r"[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})", line, re.I):
+                if match.group(1).lower() not in ALLOWED_EMAIL_DOMAINS:
+                    report(path, line_number, "personal email address")
+                    failures += 1
+            for match in re.finditer(r"(?<![0-9A-Fa-f])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9A-Fa-f])", line):
+                try:
+                    address = ipaddress.ip_address(match.group(0))
+                except ValueError:
+                    continue
+                if any(address in network for network in PRIVATE_NETWORKS):
+                    report(path, line_number, "private network address")
+                    failures += 1
+            if re.search(r"(?i)(?<![0-9a-f])(?:[0-9a-f]{2}:){5}[0-9a-f]{2}(?![0-9a-f])", line):
+                report(path, line_number, "device MAC address")
+                failures += 1
+            if re.search(r"-----BEGIN (?:OPENSSH |RSA |EC |DSA )?PRIVATE KEY-----", line):
+                report(path, line_number, "private key material")
+                failures += 1
+            if re.search(r"(?:ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})", line):
+                report(path, line_number, "recognized token format")
+                failures += 1
+    return failures
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--index", action="store_true")
+    modes.add_argument("--worktree", action="store_true")
+    arguments = parser.parse_args()
+    mode = "worktree" if arguments.worktree else "index"
+    try:
+        entries = worktree_entries() if arguments.worktree else index_entries()
+        failures = scan(entries, mode)
+    except (OSError, RuntimeError, subprocess.CalledProcessError, UnicodeError, ValueError) as error:
+        print(f"public-safety scan error: {error}", file=sys.stderr)
+        return 1
+    if failures:
+        print(f"public-safety scan failed with {failures} finding(s)", file=sys.stderr)
+        return 1
+    print(f"public-safety scan passed ({mode})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

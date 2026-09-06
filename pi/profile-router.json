@@ -1,0 +1,51 @@
+{
+  "threshold": 75,
+  "fallbackProfile": null,
+  "classifier": {
+    "provider": "openai-codex",
+    "model": "gpt-5.6-terra",
+    "reasoningEffort": "none",
+    "reasoningSummary": "auto",
+    "textVerbosity": "low",
+    "timeoutMs": 5000
+  },
+  "profiles": {
+    "quick": {
+      "description": "Atomic, familiar work with an explicit expected result and cheap verification; no material ambiguity or interacting constraints.",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "thinkingLevel": "medium",
+      "serviceTier": "priority"
+    },
+    "light": {
+      "description": "Routine technical work with known patterns, bounded context, several explicit constraints, and contained failure impact.",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-terra",
+      "thinkingLevel": "high",
+      "serviceTier": "default"
+    },
+    "balanced": {
+      "description": "Substantive but bounded work that can be understood and completed without sustained hypothesis management or compounding decisions.",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-sol",
+      "thinkingLevel": "medium",
+      "serviceTier": "default"
+    },
+    "strong": {
+      "description": "Difficult or high-stakes work requiring sustained judgment, but with a reasonably clear problem boundary and feedback loop.",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-sol",
+      "thinkingLevel": "high",
+      "serviceTier": "default"
+    },
+    "deep": {
+      "description": "Long-horizon or highly uncertain work involving compounding decisions, difficult causal reasoning, multiple interacting unknowns, or early assumptions that materially affect later work.",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-sol",
+      "thinkingLevel": "xhigh",
+      "serviceTier": "default"
+    },
+    "reasoning": null,
+    "max": null
+  }
+}

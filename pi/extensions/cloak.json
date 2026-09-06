@@ -1,0 +1,16 @@
+{
+  "patterns": [
+    {
+      "source": "(api[_-]?key|token|secret|password)\\s*[:=]\\s*['\\\"]?[^\\s'\\\"]{12,}",
+      "flags": "gi"
+    },
+    {
+      "source": "sk-[A-Za-z0-9_-]{20,}",
+      "flags": "g"
+    },
+    {
+      "source": "/(?:home|Users)/[^/]+/\\.pi/agent/auth\\.json",
+      "flags": "g"
+    }
+  ]
+}

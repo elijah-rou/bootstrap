@@ -1,0 +1,17 @@
+blast-radius
+design-control-loop
+diagnosing-bugs
+feature-shaping
+how
+make-operations-idempotent
+omarchy
+separate-before-serializing-shared-state
+show-me
+source-grounded-research
+technical-writing
+technology-selection
+type-system-discipline
+unslop
+verification
+why
+writing-for-agents

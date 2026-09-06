@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+git diff --check
+git diff --cached --check
+python3 scripts/check-public-safety --index
+python3 scripts/check-public-safety --worktree
+shell_files=(install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace)
+for file in "${shell_files[@]}"; do bash -n "$file"; done
+for file in zshrc zshenv zprofile; do zsh -n "$file"; done
+shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"
+python3 - <<'PY'
+import json, pathlib, tomllib
+for path in pathlib.Path('.').rglob('*'):
+    if '.git' in path.parts or not path.is_file():
+        continue
+    if path.suffix == '.json': json.loads(path.read_text())
+    if path.suffix == '.toml': tomllib.loads(path.read_text())
+for name in pathlib.Path('codex/skills.txt').read_text().splitlines():
+    assert (pathlib.Path('pi/skills') / name / 'SKILL.md').is_file(), name
+print('PASS structured config and exported skill sources')
+PY
+bash tests/bare_install_test.sh
+bash tests/languages_test.sh
+python3 tests/shell_open_test.py
+python3 tests/modelusage_test.py
+node --experimental-transform-types --test tests/lsp_test.mjs
+printf 'Validation passed.\n'

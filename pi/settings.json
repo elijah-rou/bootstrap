@@ -1,0 +1,93 @@
+{
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-6-astra",
+  "defaultThinkingLevel": "high",
+  "theme": "iroaseta",
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 32768,
+    "keepRecentTokens": 20000
+  },
+  "retry": {
+    "enabled": true,
+    "maxRetries": 3
+  },
+  "npmCommand": [
+    "bun"
+  ],
+  "packages": [
+    "git:github.com/elijah-rou/pi-subagents@e45ccac7518bb5648263f65ba239b9fc5bf6e5ab",
+    "npm:pi-web-access@0.24.2",
+    "git:github.com/elijah-rou/pi-privileged-operations@8728b268bc8d1cc31d7e0f4b51a74974fc72216d",
+    "git:github.com/elijah-rou/pi-sub-limits@b968a179c05d323f8fea126ba3ad3e5fdf1cfc09",
+    "git:github.com/elijah-rou/pi-effort@9400dcea4a591b90c994187432e3bdcd0f3fa4ff"
+  ],
+  "subagents": {
+    "maxSubagentDepth": 2,
+    "defaultModel": "openai-codex/gpt-5.6-sol",
+    "defaultThinking": "high",
+    "agentOverrides": {
+      "delegate": {
+        "model": "openai-codex/gpt-5.6-luna",
+        "fallbackModels": [
+          "opencode/deepseek-v4-flash:high"
+        ],
+        "thinking": "high"
+      },
+      "worker": {
+        "model": "openai-codex/gpt-5.6-sol",
+        "fallbackModels": [
+          "opencode/grok-4.6:high"
+        ],
+        "thinking": "medium",
+        "defaultContext": "fresh",
+        "inheritProjectContext": true,
+        "inheritGlobalContext": true
+      },
+      "researcher": {
+        "model": "openai-codex/gpt-5.6-luna",
+        "fallbackModels": [
+          "opencode/deepseek-v4-flash:high"
+        ],
+        "thinking": "medium"
+      },
+      "reviewer": {
+        "model": "openai-codex/gpt-6-astra",
+        "fallbackModels": [
+          "opencode/grok-4.6:high"
+        ],
+        "thinking": "high"
+      },
+      "oracle": {
+        "model": "openai-codex/gpt-5.6-sol",
+        "thinking": "high",
+        "disabled": true
+      },
+      "oracle-eval": {
+        "disabled": true
+      },
+      "oracle-investigate": {
+        "disabled": true
+      },
+      "oracle-review": {
+        "disabled": true
+      },
+      "scout": {
+        "model": "openai-codex/gpt-5.6-luna",
+        "fallbackModels": [
+          "opencode/deepseek-v4-flash:high"
+        ],
+        "thinking": "low"
+      }
+    },
+    "maxActiveAsyncRunsPerSession": 4,
+    "perRunConcurrencyLimit": 6,
+    "maxSubagentSpawnsPerRun": 16,
+    "maxSubagentSpawnsPerSession": 32
+  },
+  "hideThinkingBlock": false,
+  "showCacheMissNotices": true,
+  "collapseChangelog": true,
+  "quietStartup": true,
+  "treeFilterMode": "all"
+}

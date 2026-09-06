@@ -1,0 +1,35 @@
+{
+  "provider": "searxng",
+  "searxngBaseUrl": "http://127.0.0.1:8888",
+  "searchRouting": {
+    "providers": [
+      "searxng"
+    ],
+    "fallbackOn": [
+      "transient",
+      "quota",
+      "network",
+      "invalid-response"
+    ]
+  },
+  "fetchRouting": {
+    "providers": [
+      "http"
+    ],
+    "allowRemoteHostedProviders": false
+  },
+  "fetchContent": {
+    "domainPolicy": {
+      "deny": [
+        "localhost",
+        "127.0.0.1"
+      ]
+    }
+  },
+  "ssrf": {
+    "allowRanges": [
+      "127.0.0.1/32"
+    ],
+    "trustEnvProxy": false
+  }
+}

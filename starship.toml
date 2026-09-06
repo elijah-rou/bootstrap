@@ -1,0 +1,20 @@
+[kubernetes]
+disabled = false
+style = 'bold #98d6fa'
+
+[status]
+disabled = false
+
+[directory]
+repo_root_style = 'bold red'
+repo_root_format = '[ $repo_root]($repo_root_style)[$path]($style)[$read_only]($read_only_style) '
+
+[python]
+version_format = '${major}.${minor}'
+style = 'bold #41e741'
+
+[package]
+disabled = true
+
+[docker_context]
+disabled = true

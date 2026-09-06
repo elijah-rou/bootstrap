@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$HOME/.local/share/dotfiles/bare"
+if [[ ! -x "$root/bin/micromamba" || ! -d "$root/env/conda-meta" ]]; then
+    printf 'Bare environment missing; run ./install.sh bare from the dotfiles checkout.\n' >&2
+    exit 1
+fi
+source "$HOME/.config/dotfiles/bare-env.sh"
+[[ $# -gt 0 ]] || set -- zsh -l
+exec "$root/bin/micromamba" --no-rc run --prefix "$root/env" "$@"

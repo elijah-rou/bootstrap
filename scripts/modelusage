@@ -1,0 +1,401 @@
+#!/usr/bin/env python3
+"""Aggregate model usage from local + SSH-reachable machines.
+
+Requires ccusage-pi and/or ccusage on each host. Uses only stdlib.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import datetime as dt
+import json
+import os
+import platform
+import shlex
+import socket
+import subprocess
+import sys
+from dataclasses import dataclass, replace
+from typing import Any
+
+DEFAULT_HOSTS = tuple(host.strip() for host in os.environ.get("MODELUSAGE_HOSTS", "localhost").split(",") if host.strip())
+DEFAULT_TIMEOUT_SECONDS = 45
+LOCALHOST_ALIASES = {"localhost", "127.0.0.1", "::1"}
+
+
+@dataclass(frozen=True)
+class UsageRow:
+    host: str
+    source: str
+    date: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_creation_tokens: int
+    cache_read_tokens: int
+    cost_usd: float
+
+
+def valid_date(value: str) -> str:
+    try:
+        return dt.date.fromisoformat(value).isoformat()
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"expected YYYY-MM-DD, got {value!r}") from exc
+
+
+def compact_date(value: str) -> str:
+    return value.replace("-", "")
+
+
+def period_key(date_text: str, period: str) -> str:
+    day = dt.date.fromisoformat(date_text)
+    match period:
+        case "daily":
+            return day.isoformat()
+        case "weekly":
+            year, week, _ = day.isocalendar()
+            return f"{year}-W{week:02d}"
+        case "monthly":
+            return f"{day.year:04d}-{day.month:02d}"
+        case "yearly":
+            return f"{day.year:04d}"
+        case _:
+            raise AssertionError(f"unsupported period: {period}")
+
+
+def local_host_names() -> set[str]:
+    names = set(LOCALHOST_ALIASES)
+    for name in (socket.gethostname(), socket.getfqdn(), platform.node(), os.environ.get("HOSTNAME", "")):
+        if not name:
+            continue
+        lowered = name.lower()
+        names.add(lowered)
+        names.add(lowered.split(".", 1)[0])
+    return names
+
+
+def is_local_host(host: str) -> bool:
+    return host.lower().split(".", 1)[0] in local_host_names()
+
+
+def local_display_name() -> str:
+    for name in (platform.node(), socket.gethostname(), socket.getfqdn()):
+        if name:
+            return name.lower().split(".", 1)[0]
+    return "localhost"
+
+
+def normalize_hosts(hosts: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    local_name = local_display_name()
+    for host in hosts:
+        display = local_name if is_local_host(host) else host
+        key = display.lower().split(".", 1)[0]
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(display)
+    return normalized
+
+
+def run_command(host: str, command: str, timeout_seconds: int) -> tuple[int, str, str]:
+    if is_local_host(host):
+        args = ["bash", "-lc", command]
+    else:
+        args = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host, command]
+
+    completed = subprocess.run(
+        args,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=timeout_seconds,
+        check=False,
+    )
+    return completed.returncode, completed.stdout, completed.stderr
+
+
+def load_json(host: str, label: str, stdout: str) -> Any | None:
+    text = stdout.strip()
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        print(f"warn: {host} {label}: invalid JSON: {exc}", file=sys.stderr)
+        return None
+
+
+def daily_entries(payload: Any) -> list[dict[str, Any]]:
+    if payload is None:
+        return []
+    if isinstance(payload, dict):
+        daily = payload.get("daily", [])
+        return daily if isinstance(daily, list) else []
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    return []
+
+
+def int_field(row: dict[str, Any], name: str) -> int:
+    value = row.get(name, 0)
+    if value is None:
+        return 0
+    return int(value)
+
+
+def float_field(row: dict[str, Any], *names: str) -> float:
+    for name in names:
+        value = row.get(name)
+        if value is not None:
+            return float(value)
+    return 0.0
+
+
+def rows_from_payload(host: str, source: str, payload: Any) -> list[UsageRow]:
+    rows: list[UsageRow] = []
+    for day in daily_entries(payload):
+        date = str(day.get("date", ""))
+        breakdowns = day.get("modelBreakdowns") or day.get("modelBreakdown") or []
+        if not isinstance(breakdowns, list) or not breakdowns:
+            models = day.get("modelsUsed") or []
+            model = ", ".join(str(item) for item in models) if isinstance(models, list) else "(unknown)"
+            breakdowns = [{**day, "modelName": model or "(unknown)"}]
+
+        for model in breakdowns:
+            if not isinstance(model, dict):
+                continue
+            rows.append(
+                UsageRow(
+                    host=host,
+                    source=source,
+                    date=date,
+                    model=source_model_name(source, str(model.get("modelName") or model.get("model") or "(unknown)")),
+                    input_tokens=int_field(model, "inputTokens"),
+                    output_tokens=int_field(model, "outputTokens"),
+                    cache_creation_tokens=int_field(model, "cacheCreationTokens"),
+                    cache_read_tokens=int_field(model, "cacheReadTokens"),
+                    cost_usd=float_field(model, "cost", "totalCost", "costUSD"),
+                )
+            )
+    return rows
+
+
+def source_model_name(source: str, model: str) -> str:
+    if source == "claude-code" and not model.startswith("[cc] "):
+        return f"[cc] {model}"
+    return model
+
+
+def collect_host(host: str, since: str, until: str, timeout_seconds: int) -> tuple[list[UsageRow], list[str]]:
+    specs = (
+        (
+            "pi",
+            "ccusage-pi daily --json --breakdown "
+            f"--since {shlex.quote(since)} --until {shlex.quote(until)}",
+        ),
+        (
+            "claude-code",
+            "ccusage daily --json --breakdown --offline "
+            f"--since {shlex.quote(compact_date(since))} --until {shlex.quote(compact_date(until))}",
+        ),
+    )
+
+    rows: list[UsageRow] = []
+    warnings: list[str] = []
+    for source, command in specs:
+        try:
+            code, stdout, stderr = run_command(host, command, timeout_seconds)
+        except subprocess.TimeoutExpired:
+            warnings.append(f"{host} {source}: timeout after {timeout_seconds}s")
+            continue
+
+        if code != 0:
+            error_text = stderr.strip()
+            if "command not found: ccusage-pi" in error_text:
+                continue
+            if "No valid Claude data directories found" in error_text:
+                continue
+            warnings.append(f"{host} {source}: exit {code}: {error_text.splitlines()[0][:160] if error_text else '(no stderr)'}")
+            continue
+
+        rows.extend(rows_from_payload(host, source, load_json(host, source, stdout)))
+    return rows, warnings
+
+
+def add_usage(total: UsageRow, row: UsageRow) -> UsageRow:
+    return replace(total,
+                   input_tokens=total.input_tokens + row.input_tokens,
+                   output_tokens=total.output_tokens + row.output_tokens,
+                   cache_creation_tokens=total.cache_creation_tokens + row.cache_creation_tokens,
+                   cache_read_tokens=total.cache_read_tokens + row.cache_read_tokens,
+                   cost_usd=total.cost_usd + row.cost_usd)
+
+
+def aggregate(rows: list[UsageRow]) -> list[UsageRow]:
+    totals: dict[tuple[str, str, str, str], UsageRow] = {}
+    zero = UsageRow("", "", "", "", 0, 0, 0, 0, 0.0)
+    for row in rows:
+        key = (row.date, row.host, row.source, row.model)
+        totals[key] = add_usage(totals.get(key, zero), row)
+
+    result = [
+        replace(total, date=date, host=host, source=source, model=model)
+        for (date, host, source, model), total in totals.items()
+    ]
+    result.sort(key=lambda r: (r.date, r.host, r.source, r.model))
+    return result
+
+
+def print_markdown(rows: list[UsageRow]) -> None:
+    print("| date | host | source | model | input | output | cache create | cache read | cost USD |")
+    print("|---|---|---|---|---:|---:|---:|---:|---:|")
+    for row in rows:
+        print(
+            f"| {row.date} | {row.host} | {row.source} | {row.model} | "
+            f"{row.input_tokens} | {row.output_tokens} | {row.cache_creation_tokens} | "
+            f"{row.cache_read_tokens} | {row.cost_usd:.4f} |"
+        )
+
+    total = sum(row.cost_usd for row in rows)
+    print(f"\nTotal cost: ${total:.4f}")
+
+
+def row_total_tokens(row: UsageRow) -> int:
+    return row.input_tokens + row.output_tokens + row.cache_creation_tokens + row.cache_read_tokens
+
+
+def format_int(value: int) -> str:
+    return f"{value:,}"
+
+
+def format_cost(value: float) -> str:
+    return f"${value:,.2f}"
+
+
+def display_model_name(model: str) -> str:
+    return model.replace("claude-", "") if model.startswith("[pi] claude-") else model
+
+
+def period_totals(rows: list[UsageRow], period: str) -> list[UsageRow]:
+    totals: dict[tuple[str, str], UsageRow] = {}
+    zero = UsageRow("", "", "", "", 0, 0, 0, 0, 0.0)
+    for row in rows:
+        key = (period_key(row.date, period), row.model)
+        totals[key] = add_usage(totals.get(key, zero), row)
+    result = [
+        replace(total, date=date, model=model)
+        for (date, model), total in totals.items()
+    ]
+    result.sort(key=lambda row: (row.date, row.cost_usd, row_total_tokens(row)), reverse=True)
+    return result
+
+
+def print_box(rows: list[UsageRow], period: str) -> None:
+    rows = period_totals(rows, period)
+    by_date: dict[str, list[UsageRow]] = {}
+    for row in rows:
+        by_date.setdefault(row.date, []).append(row)
+
+    widths = (31, 42, 14, 12, 15, 16, 16, 13)
+    headers = ("Date", "Models", "Input", "Output", "Cache Create", "Cache Read", "Total Tokens", "Cost (USD)")
+
+    def border(left: str, sep: str, right: str) -> str:
+        return left + sep.join("─" * width for width in widths) + right
+
+    def line(values: tuple[str, str, str, str, str, str, str, str]) -> str:
+        aligned = []
+        for index, value in enumerate(values):
+            if index >= 2:
+                aligned.append(value.rjust(widths[index] - 2))
+            else:
+                aligned.append(value.ljust(widths[index] - 2))
+        return "│ " + " │ ".join(aligned) + " │"
+
+    print(border("┌", "┬", "┐"))
+    print(line(headers))
+    print(border("├", "┼", "┤"))
+
+    grand = UsageRow("", "", "", "", 0, 0, 0, 0, 0.0)
+    first_group = True
+    for date in sorted(by_date.keys(), reverse=True):
+        if not first_group:
+            print(border("├", "┼", "┤"))
+        first_group = False
+
+        models = sorted(by_date[date], key=lambda row: (row.cost_usd, row_total_tokens(row)), reverse=True)
+        date_total = UsageRow(
+            host="",
+            source="",
+            date=date,
+            model="",
+            input_tokens=sum(row.input_tokens for row in models),
+            output_tokens=sum(row.output_tokens for row in models),
+            cache_creation_tokens=sum(row.cache_creation_tokens for row in models),
+            cache_read_tokens=sum(row.cache_read_tokens for row in models),
+            cost_usd=sum(row.cost_usd for row in models),
+        )
+        grand = add_usage(grand, date_total)
+
+        model_lines = [f"- {display_model_name(row.model)}" for row in models]
+        print(line((date, model_lines[0], format_int(date_total.input_tokens), format_int(date_total.output_tokens), format_int(date_total.cache_creation_tokens), format_int(date_total.cache_read_tokens), format_int(row_total_tokens(date_total)), format_cost(date_total.cost_usd))))
+        for model_line in model_lines[1:]:
+            print(line(("", model_line, "", "", "", "", "", "")))
+
+        for model in models:
+            print(border("├", "┼", "┤"))
+            print(line((f"  └─ {display_model_name(model.model)}", "", format_int(model.input_tokens), format_int(model.output_tokens), format_int(model.cache_creation_tokens), format_int(model.cache_read_tokens), format_int(row_total_tokens(model)), format_cost(model.cost_usd))))
+
+    print(border("├", "┼", "┤"))
+    print(line(("Total", "", format_int(grand.input_tokens), format_int(grand.output_tokens), format_int(grand.cache_creation_tokens), format_int(grand.cache_read_tokens), format_int(row_total_tokens(grand)), format_cost(grand.cost_usd))))
+    print(border("└", "┴", "┘"))
+
+
+def print_csv(rows: list[UsageRow]) -> None:
+    writer = csv.writer(sys.stdout)
+    writer.writerow(("date", "host", "source", "model", "input_tokens", "output_tokens", "cache_creation_tokens", "cache_read_tokens", "cost_usd"))
+    for row in rows:
+        writer.writerow((row.date, row.host, row.source, row.model, row.input_tokens, row.output_tokens, row.cache_creation_tokens, row.cache_read_tokens, f"{row.cost_usd:.6f}"))
+
+
+def main() -> int:
+    today = dt.date.today().isoformat()
+    parser = argparse.ArgumentParser(description="Aggregate ccusage-pi and ccusage model usage across SSH hosts.")
+    parser.add_argument("--hosts", default=",".join(DEFAULT_HOSTS), help="comma-separated hosts; use localhost for current machine")
+    parser.add_argument("--since", type=valid_date, default=today)
+    parser.add_argument("--until", type=valid_date, default=today)
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_SECONDS)
+    parser.add_argument("--period", choices=("daily", "weekly", "monthly", "yearly"), default="daily", help="aggregation period; defaults to daily")
+    parser.add_argument("--format", choices=("box", "markdown", "csv", "json"), default="box")
+    args = parser.parse_args()
+
+    assert args.timeout > 0, "timeout must be positive"
+    hosts = normalize_hosts([host.strip() for host in args.hosts.split(",") if host.strip()])
+    assert hosts, "at least one host required"
+
+    rows: list[UsageRow] = []
+    warnings: list[str] = []
+    for host in hosts:
+        host_rows, host_warnings = collect_host(host, args.since, args.until, args.timeout)
+        rows.extend(host_rows)
+        warnings.extend(host_warnings)
+
+    rows = aggregate(rows)
+    if args.format == "json":
+        print(json.dumps([row.__dict__ for row in rows], indent=2, sort_keys=True))
+    elif args.format == "csv":
+        print_csv(rows)
+    elif args.format == "markdown":
+        print_markdown(rows)
+    else:
+        print_box(rows, args.period)
+
+    for warning in warnings:
+        print(f"warn: {warning}", file=sys.stderr)
+    return 0 if rows else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

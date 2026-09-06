@@ -1,0 +1,2 @@
+# Defense in depth for local subagent state. Explicit `git add -f` remains available.
+.pi-subagents/

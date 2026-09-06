@@ -1,0 +1,14 @@
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+personality = "pragmatic"
+
+[agents]
+default_subagent_model = "gpt-6-astra"
+default_subagent_reasoning_effort = "low"
+
+[notice]
+hide_gpt5_1_migration_prompt = true
+
+[notice.model_migrations]
+"gpt-5.1-codex" = "gpt-5.3-codex"
+"gpt-5.3-codex" = "gpt-5.4"

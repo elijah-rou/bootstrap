@@ -1,0 +1,59 @@
+[include]
+    path = ~/.gitconfig.local
+
+[core]
+    pager = delta
+    excludesFile = ~/.config/git/ignore
+
+[fetch]
+    prune = true
+
+[pull]
+    rebase = true
+
+[rebase]
+    updateRefs = true
+
+[rerere]
+    enabled = true
+
+[branch]
+    sort = -committerdate
+
+[init]
+    defaultBranch = main
+
+[interactive]
+    diffFilter = delta --color-only --features=interactive
+
+[delta]
+    features = decorations
+    conflictstyle = diff3
+    line-numbers = true
+    hyperlinks = true
+
+[pager]
+    blame = delta
+
+[diff]
+    colorMoved = default
+
+[delta "interactive"]
+    keep-plus-minus-markers = false
+
+[delta "decorations"]
+    commit-decoration-style = blue ol
+    commit-style = raw
+    file-style = omit
+    hunk-header-decoration-style = blue box
+    hunk-header-file-style = red
+    hunk-header-line-number-style = "#067a00"
+    hunk-header-style = file line-number syntax
+
+[credential "https://github.com"]
+    helper =
+    helper = !gh auth git-credential
+
+[credential "https://gist.github.com"]
+    helper =
+    helper = !gh auth git-credential

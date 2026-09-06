@@ -1,0 +1,11 @@
+{
+  "threshold": 75,
+  "classifier": {
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoningEffort": "none",
+    "reasoningSummary": "auto",
+    "textVerbosity": "low",
+    "timeoutMs": 5000
+  }
+}
