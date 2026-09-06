@@ -34,29 +34,32 @@ def run_case(shell, mode):
         script = '''
 OSTYPE="$1"
 open() { printf 'native\\n'; }
-source "$2" >/dev/null 2>&1
+source "$2" >/dev/null
+# Host Homebrew startup can prepend its tools; exercise only fixture openers.
+PATH="$3"
 open 'file with spaces' 'https://example.invalid/a?b=c'
 result=$?
 printf 'STATUS=%s AFTER=%s/%s\\n' "$result" "$DISPLAY" "$WAYLAND_DISPLAY"
 '''
-        result = subprocess.run([shell, "-c", script, "_", "darwin24" if mode == "macos" else "linux-gnu", str(source)],
+        result = subprocess.run([shell, "-c", script, "_", "darwin24" if mode == "macos" else "linux-gnu", str(source), str(binaries)],
                                 env=env, text=True, capture_output=True, timeout=15)
         assert result.returncode == 0, result.stderr
         output = result.stdout
+        context = f"{Path(shell).name}/{mode}: {output} STDERR={result.stderr}"
         if mode == "macos":
-            assert output == "native\nSTATUS=0 AFTER=/\n", output
+            assert output == "native\nSTATUS=0 AFTER=/\n", context
         elif mode == "missing":
-            assert output == "STATUS=127 AFTER=/\n", output
+            assert output == "STATUS=127 AFTER=/\n", context
             assert "no desktop opener found" in result.stderr
         else:
-            assert "ARG=file with spaces\nARG=https://example.invalid/a?b=c\n" in output, output
-            assert "STATUS=7" in output and "EXTRA=\n" in output, output
+            assert "ARG=file with spaces\nARG=https://example.invalid/a?b=c\n" in output, context
+            assert "STATUS=7" in output and "EXTRA=\n" in output, context
             if mode == "existing":
-                assert "DISPLAY=:2 WAYLAND=wayland-2" in output and "AFTER=:2/wayland-2" in output, output
+                assert "DISPLAY=:2 WAYLAND=wayland-2" in output and "AFTER=:2/wayland-2" in output, context
             elif mode == "detached":
-                assert "DISPLAY=:9 WAYLAND=wayland-9" in output and "AFTER=/" in output, output
+                assert "DISPLAY=:9 WAYLAND=wayland-9" in output and "AFTER=/" in output, context
             else:
-                assert "ARG=open" not in output and "DISPLAY= WAYLAND=" in output, output
+                assert "ARG=open" not in output and "DISPLAY= WAYLAND=" in output, context
 
 
 for name in ("bash", "zsh"):

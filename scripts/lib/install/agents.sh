@@ -70,7 +70,7 @@ link_pi_headroom() {
     info "Linked Pi Headroom launcher and extension"
 }
 
-sync_pi_skill_links() {
+sync_pi_skill_links() (
     [[ $# -eq 2 ]] || {
         warn "sync_pi_skill_links requires source and target directories"
         return 2
@@ -79,18 +79,13 @@ sync_pi_skill_links() {
     local source_dir="$1"
     local target_dir="$2"
     local current_target skill_dir link
-    local skill_dirs=()
-    local target_entries=()
 
     [[ -d "$source_dir" ]] || return 0
     mkdir -p "$target_dir"
 
     shopt -s nullglob
-    target_entries=("$target_dir"/*)
-    skill_dirs=("$source_dir"/*)
-    shopt -u nullglob
 
-    for link in "${target_entries[@]}"; do
+    for link in "$target_dir"/*; do
         [[ -L "$link" ]] || continue
         current_target="$(readlink "$link" 2>/dev/null || true)"
         case "$current_target" in
@@ -102,7 +97,7 @@ sync_pi_skill_links() {
         esac
     done
 
-    for skill_dir in "${skill_dirs[@]}"; do
+    for skill_dir in "$source_dir"/*; do
         [[ -d "$skill_dir" && -f "$skill_dir/SKILL.md" ]] || continue
         link_managed_file "$skill_dir" "$target_dir/$(basename "$skill_dir")" "$target_dir/.backups" || return 1
     done
@@ -115,7 +110,7 @@ sync_pi_skill_links() {
             link_managed_file "$source_dir/omarchy" "$omarchy_alias" "$(dirname "$omarchy_alias")/.backups" || return 1
         fi
     fi
-}
+)
 
 link_codex_skill() {
     [[ $# -eq 1 ]] || return 2
