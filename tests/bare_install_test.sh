@@ -194,13 +194,13 @@ echo 'PASS bare installs the public Neovim config, honors overrides, and propaga
         printf '#!/bin/sh\nexit 0\n' > "$HOME/.local/share/dotfiles/bare/bin/micromamba"
         chmod +x "$HOME/.local/share/dotfiles/bare/bin/micromamba"
         for tool in git delta gh ssh zsh tmux nvim rg fzf bat eza jq make python3 uv node npm bun \
-            rustup cargo rustc rust-analyzer basedpyright-langserver typescript-language-server bash-language-server shellcheck; do
+            rustup cargo rustc rust-analyzer basedpyright-langserver typescript-language-server bash-language-server shellcheck codex herdr; do
             if ! command -v "$tool" >/dev/null; then eval "$tool() { :; }"; fi
         done
         pi() { printf '%s\n' "$PI_CLI_VERSION"; }
         rust-analyzer() { :; }
         check_pi_subagents_revision() { :; }
-        bare_doctor > "$HOME/doctor-output" 2>&1
+        bare_doctor > "$HOME/doctor-output" 2>&1 || { cat "$HOME/doctor-output"; exit 1; }
         mv "$XDG_CONFIG_HOME/nvim" "$XDG_CONFIG_HOME/saved-nvim"
         if bare_doctor > "$HOME/doctor-output" 2>&1; then exit 1; fi
         mkdir "$XDG_CONFIG_HOME/nvim"
