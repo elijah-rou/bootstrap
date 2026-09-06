@@ -102,11 +102,9 @@ sync_pi_links() (
     for link in "$target_dir"/$pattern; do
         [[ -L "$link" ]] || continue
         current="$(readlink "$link")"
-        case "$current" in
-            "$source_dir"/*)
-                [[ -e "$current" || -L "$current" ]] || rm -f "$link" || return 1
-                ;;
-        esac
+        if [[ "$current" == "$source_dir/$(basename "$link")" && ! -e "$current" && ! -L "$current" ]]; then
+            rm -f "$link" || return 1
+        fi
     done
     # shellcheck disable=SC2231
     for source in "$source_dir"/$pattern; do
@@ -132,7 +130,7 @@ link_pi_config() {
 
         remove_owned_link "$HOME/.pi/agent/components/legacy-route-context.ts" pi/components/legacy-route-context.ts || return 1
         remove_owned_link "$HOME/.pi/agent/components/auto-router" pi/components/auto-router || return 1
-        cleanup_legacy_pi_links || return 1
+        cleanup_retired_pi_links || return 1
         sync_pi_links "$DOTFILES_DIR/pi/extensions" "$HOME/.pi/agent/extensions" "*.ts" || return 1
         sync_pi_links "$DOTFILES_DIR/pi/extensions" "$HOME/.pi/agent/extensions" "*.json" || return 1
         sync_pi_links "$DOTFILES_DIR/pi/agents" "$HOME/.pi/agent/agents" "*.md" || return 1
@@ -187,15 +185,13 @@ remove_owned_link() {
     local target="$1" relative="$2" current
     [[ -L "$target" ]] || return 0
     current="$(readlink "$target")" || return 1
-    if [[ "$current" == "$DOTFILES_DIR/$relative" ||
-          ( -n "${BOOTSTRAP_LEGACY_ROOT:-}" && "$current" == "$BOOTSTRAP_LEGACY_ROOT/$relative" ) ]]; then
+    if managed_source_matches "$current" "$relative"; then
         rm -f "$target" || return 1
     fi
     return 0
 }
 
-cleanup_legacy_pi_links() (
-    [[ -n "${BOOTSTRAP_LEGACY_ROOT:-}" ]] || return 0
+cleanup_retired_pi_links() (
     local directory pattern link current relative
     shopt -s nullglob
     while read -r directory pattern; do
@@ -203,14 +199,10 @@ cleanup_legacy_pi_links() (
         for link in "$HOME/.pi/agent/$directory"/$pattern; do
             [[ -L "$link" ]] || continue
             current="$(readlink "$link")" || return 1
-            case "$current" in
-                "$BOOTSTRAP_LEGACY_ROOT/pi/$directory/$(basename "$link")")
-                    relative="${current#"$BOOTSTRAP_LEGACY_ROOT/"}"
-                    if [[ ! -e "$DOTFILES_DIR/$relative" ]]; then
-                        rm -f "$link" || return 1
-                    fi
-                    ;;
-            esac
+            relative="pi/$directory/$(basename "$link")"
+            if [[ ! -e "$DOTFILES_DIR/$relative" ]] && managed_source_matches "$current" "$relative"; then
+                rm -f "$link" || return 1
+            fi
         done
     done <<'LINKS'
 extensions *.ts

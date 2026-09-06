@@ -12,6 +12,36 @@ resolve_path() {
     python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$path" 2>/dev/null || true
 }
 
+managed_source_matches() {
+    [[ $# -eq 2 ]] || return 2
+    local source="$1" relative="$2" snapshots candidate snapshot marker size checksum
+    case "$relative" in
+        ''|/*|..|../*|*/../*|*/..) return 2 ;;
+    esac
+    if [[ "$source" == "$DOTFILES_DIR/$relative" ||
+          ( -n "${BOOTSTRAP_LEGACY_ROOT:-}" && "$source" == "$BOOTSTRAP_LEGACY_ROOT/$relative" ) ]]; then
+        return 0
+    fi
+
+    # Completed sibling snapshots retain ownership across a pinned revision upgrade.
+    snapshots="${DOTFILES_DIR%/*}"
+    [[ "${snapshots##*/}" == snapshots ]] || return 1
+    [[ "$source" == */"$relative" ]] || return 1
+    candidate="${source%"/$relative"}"
+    [[ "${candidate%/*}" == "$snapshots" ]] || return 1
+    for snapshot in "$DOTFILES_DIR" "$candidate"; do
+        [[ "${snapshot##*/}" =~ ^[0-9a-f]{40}$ ]] || return 1
+        [[ -d "$snapshot" && ! -L "$snapshot" && -x "$snapshot/install.sh" ]] || return 1
+        marker="$snapshot/.bootstrap-archive-sha256"
+        [[ -f "$marker" && ! -L "$marker" ]] || return 1
+        size="$(wc -c < "$marker")" || return 1
+        [[ "$size" -eq 64 || "$size" -eq 65 ]] || return 1
+        checksum="$(cat "$marker")" || return 1
+        [[ "$checksum" =~ ^[0-9a-f]{64}$ ]] || return 1
+    done
+    return 0
+}
+
 managed_backup_path() {
     local target="$1"
     local timestamp candidate counter=0

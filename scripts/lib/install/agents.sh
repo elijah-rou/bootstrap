@@ -88,13 +88,9 @@ sync_pi_skill_links() (
     for link in "$target_dir"/*; do
         [[ -L "$link" ]] || continue
         current_target="$(readlink "$link" 2>/dev/null || true)"
-        case "$current_target" in
-            "$source_dir"/*)
-                if [[ ! -d "$current_target" || ! -f "$current_target/SKILL.md" ]]; then
-                    rm -f "$link"
-                fi
-                ;;
-        esac
+        if [[ "$current_target" == "$source_dir/$(basename "$link")" && ! -f "$current_target/SKILL.md" ]]; then
+            rm -f "$link" || return 1
+        fi
     done
 
     for skill_dir in "$source_dir"/*; do
@@ -128,7 +124,7 @@ link_codex_skill() {
             if [[ "$(resolve_path "$current")" == "$(resolve_path "$source")" ]]; then
                 continue
             fi
-            if [[ -n "${BOOTSTRAP_LEGACY_ROOT:-}" && "$(readlink "$current")" == "$BOOTSTRAP_LEGACY_ROOT/pi/skills/$name" ]]; then
+            if managed_source_matches "$(readlink "$current")" "pi/skills/$name"; then
                 continue
             fi
             if [[ "$name" == omarchy && "$(readlink "$current")" == /usr/share/omarchy/default/agents/skills/omarchy ]]; then
@@ -175,7 +171,7 @@ link_codex_assets() {
     if [[ -s "$codex_home/AGENTS.override.md" ]]; then
         warn "Codex will load $codex_home/AGENTS.override.md instead of the linked AGENTS.md"
     fi
-    cleanup_legacy_codex_skills || return 1
+    cleanup_retired_codex_skills || return 1
     for source in "${sources[@]}"; do
         link_codex_skill "$source" || return 1
     done
@@ -273,20 +269,17 @@ check_pi_subagents_revision() {
     [[ $failed -eq 0 ]]
 }
 
-cleanup_legacy_codex_skills() (
-    [[ -n "${BOOTSTRAP_LEGACY_ROOT:-}" ]] || return 0
+cleanup_retired_codex_skills() (
     local root link current relative
     shopt -s nullglob
     for root in "$HOME/.agents/skills" "${CODEX_HOME:-$HOME/.codex}/skills"; do
         for link in "$root"/*; do
             [[ -L "$link" ]] || continue
             current="$(readlink "$link")" || return 1
-            case "$current" in
-                "$BOOTSTRAP_LEGACY_ROOT/pi/skills/$(basename "$link")")
-                    relative="${current#"$BOOTSTRAP_LEGACY_ROOT/"}"
-                    [[ -f "$DOTFILES_DIR/$relative/SKILL.md" ]] || rm -f "$link" || return 1
-                    ;;
-            esac
+            relative="pi/skills/$(basename "$link")"
+            if [[ ! -f "$DOTFILES_DIR/$relative/SKILL.md" ]] && managed_source_matches "$current" "$relative"; then
+                rm -f "$link" || return 1
+            fi
         done
     done
 )
