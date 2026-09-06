@@ -1,8 +1,8 @@
 # bootstrap
 
-My terminal setup for machines without my SSH keys. Everything needed to start
-is public and fetched over HTTPS. GitHub and AI provider login happen separately,
-after installation.
+Shared terminal, Pi and Codex configuration, with a user-local installer for
+machines without my SSH keys. Everything needed to start is public and fetched
+over HTTPS. GitHub and AI provider login happen separately, after installation.
 
 ## Install
 
@@ -119,17 +119,102 @@ new snapshot; earlier snapshots remain in place. Cloned checkouts update with
 build image. `bash bootstrap.sh link` relinks configuration offline; `codex-link` only
 relinks Codex instructions and shared skills.
 
+## Configure an existing workstation
+
+Bootstrap owns the shared shell, Pi and Codex baseline and the helpers that
+apply it. A workstation repository can consume a pinned public snapshot and
+supply its own packages, desktop services, credentials and configuration overlays.
+The default bare installation remains independent of that workstation repository.
+
+From a checkout or retained snapshot, run:
+
+```sh
+./configure.sh all \
+  --overlay /absolute/path/to/workstation \
+  --overlay /absolute/path/to/local \
+  --legacy-root /absolute/path/to/previous-dotfiles
+```
+
+`configure.sh` requires Python 3 and accepts `terminal`, `pi`, `codex`, `neovim`
+or `all`. It only writes user configuration. It does not install packages, access
+the network, change the login shell, activate the bare environment or install the
+Neovim Mason override. Neovim configuration only relinks an existing checkout.
+
+Each `--overlay` directory must exist. Paths must be absolute and cannot be `/`.
+Repeated overlays apply from low to high precedence, after the public baseline.
+An overlay may omit any of these files:
+
+| Overlay file | Behavior |
+|---|---|
+| `gitconfig` | Included after the public Git configuration, in overlay order |
+| `env.sh` | Sourced by Bash and Zsh, in overlay order |
+| `zshenv` | Sourced as workstation additions to the public Zsh baseline |
+| `repos.conf` | The highest-precedence existing file supplies the repository list |
+| `pi-settings.json`, `pi-models.json` | Objects merge recursively; arrays and scalar values replace earlier values |
+
+The generated Git and shell files refer to their original sources, so retain the
+snapshot and overlay directories. Pi settings and models are materialized as
+local files. Pi authentication and Codex preferences, hooks and authentication
+remain untouched. The Pi target also links `pi-workspace`, `piw` and the Headroom
+launcher; the terminal target links `modelusage`.
+
+The optional `--legacy-root` identifies known links from a previous managed
+checkout. It can name a directory that no longer exists. Configuration migrates
+or removes matching managed links and preserves unrelated links. Existing files
+replaced by configuration are backed up. Retries reuse matching output; overlapping
+runs fail with a lock path to inspect before retrying.
+
+Package installation stays separate:
+
+```sh
+./install.sh neovim       # Clone or update the workstation editor checkout
+./install.sh pi-packages  # Install packages from materialized Pi settings
+./install.sh pi-version   # Print the pinned Pi CLI version
+./install.sh pi-check     # Check repository, rendered and installed subagent pins
+```
+
+`neovim` honors `NVIM_CONFIG_REPO_URL` and `NVIM_CONFIG_CHECKOUT_DIR`, preserving
+local edits. Its default checkout is
+`$XDG_DATA_HOME/dotfiles/lazyvim-config`, with `~/.local/share` as the data-home
+fallback. This workstation command does not add the bare Mason override.
+
 ## Development
 
-From a cloned checkout, run `./scripts/validate`. Tests use temporary homes, stub package installation and
-exercise real local Git checkouts. CI runs the same checks on Linux and macOS.
-They do not install a workstation or start provider sessions.
+From a cloned checkout, run `./scripts/validate`. Tests use temporary homes,
+stub package installation and exercise local Git checkouts. The validator includes
+all `pi/tests/*.test.mjs` files, offline configuration and Codex linking checks.
+CI runs these checks on Linux and macOS, plus installed Pi and Codex consumer
+checks on Linux using isolated dependencies installed by Bun.
+
+Installed consumer checks are opt-in locally. Set these paths to your test
+dependencies, then run `./scripts/validate --runtime` with Bun and Codex on PATH:
+
+| Variable | Installed source |
+|---|---|
+| `PI_FAST_RUNTIME_SOURCE` | The pinned `@earendil-works/pi-coding-agent` package directory |
+| `PI_BASH_OPERATIONS_TEST_RUNTIME_PATH` | Its `dist/core/tools/bash.js` |
+| `PI_SKILLS_TEST_RUNTIME_PATH` | Its `dist/core/skills.js` |
+| `PI_WEB_ACCESS_SSRF_MODULE` | `pi-web-access/ssrf-protection.ts` |
+| `PI_SUBAGENTS_TEST_RUNTIME_SOURCE` | The subagent checkout pinned in `pi/settings.json` |
+
+Without those paths, the default run reports skipped installed Pi checks.
+Runtime checks exercise loaders, package contracts, subprocess cancellation,
+provider request serialization and native Codex discovery without provider
+requests or authentication.
+
+After installing optional language tools, the separate bare-environment smoke
+test exercises selected compilers and LSP initialization:
+
+```sh
+dev-shell python3 tests/bare_runtime_test.py c rust python typescript bash
+```
+
+Select only languages you installed; add `--codex` to check its optional CLI.
+This journey requires an installed bare environment and is not part of default CI.
 
 When publishing runtime changes, push the tested runtime commit first, then update
 `REVISION` and `ARCHIVE_SHA256` in `bootstrap.sh` to that commit and its codeload
 archive digest. The downloaded archive is verified; existing extracted snapshots
 are trusted local files, so use a separate checkout for development.
 
-The initial runtime is a selected snapshot of my private dotfiles, with public
-and portable defaults. Bootstrap runs independently. [SOURCE.md](SOURCE.md)
-records the boundary; deciding how to consolidate the two repos comes next.
+[SOURCE.md](SOURCE.md) records the initial import and current ownership boundary.
