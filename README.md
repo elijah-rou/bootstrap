@@ -33,16 +33,13 @@ authentication stay in place. If you cloned this repo over HTTPS instead, run
 | Area | Included |
 |---|---|
 | Terminal | Bash/Zsh configuration, Starship, tmux, zoxide |
-| Tools | Git, delta, gh, SSH client, ripgrep, fd, fzf, bat, eza, jq, uv, Ruff, ShellCheck, just |
+| Tools | Git, delta, gh, SSH client, ripgrep, fd, fzf, bat, eza, jq, just |
 | Neovim | [My LazyVim configuration](https://github.com/elijah-rou/lazyvim-config), downloaded over HTTPS; plugins install on first launch |
 | Agents | Pi with my theme, extensions, prompts, agents and shared skills; Codex; Herdr and its Pi integration |
-| LSPs | Python, TypeScript, Bash and Rust Analyzer |
 
-Node, Python, Bun and TypeScript are dependencies of these tools and LSPs, so they
-remain in the base environment. Project language toolchains are opt-in. Rust
-Analyzer is installed as a [standalone conda-forge package](https://anaconda.org/conda-forge/rust-analyzer).
-Full Rust project analysis and builds need Cargo and Rust; add the Rust toolchain
-when working on a Rust project.
+Node, Python and Bun remain in the base environment because the installer and
+agent tools use them. Language development tools and LSPs are opt-in. The managed
+Neovim overlay disables Mason downloads and uses available servers from PATH.
 
 Prime, Meridian, Headroom, Docker, desktop apps and services are not installed.
 Local web search and desktop clipboard features need host support or separate
@@ -56,12 +53,28 @@ After the base setup, select any combination:
 ```sh
 bash bootstrap.sh languages c
 bash bootstrap.sh languages cpp rust go
+bash bootstrap.sh languages elixir zig
 ```
 
-C and C++ include compiler activation, make and pkg-config. Rust uses rustup and
-includes Cargo, rust-src, rustfmt, Clippy and a C linker. Go comes from conda-forge.
-Node and Python are already available as base dependencies. No toolchain is
-removed from an existing machine.
+Each selection installs its language tools and matching LSP:
+
+| Selection | Language tools | LSP |
+|---|---|---|
+| `c` | C compiler, make, pkg-config | clangd |
+| `cpp` | C++ compiler, make, pkg-config | clangd |
+| `rust` | rustup, Cargo, rust-src, rustfmt, Clippy, C linker | Rust Analyzer |
+| `go` | Go | gopls |
+| `python` | uv, Ruff; Python is already available | BasedPyright, Ruff |
+| `typescript` | TypeScript; Node is already available, also supports JavaScript | TypeScript Language Server |
+| `bash` | ShellCheck; Bash is a host prerequisite | Bash Language Server |
+| `elixir` | Elixir 1.20.4, Erlang/OTP 29.0.6, Mix | ElixirLS 0.31.1 |
+| `zig` | Zig 0.16.0 | ZLS 0.16.0 |
+
+[ElixirLS](https://github.com/elixir-lsp/elixir-ls/releases/tag/v0.31.1) compiles
+into Mix's cache during installation, requiring network access. Its release
+archive and the platform-specific [ZLS binaries](https://github.com/zigtools/zls/releases/tag/0.16.0)
+are checksum-verified. Zig and ZLS use matching releases. No source checkout in
+`~/Projects` is needed. Existing toolchains and LSPs are not removed.
 
 Use `dev-shell` for builds so compiler variables are active:
 

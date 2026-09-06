@@ -1,7 +1,6 @@
 # conda-forge tools for the user-local terminal environment.
 python=3.13
 nodejs=24
-uv
 bun
 git
 git-delta
@@ -22,7 +21,4 @@ less
 curl
 wget
 unzip
-shellcheck
 just
-ruff
-rust-analyzer

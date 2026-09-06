@@ -12,12 +12,12 @@ case "$command_name" in
     languages)
         [[ $# -gt 1 ]] || { printf 'Select toolchains: c cpp rust go\n' >&2; exit 2; }
         for selection in "${@:2}"; do
-            case "$selection" in c|cpp|rust|go) ;; *) printf 'Unknown toolchain: %s\n' "$selection" >&2; exit 2 ;; esac
+            case "$selection" in c|cpp|rust|go|python|typescript|bash|elixir|zig) ;; *) printf 'Unknown toolchain: %s\n' "$selection" >&2; exit 2 ;; esac
         done
         ;;
     --help|-h)
         printf '%s\n' 'Usage: bash bootstrap.sh [install|fetch|preflight|doctor|link|codex-link]' \
-            '       bash bootstrap.sh languages c cpp rust go' \
+            '       bash bootstrap.sh languages c cpp rust go python typescript bash elixir zig' \
             'Downloads a verified public snapshot; install is the default.'
         exit 0
         ;;

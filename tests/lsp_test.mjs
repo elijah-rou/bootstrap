@@ -28,11 +28,15 @@ process.stdin.on('data', chunk => {
   }
 });
 `, { mode: 0o755 });
-writeFileSync(join(root, 'main.rs'), 'fn main() {}\n');
+for (const [extension, server] of [['rs', 'rust-analyzer'], ['ex', 'elixir-ls'], ['exs', 'elixir-ls'], ['zig', 'zls']]) {
+  writeFileSync(join(root, 'bin', server), readFileSync(join(root, 'bin', 'rust-analyzer')), { mode: 0o755 });
+  writeFileSync(join(root, `main.${extension}`), '// fixture\n');
+}
 writeFileSync(join(root, 'verification-receipt.ts'), readFileSync(new URL('../pi/extensions/verification-receipt.ts', import.meta.url)));
 
 for (const name of ['lsp-diagnostics', 'lsp-navigation']) {
-  test(`${name} uses standalone Rust Analyzer without rustup`, async () => {
+  for (const [extension, server] of [['rs', 'rust-analyzer'], ['ex', 'elixir-ls'], ['exs', 'elixir-ls'], ['zig', 'zls']]) {
+  test(`${name} uses ${server} for .${extension}`, async () => {
     const source = readFileSync(new URL(`../pi/extensions/${name}.ts`, import.meta.url), 'utf8')
       .replace('import { Type } from "@mariozechner/pi-ai";', 'const Type = new Proxy({}, { get: () => () => ({}) });');
     const file = join(root, `${name}.ts`); writeFileSync(file, source);
@@ -40,9 +44,10 @@ for (const name of ['lsp-diagnostics', 'lsp-navigation']) {
     const tools = new Map(); register({ on() {}, registerTool(tool) { tools.set(tool.name, tool); } });
     const diagnostic = name === 'lsp-diagnostics';
     const tool = tools.get(diagnostic ? 'lsp_diagnostics' : 'lsp_definition');
-    const params = diagnostic ? { paths: [join(root, 'main.rs')], timeoutMs: 2000 } : { path: 'main.rs', line: 1, character: 1, timeoutMs: 2000 };
+    const params = diagnostic ? { paths: [join(root, `main.${extension}`)], timeoutMs: 2000 } : { path: `main.${extension}`, line: 1, character: 1, timeoutMs: 2000 };
     const result = await tool.execute('test', params, undefined, undefined, { cwd: root });
     if (diagnostic) assert.equal(result.details.outcome, 'clean');
-    else assert.equal(result.details.server, 'rust-analyzer');
+    else assert.equal(result.details.server, server);
   });
+  }
 }

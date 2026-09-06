@@ -17,7 +17,7 @@ const MAX_TIMEOUT_MS = 30_000;
 
 type Severity = 1 | 2 | 3 | 4;
 type LspOutcome = "clean" | "diagnostics" | "not_applicable" | "unsupported" | "failed" | "timed_out" | "cancelled";
-type SupportedServer = "typescript-language-server" | "basedpyright" | "pyright-langserver" | "rust-analyzer" | "gopls" | "clangd" | "lua-language-server" | "sourcekit-lsp";
+type SupportedServer = "typescript-language-server" | "basedpyright" | "pyright-langserver" | "rust-analyzer" | "gopls" | "clangd" | "lua-language-server" | "sourcekit-lsp" | "elixir-ls" | "zls";
 
 interface ServerConfig {
 	name: SupportedServer;
@@ -49,6 +49,8 @@ interface LspRequestParams {
 }
 
 const SERVER_CONFIGS: ServerConfig[] = [
+	{ name: "elixir-ls", command: "elixir-ls", args: [], languageIds: { ".ex": "elixir", ".exs": "elixir" } },
+	{ name: "zls", command: "zls", args: [], languageIds: { ".zig": "zig" } },
 	{
 		name: "typescript-language-server",
 		command: "typescript-language-server",

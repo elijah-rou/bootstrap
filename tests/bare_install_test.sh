@@ -147,7 +147,7 @@ echo 'PASS unknown bare arguments are rejected before installation'
     install_bare_micromamba() { :; }
     install_bare_environment() { :; }
     install_bare_rust() { echo 'unexpected default Rust toolchain' >&2; exit 95; }
-    npm() { :; }
+    npm() { printf '%s\n' "$@" > "$HOME/npm-packages"; }
     pi() { printf '%s\n' "$PI_CLI_VERSION"; }
     install_herdr() { :; }
     link_bare_config() { :; }
@@ -161,6 +161,7 @@ echo 'PASS unknown bare arguments are rejected before installation'
     unset NVIM_CONFIG_REPO_URL
     install_bare
     [[ "$(cat "$HOME/nvim-source")" == https://github.com/elijah-rou/lazyvim-config.git ]]
+    [[ "$(cat "$HOME/npm-packages")" == "$(printf '%s\n' install --global "$PI_CLI_PACKAGE@$PI_CLI_VERSION" @openai/codex)" ]]
     NVIM_CONFIG_REPO_URL=https://example.invalid/custom-nvim.git install_bare
     [[ "$(cat "$HOME/nvim-source")" == https://example.invalid/custom-nvim.git ]]
     nvim_status=17
@@ -193,12 +194,11 @@ echo 'PASS bare installs the public Neovim config, honors overrides, and propaga
         ln -s "$ROOT_DIR/scripts/bare-env.sh" "$HOME/.config/dotfiles/bare-env.sh"
         printf '#!/bin/sh\nexit 0\n' > "$HOME/.local/share/dotfiles/bare/bin/micromamba"
         chmod +x "$HOME/.local/share/dotfiles/bare/bin/micromamba"
-        for tool in git delta gh ssh zsh tmux nvim rg fzf bat eza jq make python3 uv node npm bun \
-            rustup cargo rustc rust-analyzer basedpyright-langserver typescript-language-server bash-language-server shellcheck codex herdr; do
+        for tool in git delta gh ssh zsh tmux nvim rg fzf bat eza jq python3 node npm bun codex herdr; do
             if ! command -v "$tool" >/dev/null; then eval "$tool() { :; }"; fi
         done
         pi() { printf '%s\n' "$PI_CLI_VERSION"; }
-        rust-analyzer() { :; }
+        rust-analyzer() { return 99; }
         check_pi_subagents_revision() { :; }
         bare_doctor > "$HOME/doctor-output" 2>&1 || { cat "$HOME/doctor-output"; exit 1; }
         mv "$XDG_CONFIG_HOME/nvim" "$XDG_CONFIG_HOME/saved-nvim"

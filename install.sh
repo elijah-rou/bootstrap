@@ -45,8 +45,8 @@ case "${1:-install}" in
     codex-link) link_codex_assets ;;
     --help|-h)
         printf '%s\n' 'Usage: ./install.sh [install|preflight|doctor|link|codex-link]' \
-            '       ./install.sh languages c cpp rust go' \
-            'Default: user-local terminal tools, Neovim, Pi, Codex, Herdr and LSPs.' \
-            'Language toolchains are opt-in; Node and Python are tool dependencies.'
+            '       ./install.sh languages c cpp rust go python typescript bash elixir zig' \
+            'Default: user-local terminal tools, Neovim, Pi, Codex, Herdr.' \
+            'Language toolchains and LSPs are opt-in; Node and Python are tool dependencies.'
         ;;
 esac

@@ -10,7 +10,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_TIMEOUT_MS = 30_000;
 const MAX_RESULTS = 80;
 
-type ServerName = "typescript-language-server" | "basedpyright" | "pyright-langserver" | "rust-analyzer" | "gopls";
+type ServerName = "typescript-language-server" | "basedpyright" | "pyright-langserver" | "rust-analyzer" | "gopls" | "elixir-ls" | "zls";
 
 interface ServerConfig {
 	name: ServerName;
@@ -35,6 +35,8 @@ interface SymbolsParams {
 }
 
 const SERVERS: ServerConfig[] = [
+	{ name: "elixir-ls", command: "elixir-ls", args: [], languageIds: { ".ex": "elixir", ".exs": "elixir" } },
+	{ name: "zls", command: "zls", args: [], languageIds: { ".zig": "zig" } },
 	{ name: "typescript-language-server", command: "typescript-language-server", args: ["--stdio"], languageIds: { ".ts": "typescript", ".tsx": "typescriptreact", ".js": "javascript", ".jsx": "javascriptreact", ".mjs": "javascript", ".cjs": "javascript" } },
 	{ name: "basedpyright", command: "basedpyright-langserver", args: ["--stdio"], languageIds: { ".py": "python", ".pyi": "python" } },
 	{ name: "pyright-langserver", command: "pyright-langserver", args: ["--stdio"], languageIds: { ".py": "python", ".pyi": "python" } },

@@ -102,8 +102,7 @@ bare_doctor() (
         return 1
     fi
     for command in git delta gh ssh zsh tmux nvim rg fzf bat eza jq \
-        python3 uv node npm bun rust-analyzer \
-        basedpyright-langserver typescript-language-server bash-language-server shellcheck pi codex herdr; do
+        python3 node npm bun pi codex herdr; do
         if command -v "$command" >/dev/null 2>&1; then
             info "$command: $(command -v "$command")"
         else
@@ -115,7 +114,6 @@ bare_doctor() (
         warn "Pi must be $PI_CLI_VERSION"
         failed=1
     fi
-    rust-analyzer --version >/dev/null 2>&1 || failed=1
     check_pi_subagents_revision || failed=1
     local nvim_config="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
     local nvim_checkout="${NVIM_CONFIG_CHECKOUT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles/lazyvim-config}"
@@ -146,8 +144,7 @@ install_bare() (
     install_bare_micromamba "$(bare_platform)" || return 1
     install_bare_environment || return 1
     hash -r
-    npm install --global "$PI_CLI_PACKAGE@$PI_CLI_VERSION" @openai/codex \
-        basedpyright typescript@6 typescript-language-server@6 bash-language-server || return 1
+    npm install --global "$PI_CLI_PACKAGE@$PI_CLI_VERSION" @openai/codex || return 1
     [[ "$(pi --version)" == "$PI_CLI_VERSION" ]] || return 1
     HERDR_INSTALL_DIR="$DOTFILES_BARE_ROOT/bin" install_herdr || return 1
     link_bare_config || return 1
@@ -175,17 +172,67 @@ install_bare_rust() {
     "$CARGO_HOME/bin/rustup" default stable
 }
 
+install_bare_elixir_ls() {
+    local destination="$DOTFILES_BARE_ROOT/tools/elixir-ls-0.31.1"
+    local source="$destination"
+    if [[ ! -e "$destination" && ! -L "$destination" ]]; then
+        download_verified 'https://github.com/elixir-lsp/elixir-ls/releases/download/v0.31.1/elixir-ls-v0.31.1.zip' \
+            bac08322ea3698157eb2373bb5b65e38c15df9dd41e1c06f142f874367fa472f "$bare_stage/elixir-ls.zip" || return 1
+        source="$bare_stage/elixir-ls"
+        mkdir -p "$source" || return 1
+        unzip -q "$bare_stage/elixir-ls.zip" -d "$source" || return 1
+    fi
+    [[ -x "$source/language_server.sh" && -f "$source/quiet_install.exs" ]] || {
+        warn "Incomplete ElixirLS installation at $source; move it aside and retry"
+        return 1
+    }
+    # The official release compiles into Mix's cache for the selected Elixir/OTP pair.
+    MIX_ENV=prod elixir "$source/quiet_install.exs" </dev/null || return 1
+    if [[ "$source" != "$destination" ]]; then
+        mkdir -p "$(dirname "$destination")" || return 1
+        mv "$source" "$destination" || return 1
+    fi
+    link_managed_file "$destination/language_server.sh" "$DOTFILES_BARE_ROOT/bin/elixir-ls"
+}
+
+install_bare_zls() {
+    local target sha destination="$DOTFILES_BARE_ROOT/tools/zls-0.16.0"
+    case "$(bare_platform)" in
+        linux-64) target=x86_64-linux; sha=ded6d562a0b86ee878b1ddf70ffab2797ce3cdca3b02d6077548f9d56dff96b6 ;;
+        linux-aarch64) target=aarch64-linux; sha=430cd293d201eb70ae2519dbc96c854bf8791b8df7fc9392e8d2dc9680a2bed7 ;;
+        osx-arm64) target=aarch64-macos; sha=b93ec549f8558a7e85984a840e9276d274f1059b54ade4254296ef4982958359 ;;
+        *) return 1 ;;
+    esac
+    if [[ ! -e "$destination" && ! -L "$destination" ]]; then
+        download_verified "https://github.com/zigtools/zls/releases/download/0.16.0/zls-$target.tar.xz" "$sha" "$bare_stage/zls.tar.xz" || return 1
+        mkdir -p "$bare_stage/zls" "$(dirname "$destination")" || return 1
+        tar -xJf "$bare_stage/zls.tar.xz" -C "$bare_stage/zls" || return 1
+        [[ "$("$bare_stage/zls/zls" --version)" == 0.16.0 ]] || return 1
+        mv "$bare_stage/zls" "$destination" || return 1
+    fi
+    [[ -x "$destination/zls" && "$("$destination/zls" --version)" == 0.16.0 ]] || {
+        warn "Incomplete ZLS installation at $destination; move it aside and retry"
+        return 1
+    }
+    link_managed_file "$destination/zls" "$DOTFILES_BARE_ROOT/bin/zls"
+}
+
 install_bare_languages() (
-    [[ $# -gt 0 ]] || { warn 'Select one or more toolchains: c cpp rust go'; return 2; }
-    local language with_rust=0
-    local packages=()
+    [[ $# -gt 0 ]] || { warn 'Select one or more languages: c cpp rust go python typescript bash elixir zig'; return 2; }
+    local language
+    local packages=() npm_packages=()
     for language in "$@"; do
         case "$language" in
-            c) packages+=(c-compiler make pkg-config) ;;
-            cpp) packages+=(cxx-compiler make pkg-config) ;;
-            rust) with_rust=1; packages+=(c-compiler make pkg-config) ;;
+            c) packages+=(c-compiler clang-tools make pkg-config) ;;
+            cpp) packages+=(cxx-compiler clang-tools make pkg-config) ;;
+            rust) packages+=(c-compiler make pkg-config) ;;
             go) packages+=(go) ;;
-            *) warn "Unknown toolchain: $language (choose c, cpp, rust, go)"; return 2 ;;
+            python) packages+=(uv ruff); npm_packages+=(basedpyright) ;;
+            typescript) npm_packages+=(typescript@6 typescript-language-server@6) ;;
+            bash) packages+=(shellcheck); npm_packages+=(bash-language-server) ;;
+            elixir) packages+=(elixir=1.20.4 erlang=29.0.6) ;;
+            zig) packages+=(zig=0.16.0) ;;
+            *) warn "Unknown toolchain: $language (choose c, cpp, rust, go, python, typescript, bash, elixir, zig)"; return 2 ;;
         esac
     done
     source "$DOTFILES_DIR/scripts/bare-env.sh"
@@ -203,9 +250,23 @@ install_bare_languages() (
         return 1
     }
     trap 'rm -rf "$bare_stage"; rmdir "$DOTFILES_BARE_ROOT/install.lock"' EXIT
-    "$DOTFILES_BARE_ROOT/bin/micromamba" --no-rc install --yes \
-        --root-prefix "$MAMBA_ROOT_PREFIX" --prefix "$DOTFILES_BARE_ROOT/env" \
-        --override-channels --channel conda-forge --strict-channel-priority "${packages[@]}" || return 1
-    if [[ $with_rust -eq 1 ]]; then install_bare_rust || return 1; fi
-    info 'Selected toolchains installed. Run builds inside dev-shell.'
+    if [[ ${#packages[@]} -gt 0 ]]; then
+        "$DOTFILES_BARE_ROOT/bin/micromamba" --no-rc install --yes \
+            --root-prefix "$MAMBA_ROOT_PREFIX" --prefix "$DOTFILES_BARE_ROOT/env" \
+            --override-channels --channel conda-forge --strict-channel-priority "${packages[@]}" || return 1
+    fi
+    if [[ ${#npm_packages[@]} -gt 0 ]]; then
+        npm install --global "${npm_packages[@]}" || return 1
+    fi
+    for language in "$@"; do
+        case "$language" in
+            rust) install_bare_rust || return 1 ;;
+            go) GOBIN="$DOTFILES_BARE_ROOT/bin" go install golang.org/x/tools/gopls@v0.23.0 || return 1 ;;
+            elixir) install_bare_elixir_ls || return 1 ;;
+            zig) install_bare_zls || return 1 ;;
+            c|cpp|python|typescript|bash) ;;
+            *) return 2 ;;
+        esac
+    done
+    info 'Selected languages and LSPs installed. Run builds inside dev-shell.'
 )

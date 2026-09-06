@@ -56,10 +56,10 @@ exit 1
         self.assertFalse((self.root / 'installed').exists())
         self.run_bootstrap('fetch')
         self.run_bootstrap()
-        self.run_bootstrap('languages', 'cpp', 'rust')
+        self.run_bootstrap('languages', 'c', 'cpp', 'rust', 'go', 'python', 'typescript', 'bash', 'elixir', 'zig')
         self.run_bootstrap('doctor')
         self.assertEqual((self.root / 'downloads').read_text(), 'curl\n')
-        self.assertEqual((self.root / 'installed').read_text(), 'install\nlanguages\ncpp\nrust\ndoctor\n')
+        self.assertEqual((self.root / 'installed').read_text(), 'install\nlanguages\nc\ncpp\nrust\ngo\npython\ntypescript\nbash\nelixir\nzig\ndoctor\n')
         self.env['INSTALL_STATUS'] = '17'
         self.run_bootstrap(status=17)
         self.assertFalse((self.cache / 'install.lock').exists())
