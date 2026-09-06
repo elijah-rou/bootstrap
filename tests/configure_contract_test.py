@@ -14,7 +14,7 @@ class ConfigurationContract(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.home = self.root / 'home'
         self.home.mkdir()
         self.env = dict(os.environ, HOME=str(self.home), CODEX_HOME=str(self.home / '.codex'),
