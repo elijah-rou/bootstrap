@@ -41,6 +41,22 @@ setup_neovim_config() (
     fi
 
     [[ -f "$checkout/init.lua" ]] || { warn "Neovim config is missing init.lua: $checkout"; return 1; }
+    if [[ -f "$checkout/lua/config/lazy.lua" ]]; then
+        local plugin="lua/plugins/zz-bootstrap-managed.lua" exclude tracked
+        tracked="$(git -C "$checkout" ls-files -- "$plugin")" || return 1
+        if [[ -n "$tracked" ]]; then
+            warn "Neovim checkout tracks $plugin; refusing to replace it"
+            return 1
+        fi
+        exclude="$(git -C "$checkout" rev-parse --git-path info/exclude)" || return 1
+        [[ "$exclude" == /* ]] || exclude="$checkout/$exclude"
+        mkdir -p "$(dirname "$exclude")" || return 1
+        if ! grep -qxF "/$plugin" "$exclude" 2>/dev/null; then
+            printf '\n/%s\n' "$plugin" >> "$exclude" || return 1
+        fi
+        link_managed_file "$DOTFILES_DIR/neovim/bootstrap.lua" "$checkout/$plugin" \
+            "${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap/neovim-backups" || return 1
+    fi
     if [[ "$(resolve_path "$checkout")" != "$(resolve_path "$target")" ]]; then
         link_managed_file "$checkout" "$target" || return 1
     fi
