@@ -6,6 +6,7 @@ trap 'rm -rf "$fixture"' EXIT
 export HOME="$fixture/home"
 mkdir -p "$HOME"
 source "$ROOT_DIR/install.sh"
+npm() { printf 'Unexpected npm invocation\n' >&2; return 99; }
 source "$ROOT_DIR/scripts/bare-env.sh"
 for arguments in '' 'unknown' 'rust --bad'; do
     # These are fixed test inputs, intentionally split into argv.
@@ -36,12 +37,12 @@ for flag in --languages -l; do
     [[ ! -d "$DOTFILES_BARE_ROOT/install.lock" ]]
 done
 install_bare_rust() { touch "$HOME/rust-installed"; }
-npm() { printf '%s\n' "$@" > "$HOME/npm-packages"; }
+bun() { printf '%s\n' "$@" > "$HOME/js-packages"; }
 go() { printf '%s\n' "$@" > "$HOME/go-args"; }
 install_bare_elixir_ls() { touch "$HOME/elixir-ls-installed"; }
 install_bare_zls() { touch "$HOME/zls-installed"; }
 for selection in c cpp go python typescript bash elixir zig; do
-    rm -f "$HOME/npm-packages" "$HOME/packages" "$HOME/go-args"
+    rm -f "$HOME/js-packages" "$HOME/packages" "$HOME/go-args"
     install_bare_optional languages "$selection"
     [[ ! -e "$HOME/rust-installed" ]]
     [[ ! -d "$DOTFILES_BARE_ROOT/install.lock" ]]
@@ -50,7 +51,7 @@ for selection in c cpp go python typescript bash elixir zig; do
         cpp) expected=cxx-compiler ;;
         go) expected=go ;;
         python) expected=ruff ;;
-        typescript) grep -Fxq typescript-language-server@6 "$HOME/npm-packages"; [[ ! -e "$HOME/packages" ]]; continue ;;
+        typescript) grep -Fxq typescript-language-server@6 "$HOME/js-packages"; [[ ! -e "$HOME/packages" ]]; continue ;;
         bash) expected=shellcheck ;;
         elixir) expected=elixir=1.20.4 ;;
         zig) expected=zig=0.16.0 ;;
@@ -59,8 +60,8 @@ for selection in c cpp go python typescript bash elixir zig; do
     case "$selection" in
         c|cpp) grep -Fxq clang-tools "$HOME/packages" ;;
         go) grep -Fxq golang.org/x/tools/gopls@v0.23.0 "$HOME/go-args" ;;
-        python) grep -Fxq basedpyright "$HOME/npm-packages" ;;
-        bash) grep -Fxq bash-language-server "$HOME/npm-packages" ;;
+        python) grep -Fxq basedpyright "$HOME/js-packages" ;;
+        bash) grep -Fxq bash-language-server "$HOME/js-packages" ;;
         elixir) [[ -f "$HOME/elixir-ls-installed" ]]; grep -Fxq erlang=29.0.6 "$HOME/packages"; grep -Fxq unzip "$HOME/packages" ;;
         zig) [[ -f "$HOME/zls-installed" ]] ;;
     esac

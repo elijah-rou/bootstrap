@@ -8,6 +8,7 @@ export XDG_CONFIG_HOME="$HOME/.config" XDG_STATE_HOME="$HOME/.local/state"
 export CODEX_HOME="$HOME/.codex"
 mkdir -p "$HOME"
 source "$ROOT_DIR/install.sh"
+npm() { printf 'Unexpected npm invocation\n' >&2; return 99; }
 
 # All configuration is real; network/service/auth paths must never be invoked.
 sudo() { echo 'unexpected sudo' >&2; exit 90; }
@@ -147,7 +148,7 @@ echo 'PASS unknown bare arguments are rejected before installation'
     install_bare_micromamba() { :; }
     install_bare_environment() { :; }
     install_bare_rust() { echo 'unexpected default Rust toolchain' >&2; exit 95; }
-    npm() { printf '%s\n' "$@" > "$HOME/npm-packages"; }
+    bun() { printf '%s\n' "$@" > "$HOME/js-packages"; }
     pi() { printf '%s\n' "$PI_CLI_VERSION"; }
     install_herdr() { :; }
     link_bare_config() { :; }
@@ -161,7 +162,7 @@ echo 'PASS unknown bare arguments are rejected before installation'
     unset NVIM_CONFIG_REPO_URL
     install_bare
     [[ "$(cat "$HOME/nvim-source")" == https://github.com/elijah-rou/lazyvim-config.git ]]
-    [[ "$(cat "$HOME/npm-packages")" == "$(printf '%s\n' install --global "$PI_CLI_PACKAGE@$PI_CLI_VERSION")" ]]
+    [[ "$(cat "$HOME/js-packages")" == "$(printf '%s\n' install --global --exact "$PI_CLI_PACKAGE@$PI_CLI_VERSION")" ]]
     NVIM_CONFIG_REPO_URL=https://example.invalid/custom-nvim.git install_bare
     [[ "$(cat "$HOME/nvim-source")" == https://example.invalid/custom-nvim.git ]]
     nvim_status=17
@@ -261,3 +262,17 @@ echo 'PASS bare installs the public Neovim config, honors overrides, and propaga
     )
 )
 echo 'PASS Neovim clone, update, retry, backup, local edits, offline relink, and failure recovery'
+
+(
+    export HOME="$fixture/bun-migration"
+    mkdir -p "$HOME/.local/share/dotfiles/bare/"{bun,npm}/bin
+    printf '#!/bin/sh\nprintf "new\\n"\n' > "$HOME/.local/share/dotfiles/bare/bun/bin/pi"
+    printf '#!/bin/sh\nprintf "old\\n"\n' > "$HOME/.local/share/dotfiles/bare/npm/bin/pi"
+    printf '#!/bin/sh\nexit 0\n' > "$HOME/.local/share/dotfiles/bare/npm/bin/retained-tool"
+    chmod +x "$HOME/.local/share/dotfiles/bare/"{bun,npm}/bin/*
+    source "$ROOT_DIR/scripts/bare-env.sh"
+    unset -f pi
+    [[ "$(command -v pi)" == "$BUN_INSTALL/bin/pi" ]]
+    [[ "$(command -v retained-tool)" == "$npm_config_prefix/bin/retained-tool" ]]
+)
+echo 'PASS Bun binaries take precedence while existing npm tools remain available'

@@ -37,8 +37,10 @@ authentication stay in place. If you cloned this repo over HTTPS instead, run
 | Neovim | [My LazyVim configuration](https://github.com/elijah-rou/lazyvim-config), downloaded over HTTPS; plugins install on first launch |
 | Agents | Pi with my theme, extensions, prompts, agents and shared skills; Herdr and its Pi integration |
 
-Node, Python and Bun remain in the base environment because the installer and
-agent tools use them. Language development tools and LSPs are opt-in. The managed
+Bun installs all JavaScript packages, including Pi, optional Codex and LSPs.
+Node remains a runtime dependency: Pi's pinned subagent extension explicitly
+launches Node child processes. Python supports the configuration helpers.
+Language development tools and LSPs are opt-in. The managed
 Neovim overlay disables Mason downloads and uses available servers from PATH.
 
 Prime, Meridian, Headroom, Docker, desktop apps and services are not installed.

@@ -6,6 +6,7 @@ trap 'rm -rf "$fixture"' EXIT
 export HOME="$fixture/home" CODEX_HOME="$fixture/home/.codex"
 mkdir -p "$HOME"
 source "$ROOT_DIR/install.sh"
+npm() { printf 'Unexpected npm invocation\n' >&2; return 99; }
 source "$ROOT_DIR/scripts/bare-env.sh"
 for arguments in '--tools' '-t' '--tools just unknown' '-t rust'; do
     status=0
@@ -28,7 +29,7 @@ for flag in --tools -t; do
         [[ ! -e "$CODEX_HOME" && ! -d "$DOTFILES_BARE_ROOT/install.lock" ]]
     done
 done
-npm() { printf '%s\n' "$@" > "$HOME/js-packages"; return "${JS_STATUS:-0}"; }
+bun() { printf '%s\n' "$@" > "$HOME/js-packages"; return "${JS_STATUS:-0}"; }
 install_bare_optional tools codex
 [[ -L "$CODEX_HOME/AGENTS.md" && -f "$CODEX_HOME/config.toml" ]]
 grep -Fxq @openai/codex "$HOME/js-packages"

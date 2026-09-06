@@ -105,7 +105,7 @@ bare_doctor() (
         return 1
     fi
     for command in git delta gh ssh zsh tmux nvim rg fzf bat eza jq \
-        python3 node npm bun pi herdr; do
+        python3 node bun pi herdr; do
         if command -v "$command" >/dev/null 2>&1; then
             info "$command: $(command -v "$command")"
         else
@@ -147,7 +147,7 @@ install_bare() (
     install_bare_micromamba "$(bare_platform)" || return 1
     install_bare_environment || return 1
     hash -r
-    npm install --global "$PI_CLI_PACKAGE@$PI_CLI_VERSION" || return 1
+    bun install --global --exact "$PI_CLI_PACKAGE@$PI_CLI_VERSION" || return 1
     [[ "$(pi --version)" == "$PI_CLI_VERSION" ]] || return 1
     HERDR_INSTALL_DIR="$DOTFILES_BARE_ROOT/bin" install_herdr || return 1
     link_bare_config || return 1
@@ -229,19 +229,19 @@ install_bare_optional() (
     esac
     shift
     [[ $# -gt 0 ]] || { warn "Select one or more $group: $choices"; return 2; }
-    local packages=() npm_packages=()
+    local packages=() js_packages=()
     for selection in "$@"; do
         case "$group/$selection" in
             languages/c) packages+=(c-compiler clang-tools make pkg-config) ;;
             languages/cpp) packages+=(cxx-compiler clang-tools make pkg-config) ;;
             languages/rust) packages+=(c-compiler make pkg-config) ;;
             languages/go) packages+=(go) ;;
-            languages/python) packages+=(uv ruff); npm_packages+=(basedpyright) ;;
-            languages/typescript) npm_packages+=(typescript@6 typescript-language-server@6) ;;
-            languages/bash) packages+=(shellcheck); npm_packages+=(bash-language-server) ;;
+            languages/python) packages+=(uv ruff); js_packages+=(basedpyright) ;;
+            languages/typescript) js_packages+=(typescript@6 typescript-language-server@6) ;;
+            languages/bash) packages+=(shellcheck); js_packages+=(bash-language-server) ;;
             languages/elixir) packages+=(elixir=1.20.4 erlang=29.0.6 unzip) ;;
             languages/zig) packages+=(zig=0.16.0) ;;
-            tools/codex) npm_packages+=(@openai/codex) ;;
+            tools/codex) js_packages+=(@openai/codex) ;;
             tools/just|tools/wget|tools/unzip) packages+=("$selection") ;;
             *) warn "Unknown $group selection: $selection (choose $choices)"; return 2 ;;
         esac
@@ -266,8 +266,8 @@ install_bare_optional() (
             --root-prefix "$MAMBA_ROOT_PREFIX" --prefix "$DOTFILES_BARE_ROOT/env" \
             --override-channels --channel conda-forge --strict-channel-priority "${packages[@]}" || return 1
     fi
-    if [[ ${#npm_packages[@]} -gt 0 ]]; then
-        npm install --global "${npm_packages[@]}" || return 1
+    if [[ ${#js_packages[@]} -gt 0 ]]; then
+        bun install --global --exact "${js_packages[@]}" || return 1
     fi
     for selection in "$@"; do
         case "$group/$selection" in
