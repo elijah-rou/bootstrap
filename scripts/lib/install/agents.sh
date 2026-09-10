@@ -96,6 +96,9 @@ sync_pi_skill_links() (
     for skill_dir in "$source_dir"/*; do
         [[ -d "$skill_dir" && -f "$skill_dir/SKILL.md" ]] || continue
         link_managed_file "$skill_dir" "$target_dir/$(basename "$skill_dir")" "$target_dir/.backups" || return 1
+        if [[ "$target_dir" == "$HOME/.pi/agent/skills" ]]; then
+            reconcile_managed_skill_alias "$skill_dir" "$HOME/.agents/skills/$(basename "$skill_dir")" || return 1
+        fi
     done
 
     # Pi discovers both roots; migrate the known system alias to the same adapter.
@@ -107,6 +110,37 @@ sync_pi_skill_links() (
         fi
     fi
 )
+
+managed_skill_source_matches() {
+    [[ $# -eq 2 ]] || return 2
+    local source="$1" name="$2" candidate snapshots
+    [[ "$name" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || return 2
+    managed_source_matches "$source" "pi/skills/$name" && return 0
+
+    # Only backed-up skill aliases may be adopted from a cache by a checkout.
+    snapshots="${DOTFILES_DIR%/*}"
+    [[ "${snapshots##*/}" != snapshots ]] || return 1
+    local cache="${DOTFILES_BOOTSTRAP_ROOT:-${BOOTSTRAP_ROOT:-$HOME/.local/share/bootstrap}}"
+    [[ "$cache" == /* && "$cache" != / ]] || return 1
+    [[ "$source" == */"pi/skills/$name" ]] || return 1
+    candidate="${source%"/pi/skills/$name"}"
+    [[ "${candidate%/*}" == "$cache/snapshots" ]] || return 1
+    completed_bootstrap_snapshot "$candidate" || return 1
+    return 0
+}
+
+reconcile_managed_skill_alias() {
+    [[ $# -eq 2 ]] || return 2
+    local source="$1" alias="$2" current name
+    [[ -f "$source/SKILL.md" ]] || return 1
+    [[ -L "$alias" ]] || return 0
+    name="$(basename "$source")"
+    current="$(readlink "$alias")" || return 1
+    if managed_skill_source_matches "$current" "$name"; then
+        link_managed_file "$source" "$alias" "$(dirname "$alias")/.backups" || return 1
+    fi
+    return 0
+}
 
 link_codex_skill() {
     [[ $# -eq 1 ]] || return 2
@@ -124,7 +158,7 @@ link_codex_skill() {
             if [[ "$(resolve_path "$current")" == "$(resolve_path "$source")" ]]; then
                 continue
             fi
-            if managed_source_matches "$(readlink "$current")" "pi/skills/$name"; then
+            if managed_skill_source_matches "$(readlink "$current")" "$name"; then
                 continue
             fi
             if [[ "$name" == omarchy && "$(readlink "$current")" == /usr/share/omarchy/default/agents/skills/omarchy ]]; then
@@ -141,6 +175,7 @@ link_codex_skill() {
     done
 
     link_managed_file "$source" "$shared" "$codex_home/backups/shared-skills" || return 1
+    reconcile_managed_skill_alias "$source" "$HOME/.pi/agent/skills/$name" || return 1
     if [[ -L "$legacy" && "$(resolve_path "$(dirname "$legacy")")" != "$(resolve_path "$(dirname "$shared")")" ]]; then
         mkdir -p "$codex_home/backups/legacy-skills" || return 1
         backup="$(managed_backup_path "$codex_home/backups/legacy-skills/$name")" || return 1

@@ -161,6 +161,119 @@ class ConfigurationContract(unittest.TestCase):
         self.run_config('codex', '--legacy-root', legacy)
         self.assertEqual(list((self.home / '.codex/backups').rglob('*.bak.*')), backups)
 
+    def test_skill_aliases_converge_from_cached_snapshot_to_checkout(self):
+        name = (ROOT / 'codex/skills.txt').read_text().splitlines()[0]
+        for cache_setting in ['default', 'DOTFILES_BOOTSTRAP_ROOT', 'BOOTSTRAP_ROOT', 'precedence']:
+            with self.subTest(cache_setting=cache_setting):
+                self.env.pop('DOTFILES_BOOTSTRAP_ROOT', None)
+                self.env.pop('BOOTSTRAP_ROOT', None)
+                cache = self.home / '.local/share/bootstrap' if cache_setting == 'default' else self.root / cache_setting
+                if cache_setting == 'precedence':
+                    self.env['DOTFILES_BOOTSTRAP_ROOT'] = str(cache)
+                    self.env['BOOTSTRAP_ROOT'] = str(self.root / 'unselected-cache')
+                elif cache_setting != 'default':
+                    self.env[cache_setting] = str(cache)
+                snapshot = cache / 'snapshots' / ('a' * 40)
+                source = snapshot / 'pi/skills' / name
+                source.mkdir(parents=True)
+                (source / 'SKILL.md').write_text('old managed skill')
+                (snapshot / 'install.sh').write_text('#!/bin/sh\n')
+                (snapshot / 'install.sh').chmod(0o755)
+                (snapshot / '.bootstrap-archive-sha256').write_text('b' * 64 + '\n')
+                retired = self.home / '.pi/agent/extensions/retired.ts'
+                retired.parent.mkdir(parents=True, exist_ok=True)
+                retired.unlink(missing_ok=True)
+                retired.symlink_to(snapshot / 'pi/extensions/retired.ts')
+                pi = self.home / '.pi/agent/skills' / name
+                shared = self.home / '.agents/skills' / name
+                for command in ['pi', 'codex']:
+                    with self.subTest(command=command):
+                        for alias in [pi, shared]:
+                            alias.parent.mkdir(parents=True, exist_ok=True)
+                            alias.unlink(missing_ok=True)
+                            alias.symlink_to(source)
+                        self.run_config(command)
+                        self.assertEqual(pi.resolve(), ROOT / 'pi/skills' / name)
+                        self.assertEqual(shared.resolve(), pi.resolve())
+                        self.assertEqual(retired.readlink(), snapshot / 'pi/extensions/retired.ts')
+                        backups = sorted(str(p) for p in self.home.rglob('*.bak.*'))
+                        self.run_config(command)
+                        self.assertEqual(sorted(str(p) for p in self.home.rglob('*.bak.*')), backups)
+
+    def test_pi_does_not_create_shared_skill_root(self):
+        self.run_config('pi')
+        self.assertFalse((self.home / '.agents').exists())
+
+    def test_codex_does_not_create_pi_skill_root(self):
+        self.run_config('codex')
+        self.assertFalse((self.home / '.pi').exists())
+
+    def test_checkout_rejects_unproven_cached_skill_ownership(self):
+        name = (ROOT / 'codex/skills.txt').read_text().splitlines()[0]
+        for mode in ['unmarked', 'malformed', 'extra-line', 'not-executable', 'other-cache', 'suffix-root', 'nested-asset', 'symlink-root']:
+            with self.subTest(mode=mode):
+                cache = self.root / mode
+                self.env['DOTFILES_BOOTSTRAP_ROOT'] = str(cache)
+                snapshot = cache / 'snapshots' / ('c' * 40)
+                source = snapshot / 'pi/skills' / name
+                source.mkdir(parents=True)
+                (source / 'SKILL.md').write_text('preserve this skill')
+                installer = snapshot / 'install.sh'
+                installer.write_text('#!/bin/sh\n')
+                installer.chmod(0o755)
+                marker = snapshot / '.bootstrap-archive-sha256'
+                marker.write_text('d' * 64 + '\n')
+                if mode == 'unmarked':
+                    marker.unlink()
+                elif mode == 'malformed':
+                    marker.write_text('not a checksum')
+                elif mode == 'extra-line':
+                    marker.write_text('d' * 64 + '\nextra\n')
+                elif mode == 'not-executable':
+                    installer.chmod(0o644)
+                elif mode == 'other-cache':
+                    self.env['DOTFILES_BOOTSTRAP_ROOT'] = str(self.root / 'selected-cache')
+                elif mode == 'suffix-root':
+                    renamed = snapshot.with_name(snapshot.name + '-custom')
+                    snapshot.rename(renamed)
+                    source = renamed / 'pi/skills' / name
+                elif mode == 'nested-asset':
+                    source = snapshot / 'custom/pi/skills' / name
+                    source.mkdir(parents=True)
+                    (source / 'SKILL.md').write_text('preserve this skill')
+                elif mode == 'symlink-root':
+                    renamed = snapshot.with_name('external')
+                    snapshot.rename(renamed)
+                    snapshot.symlink_to(renamed)
+                shared = self.home / '.agents/skills' / name
+                shared.parent.mkdir(parents=True, exist_ok=True)
+                shared.unlink(missing_ok=True)
+                shared.symlink_to(source)
+                for command in ['pi', 'codex']:
+                    self.run_config(command)
+                    self.assertEqual(shared.readlink(), source)
+                    self.assertEqual((source / 'SKILL.md').read_text(), 'preserve this skill')
+
+    def test_unowned_shared_skill_is_preserved_during_pi_setup(self):
+        name = (ROOT / 'codex/skills.txt').read_text().splitlines()[0]
+        source = self.root / 'custom' / name
+        source.mkdir(parents=True)
+        (source / 'SKILL.md').write_text('user skill')
+        shared = self.home / '.agents/skills' / name
+        shared.parent.mkdir(parents=True)
+        shared.symlink_to(source)
+        self.run_config('pi')
+        self.assertEqual(shared.readlink(), source)
+        self.assertEqual((source / 'SKILL.md').read_text(), 'user skill')
+        shared.unlink()
+        shared.symlink_to(ROOT / 'pi/skills' / name)
+        pi = self.home / '.pi/agent/skills' / name
+        pi.unlink()
+        pi.symlink_to(source)
+        self.run_config('codex')
+        self.assertEqual(pi.readlink(), source)
+        self.assertEqual((source / 'SKILL.md').read_text(), 'user skill')
+
     def test_install_read_only_contract(self):
         result = subprocess.run(['bash', str(ROOT / 'install.sh'), 'pi-version'], env=self.env,
                                 capture_output=True, text=True)
