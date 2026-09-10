@@ -83,7 +83,13 @@ bash tests/languages_test.sh
 bash tests/tools_test.sh
 bash tests/language_release_test.sh
 bash tests/neovim_config_test.sh
-python3 tests/bundled_neovim_test.py
+(
+    neovim_temporary="$(mktemp -d)"
+    trap 'rm -rf "$neovim_temporary"' EXIT
+    mkdir "$neovim_temporary/real"
+    ln -s "$neovim_temporary/real" "$neovim_temporary/alias"
+    TMPDIR="$neovim_temporary/alias" python3 tests/bundled_neovim_test.py
+)
 if command -v nvim >/dev/null; then
     (
         cd neovim/config

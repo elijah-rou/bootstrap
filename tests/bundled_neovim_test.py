@@ -37,7 +37,7 @@ def configure(env: dict[str, str], *arguments: str, source: Path = ROOT, success
 
 def test_fresh_retry_and_profile_switch() -> None:
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-') as temporary:
-        home, env = environment(Path(temporary))
+        home, env = environment(Path(temporary).resolve())
         runtime = home / '.local/share/bootstrap/neovim'
         target = home / '.config/nvim'
         _ = configure(env, 'configure.sh', 'neovim')
@@ -61,7 +61,7 @@ def test_fresh_retry_and_profile_switch() -> None:
 
 def test_legacy_migration_and_source_upgrade_preserve_local_state() -> None:
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-migrate-') as temporary:
-        root = Path(temporary)
+        root = Path(temporary).resolve()
         home, env = environment(root)
         old = home / '.local/share/elijahrou/lazyvim-config'
         (old / 'lua/config').mkdir(parents=True)
@@ -97,7 +97,7 @@ def test_foreign_runtime_and_invalid_profiles_are_preserved() -> None:
                {'version': 1, 'profile': 'unknown'}, {'version': 1, 'profile': None},
                {'version': 1, 'profile': 'bare', 'extra': True}]
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-invalid-') as temporary:
-        home, env = environment(Path(temporary))
+        home, env = environment(Path(temporary).resolve())
         runtime = home / '.local/share/bootstrap/neovim'
         runtime.mkdir(parents=True)
         keep = runtime / 'keep'
@@ -122,7 +122,7 @@ def test_foreign_runtime_and_invalid_profiles_are_preserved() -> None:
 
 def test_lock_and_partial_initialization_recovery() -> None:
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-lock-') as temporary:
-        home, env = environment(Path(temporary))
+        home, env = environment(Path(temporary).resolve())
         runtime = home / '.local/share/bootstrap/neovim'
         lock = runtime.with_name('neovim.install.lock')
         lock.mkdir(parents=True)
@@ -149,7 +149,7 @@ def test_lock_and_partial_initialization_recovery() -> None:
 
 def test_failed_activation_can_retry_without_losing_legacy_state() -> None:
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-activation-') as temporary:
-        root = Path(temporary)
+        root = Path(temporary).resolve()
         home, env = environment(root)
         target = home / '.config/nvim'
         target.mkdir(parents=True)
@@ -178,7 +178,7 @@ def test_failed_activation_can_retry_without_losing_legacy_state() -> None:
 
 def test_bare_doctor_rejects_workstation_profile() -> None:
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-doctor-') as temporary:
-        home, env = environment(Path(temporary))
+        home, env = environment(Path(temporary).resolve())
         _ = configure(env, 'configure.sh', 'neovim')
         activation = home / '.config/dotfiles/bare-env.sh'
         activation.parent.mkdir(parents=True)
