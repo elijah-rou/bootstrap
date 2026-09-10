@@ -18,7 +18,7 @@ function parseFrontmatter(source) {
 test("explicit roles preserve parent and approved compute choices", () => {
  const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
  assert.equal(settings.defaultModel, "gpt-6-astra");
- assert.equal(settings.defaultThinkingLevel, "high");
+ assert.equal(settings.defaultThinkingLevel, "low");
  assert.equal(settings.subagents.childRouting, undefined, "no classifier is configured");
  for (const [name, model, thinking, fallback] of [
   ["deep", "openai-codex/gpt-6-astra", "xhigh", "opencode/claude-opus-4-8:xhigh"],

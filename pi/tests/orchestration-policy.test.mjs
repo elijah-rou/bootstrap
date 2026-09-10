@@ -92,7 +92,7 @@ test("active settings preserve the parent and route only child compute", async (
 	const settings = JSON.parse(await readPiFile("settings.json"));
 	assert.equal(settings.defaultProvider, "openai-codex");
 	assert.equal(settings.defaultModel, "gpt-6-astra");
-	assert.equal(settings.defaultThinkingLevel, "high");
+	assert.equal(settings.defaultThinkingLevel, "low");
 	assert.deepEqual(settings.compaction, {
 		enabled: true,
 		reserveTokens: 32768,
