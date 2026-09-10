@@ -4,7 +4,7 @@
 
 User approved moving the recovered LazyVim configuration into public bootstrap, including the remote-clipboard helper and the file-picker fix. The seven local LeetCode commits are the recovered baseline. Plugin-lock edits remain local. Both existing checkouts must remain untouched. Root may fast-forward and push bootstrap/dotfiles and activate the result locally after verification.
 
-Current slice: review and delivery. Import, portable runtime, materialization, and dotfiles integration are implemented. No requested intermediate checkpoints.
+Current slice: complete. Import, portable runtime, materialization, dotfiles integration, publication, and local activation are verified.
 
 ## Design
 
@@ -37,6 +37,11 @@ Current slice: review and delivery. Import, portable runtime, materialization, a
 - Native timeouts include forced termination and editor-exit cleanup. Tests cover a child ignoring TERM and handler cleanup.
 - Alternate review found no P0/P1 in runtime placement/process/clipboard behavior. Its residual concerns were addressed by canonicalizing module paths, moving seed JSON outside the runtime path, and requiring a valid profile at startup.
 
+- Cross-platform CI passed for runtime `cd56e04ce9a628d48c698f52f1a540425da27489`: Linux, macOS, and installed Pi/Codex jobs. Symlinked temporary roots are now exercised on every platform.
+- Dotfiles installer tests now isolate HOME and inherited XDG/tool roots. A sentinel guard reproduced the prior escape and passes after correction; a full run leaves the active Neovim runtime unchanged.
+- Local startup loads the bundled workstation config, recovered LeetCode command, approved clipboard helper, and file-picker binding. Both former checkouts match their recorded content hashes; local JSON matches the previously active config.
+- Both installation pins select the verified runtime. The old repositories and task worktrees are retained.
+
 ## Resume
 
-Both reviews are complete and accepted findings are addressed. Final bootstrap validation passed with installed runtime checks after the corrections. Next: publish the runtime and both pins, then activate locally and verify source-checkout preservation. No outstanding user decisions.
+No remaining implementation steps or user decisions. Shared Neovim changes now belong in bootstrap; the archived repository is only an explicit compatibility override.
