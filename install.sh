@@ -3,7 +3,7 @@ set -e
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PI_CLI_PACKAGE="@earendil-works/pi-coding-agent"
-PI_CLI_VERSION="0.84.4"
+PI_CLI_VERSION="0.85.1"
 HERDR_INSTALLER_SHA256="bf83668c944cff30b3365eee5a4fe15ff61a4b749ab0c73b98e7a203f70893dd"
 install_failures=()
 INSTALL_FAILURE_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/install-failures.log"
