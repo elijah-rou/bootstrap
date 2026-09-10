@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REVISION='516ef447ff4b2a5ccc70b3fbc2098318926880a3'
-ARCHIVE_SHA256='8d4251b397190a173700e0f47673a0ab66eeb92efaede3ba626914e96bf65fdb'
+REVISION='5e73ab2c7de1ad82b9df7a4fae2ac3418882ecf5'
+ARCHIVE_SHA256='6dd85d96a21d10e4faef20f9bbbb3aec69e1d19bf003c6a25d6fc0f84196d3ff'
 BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$HOME/.local/share/bootstrap}"
 snapshot="$BOOTSTRAP_ROOT/snapshots/$REVISION"
 command_name="${1:-install}"
 
 case "$command_name" in
-    install|fetch|preflight|doctor|link|codex-link) [[ $# -le 1 ]] || { printf 'Unexpected arguments\n' >&2; exit 2; } ;;
+    install|fetch|preflight|doctor|link|codex-link|herdr) [[ $# -le 1 ]] || { printf 'Unexpected arguments\n' >&2; exit 2; } ;;
     --languages|-l)
         [[ $# -gt 1 ]] || { printf 'Select languages: c cpp rust go python typescript bash elixir zig\n' >&2; exit 2; }
         for selection in "${@:2}"; do
@@ -22,7 +22,7 @@ case "$command_name" in
         done
         ;;
     --help|-h)
-        printf '%s\n' 'Usage: bash bootstrap.sh [install|fetch|preflight|doctor|link|codex-link]' \
+        printf '%s\n' 'Usage: bash bootstrap.sh [install|fetch|preflight|doctor|link|codex-link|herdr]' \
             '       bash bootstrap.sh (--languages|-l) LANGUAGE...' \
             '       bash bootstrap.sh (--tools|-t) TOOL...' \
             'Tools: codex just wget unzip (requires base install).' \

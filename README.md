@@ -50,7 +50,8 @@ launcher is retained for hosts where Headroom is installed separately.
 
 ## Update Herdr separately
 
-From a checkout, run `./install.sh herdr`. This installs or updates Herdr, installs its Pi
+From a checkout, run `./install.sh herdr`; with the public launcher, run
+`bash bootstrap.sh herdr`. This installs or updates Herdr, installs its Pi
 integration when Pi is available, and writes Zsh completions. It does not start
 a service, configure SSH or Tailscale, or register any `herdr machine` entries.
 Machine registration remains an explicit user action.

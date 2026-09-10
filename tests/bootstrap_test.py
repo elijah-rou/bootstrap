@@ -61,8 +61,9 @@ exit 1
         self.run_bootstrap('--tools', 'codex', 'just', 'wget', 'unzip')
         self.run_bootstrap('-t', 'just')
         self.run_bootstrap('doctor')
+        self.run_bootstrap('herdr')
         self.assertEqual((self.root / 'downloads').read_text(), 'curl\n')
-        self.assertEqual((self.root / 'installed').read_text(), 'install\n--languages\nc\ncpp\nrust\ngo\npython\ntypescript\nbash\nelixir\nzig\n-l\nelixir\nzig\n--tools\ncodex\njust\nwget\nunzip\n-t\njust\ndoctor\n')
+        self.assertEqual((self.root / 'installed').read_text(), 'install\n--languages\nc\ncpp\nrust\ngo\npython\ntypescript\nbash\nelixir\nzig\n-l\nelixir\nzig\n--tools\ncodex\njust\nwget\nunzip\n-t\njust\ndoctor\nherdr\n')
         self.env['INSTALL_STATUS'] = '17'
         self.run_bootstrap(status=17)
         self.assertFalse((self.cache / 'install.lock').exists())
@@ -94,7 +95,7 @@ exit 1
         self.assertTrue(lock.is_dir())
 
     def test_rejects_arguments_before_writes(self):
-        for args in [('unknown',), ('install', '--bad'), ('languages', 'rust'),
+        for args in [('unknown',), ('install', '--bad'), ('herdr', '--label', 'remote'), ('languages', 'rust'),
                      ('--languages',), ('-l',), ('--languages', 'rust', 'unknown'),
                      ('-l', 'rust', '--bad'), ('--languages=rust',), ('--languages', ''), ('--tools',), ('-t',), ('--tools', 'just', 'unknown'),
                      ('-t', 'rust'), ('--tools', '')]:
