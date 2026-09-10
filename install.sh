@@ -26,7 +26,7 @@ source "$DOTFILES_DIR/scripts/lib/install/bare.sh"
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
 
 case "${1:-install}" in
-    install|bare|preflight|bare-preflight|doctor|bare-doctor|link|codex-link|neovim|pi-packages|pi-version|pi-check|--help|-h)
+    install|bare|preflight|bare-preflight|doctor|bare-doctor|link|codex-link|neovim|herdr|pi-packages|pi-version|pi-check|--help|-h)
         [[ $# -le 1 ]] || { printf 'This command accepts no additional arguments\n' >&2; exit 2; }
         ;;
     --languages|-l)
@@ -49,11 +49,12 @@ case "${1:-install}" in
     link) DOTFILES_RELINK_ONLY=1 link_bare_config; DOTFILES_RELINK_ONLY=1 setup_neovim_config ;;
     codex-link) link_codex_assets ;;
     neovim) BOOTSTRAP_WORKSTATION=1 NVIM_CONFIG_REPO_URL="${NVIM_CONFIG_REPO_URL:-https://github.com/elijah-rou/lazyvim-config.git}" setup_neovim_config ;;
+    herdr) install_herdr ;;
     pi-packages) install_pi_packages "$HOME/.pi/agent/settings.json" ;;
     pi-version) printf '%s\n' "$PI_CLI_VERSION" ;;
     pi-check) check_pi_subagents_revision ;;
     --help|-h)
-        printf '%s\n' 'Usage: ./install.sh [install|preflight|doctor|link|codex-link|neovim|pi-packages|pi-version|pi-check]' \
+        printf '%s\n' 'Usage: ./install.sh [install|preflight|doctor|link|codex-link|neovim|herdr|pi-packages|pi-version|pi-check]' \
             '       ./install.sh (--languages|-l) LANGUAGE...' \
             '       ./install.sh (--tools|-t) TOOL...' \
             'Tools: codex just wget unzip (requires base install).' \

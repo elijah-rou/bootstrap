@@ -17,7 +17,7 @@ download_verified() {
         return 1
     }
     rm -f "$partial_path"
-    if ! curl --fail --location --show-error --silent --retry 3 \
+    if ! curl --fail --location --show-error --silent --proto '=https' --proto-redir '=https' --retry 3 \
         --connect-timeout 15 --max-time 300 --output "$partial_path" "$url"; then
         rm -f "$partial_path"
         return 1

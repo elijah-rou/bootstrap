@@ -90,6 +90,7 @@ bash tests/pi_package_test.sh
 python3 tests/codex_link_edges_test.py
 python3 tests/control_loop_template_test.py
 python3 tests/bootstrap_test.py
+python3 tests/herdr_install_test.py
 python3 tests/shell_open_test.py
 python3 tests/modelusage_test.py
 node --experimental-transform-types --test tests/lsp_test.mjs
