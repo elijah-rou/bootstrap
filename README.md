@@ -48,6 +48,12 @@ Local web search and desktop clipboard features need host support or separate
 setup. The optional `/usage` integration requires ccusage tools. The Headroom
 launcher is retained for hosts where Headroom is installed separately.
 
+[Unveil](https://github.com/elijah-rou/pi-unveil) adds opt-in guided planning and
+code exploration. Use `/unveil-plan <task>` or `/unveil-understand <target>` to
+work through decisions or execution paths together, and `/unveil-off` to return
+to ordinary work. It is off by default and stores mode state only in the current
+Pi session. It does not change tool permissions or require quizzes.
+
 ## Update Herdr separately
 
 From a checkout, run `./install.sh herdr`; with the public launcher, run

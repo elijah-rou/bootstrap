@@ -20,7 +20,8 @@
     "npm:pi-web-access@0.24.2",
     "git:github.com/elijah-rou/pi-privileged-operations@8728b268bc8d1cc31d7e0f4b51a74974fc72216d",
     "git:github.com/elijah-rou/pi-sub-limits@b968a179c05d323f8fea126ba3ad3e5fdf1cfc09",
-    "git:github.com/elijah-rou/pi-effort@9400dcea4a591b90c994187432e3bdcd0f3fa4ff"
+    "git:github.com/elijah-rou/pi-effort@9400dcea4a591b90c994187432e3bdcd0f3fa4ff",
+    "git:github.com/elijah-rou/pi-unveil@60f267dd8b6777358a7d8f5abef02a1be47a2330"
   ],
   "subagents": {
     "maxSubagentDepth": 2,
