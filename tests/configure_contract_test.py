@@ -285,6 +285,21 @@ class ConfigurationContract(unittest.TestCase):
         self.assertIn('checkout missing', result.stdout)
         self.assertEqual(list(self.home.iterdir()), [])
 
+    def test_checkout_only_install_preserves_explicit_legacy_override(self):
+        checkout = self.root / 'explicit-checkout'
+        self.env['NVIM_CONFIG_CHECKOUT_DIR'] = str(checkout)
+        self.env.pop('NVIM_CONFIG_REPO_URL', None)
+        git = self.root / 'guard/git'
+        git.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$HOME/git-args"\nexit 29\n')
+        git.chmod(0o755)
+        result = subprocess.run(['bash', str(ROOT / 'install.sh'), 'neovim'], env=self.env,
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.home / 'git-args').read_text().splitlines(),
+                         ['clone', '--', 'https://github.com/elijah-rou/lazyvim-config.git', str(checkout)])
+        self.assertFalse(checkout.with_name('explicit-checkout.install.lock').exists())
+        self.assertFalse((self.home / '.config/nvim').exists())
+
     def test_workstation_neovim_install_command(self):
         upstream = self.root / 'upstream'
         (upstream / 'lua/config').mkdir(parents=True)

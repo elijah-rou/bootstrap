@@ -15,6 +15,14 @@ opt-in here. The bare installer adds a
 managed Neovim overlay that disables automatic Mason downloads and uses selected
 servers from PATH. Workstation configuration leaves that overlay disabled.
 
+The bundled Neovim configuration was recovered from local `lazyvim-config`
+revision `dc95d822dbc28cec770f07cc669f7aeaa198b755`, including its seven previously
+unpublished LeetCode-mode commits. The owner approved including the local remote
+clipboard helper and the explicit file-picker binding. The committed plugin lock
+is the public seed; machine-local plugin-lock updates were not imported. Runtime
+code was adapted for portable timeouts and writable state outside snapshots.
+No Git history, authentication files, or local account state was imported.
+
 Bootstrap now owns the shared baseline, configuration helpers and their tests.
 The private dotfiles repository consumes a pinned public snapshot through
 `configure.sh`, retaining workstation package installation, services, credentials

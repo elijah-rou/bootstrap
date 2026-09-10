@@ -17,6 +17,7 @@ info() { :; }
 warn() { printf '%s\n' "$*" >&2; }
 source "$ROOT/scripts/lib/install/managed-files.sh"
 source "$ROOT/scripts/lib/install/configuration.sh"
+source "$ROOT/scripts/lib/install/neovim.sh"
 setup_neovim_config
 plugin="$NVIM_CONFIG_CHECKOUT_DIR/lua/plugins/zz-bootstrap-managed.lua"
 [[ -L "$plugin" && -L "$XDG_CONFIG_HOME/nvim" ]]

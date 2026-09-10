@@ -156,15 +156,17 @@ echo 'PASS unknown bare arguments are rejected before installation'
     report_install_failures() { :; }
     bare_doctor() { :; }
     setup_neovim_config() {
-        printf '%s\n' "$NVIM_CONFIG_REPO_URL" > "$HOME/nvim-source"
+        printf '%s\n' "${NVIM_CONFIG_REPO_URL:-}" > "$HOME/nvim-source"
         return "${nvim_status:-0}"
     }
     unset NVIM_CONFIG_REPO_URL
     install_bare
-    [[ "$(cat "$HOME/nvim-source")" == https://github.com/elijah-rou/lazyvim-config.git ]]
+    [[ -z "$(cat "$HOME/nvim-source")" ]]
     [[ "$(cat "$HOME/js-packages")" == "$(printf '%s\n' install --global --exact "$PI_CLI_PACKAGE@$PI_CLI_VERSION")" ]]
     NVIM_CONFIG_REPO_URL=https://example.invalid/custom-nvim.git install_bare
     [[ "$(cat "$HOME/nvim-source")" == https://example.invalid/custom-nvim.git ]]
+    NVIM_CONFIG_CHECKOUT_DIR="$HOME/legacy-checkout" install_bare
+    [[ "$(cat "$HOME/nvim-source")" == https://github.com/elijah-rou/lazyvim-config.git ]]
     nvim_status=17
     if install_bare; then exit 1; fi
     [[ ! -d "$HOME/.local/share/dotfiles/bare/install.lock" ]]

@@ -118,8 +118,16 @@ bare_doctor() (
     check_pi_subagents_revision || failed=1
     local nvim_config="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
     local nvim_checkout="${NVIM_CONFIG_CHECKOUT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles/lazyvim-config}"
+    if [[ -z "${NVIM_CONFIG_REPO_URL:-}" && -z "${NVIM_CONFIG_CHECKOUT_DIR:-}" ]]; then
+        nvim_checkout="${XDG_DATA_HOME:-$HOME/.local/share}/bootstrap/neovim"
+        if ! validate_neovim_profile "$nvim_checkout/bootstrap-profile.json" bare || \
+            [[ "$(resolve_path "$nvim_checkout/init.lua")" != "$(resolve_path "$DOTFILES_DIR/neovim/config/init.lua")" ]]; then
+            warn 'Bundled Neovim profile or source does not match bare; rerun bare'
+            failed=1
+        fi
+    fi
     if [[ ! -f "$nvim_config/init.lua" || "$(resolve_path "$nvim_config")" != "$(resolve_path "$nvim_checkout")" ]]; then
-        warn 'Neovim configuration is missing or not linked to its checkout; rerun bare'
+        warn 'Neovim configuration is missing or not linked to its managed runtime; rerun bare'
         failed=1
     fi
     info 'Optional: SearXNG/web search, Headroom, desktop clipboard and the host privilege backend require separate setup'
@@ -149,7 +157,7 @@ install_bare() (
     [[ "$(pi --version)" == "$PI_CLI_VERSION" ]] || return 1
     HERDR_INSTALL_DIR="$DOTFILES_BARE_ROOT/bin" install_herdr || return 1
     link_bare_config || return 1
-    NVIM_CONFIG_REPO_URL="${NVIM_CONFIG_REPO_URL:-https://github.com/elijah-rou/lazyvim-config.git}" setup_neovim_config || return 1
+    install_neovim_config || return 1
     install_pi_packages "$HOME/.pi/agent/settings.json" || return 1
     report_install_failures || return 1
     bare_doctor || return 1

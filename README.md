@@ -34,7 +34,7 @@ authentication stay in place. If you cloned this repo over HTTPS instead, run
 |---|---|
 | Terminal | Bash/Zsh configuration, Starship, tmux, zoxide |
 | Tools | Git, delta, gh, SSH client, ripgrep, fd, fzf, bat, eza, jq |
-| Neovim | [My LazyVim configuration](https://github.com/elijah-rou/lazyvim-config), downloaded over HTTPS; plugins install on first launch |
+| Neovim | [Bundled LazyVim configuration](neovim/README.md); plugins install on first launch |
 | Agents | Pi with my theme, extensions, prompts, agents and shared skills; Herdr and its Pi integration |
 
 Bun installs all JavaScript packages, including Pi, optional Codex and LSPs.
@@ -116,8 +116,9 @@ selected in the editor's configuration.
 Pi subagent package revision. It does not test provider login, all plugin/LSP
 operations or project builds.
 
-Rerun `bash bootstrap.sh` to finish a partial setup. Clean Neovim checkouts update;
-local edits are preserved. An interrupted run can leave an install lock: confirm
+Rerun `bash bootstrap.sh` to finish a partial setup. Bundled Neovim code follows
+the selected snapshot; local plugin locks and extras are preserved. Explicit custom
+Neovim checkouts update only when clean. An interrupted run can leave an install lock: confirm
 no installer is running before removing the exact lock directory in the error.
 An incomplete environment or unexpected checkout is reported for manual recovery.
 
@@ -146,7 +147,8 @@ From a checkout or retained snapshot, run:
 `configure.sh` requires Python 3 and accepts `terminal`, `pi`, `codex`, `neovim`
 or `all`. It only writes user configuration. It does not install packages, access
 the network, change the login shell, activate the bare environment or install the
-Neovim Mason override. Neovim configuration only relinks an existing checkout.
+Neovim Mason override. Neovim configuration materializes the bundled config offline;
+explicit custom-checkout overrides only relink an existing checkout.
 
 Each `--overlay` directory must exist. Paths must be absolute and cannot be `/`.
 Repeated overlays apply from low to high precedence, after the public baseline.
@@ -172,27 +174,31 @@ or removes matching managed links and preserves unrelated links. Existing files
 replaced by configuration are backed up. Retries reuse matching output; overlapping
 runs fail with a lock path to inspect before retrying.
 
-Package installation stays separate:
+Other entrypoints:
 
 ```sh
-./install.sh neovim       # Clone or update the workstation editor checkout
+./install.sh neovim       # Configure the bundled workstation editor
 ./install.sh pi-packages  # Install packages from materialized Pi settings
 ./install.sh pi-version   # Print the pinned Pi CLI version
 ./install.sh pi-check     # Check repository, rendered and installed subagent pins
 ```
 
-`neovim` honors `NVIM_CONFIG_REPO_URL` and `NVIM_CONFIG_CHECKOUT_DIR`, preserving
-local edits. Its default checkout is
-`$XDG_DATA_HOME/dotfiles/lazyvim-config`, with `~/.local/share` as the data-home
-fallback. This workstation command does not add the bare Mason override.
+`neovim` defaults to the bundled source with writable state under
+`$XDG_DATA_HOME/bootstrap/neovim` (`~/.local/share` is the data-home fallback).
+It preserves both former LazyVim checkouts and seeds local JSON state from the
+active config. `NVIM_CONFIG_REPO_URL` and `NVIM_CONFIG_CHECKOUT_DIR` remain explicit
+opt-ins for custom repositories/checkouts. This workstation command does not add
+the bare Mason override. See [Neovim configuration](neovim/README.md) for migration,
+keybindings, clipboard behavior, and tests.
 
 ## Development
 
 From a cloned checkout, run `./scripts/validate`. Tests use temporary homes,
 stub package installation and exercise local Git checkouts. The validator includes
 all `pi/tests/*.test.mjs` files, offline configuration and Codex linking checks.
-CI runs these checks on Linux and macOS, plus installed Pi and Codex consumer
-checks on Linux using isolated dependencies installed by Bun.
+CI runs these checks on Linux and macOS with Neovim 0.12.5 for the bundled Lua
+contracts, plus installed Pi and Codex consumer checks on Linux using isolated
+dependencies installed by Bun.
 
 Installed consumer checks are opt-in locally. Set these paths to your test
 dependencies, then run `./scripts/validate --runtime` with Bun and Codex on PATH:

@@ -20,6 +20,8 @@ source "$DOTFILES_DIR/scripts/lib/install/managed-files.sh"
 source "$DOTFILES_DIR/scripts/lib/install/agents.sh"
 # shellcheck source=scripts/lib/install/configuration.sh
 source "$DOTFILES_DIR/scripts/lib/install/configuration.sh"
+# shellcheck source=scripts/lib/install/neovim.sh
+source "$DOTFILES_DIR/scripts/lib/install/neovim.sh"
 # shellcheck source=scripts/lib/install/bare.sh
 source "$DOTFILES_DIR/scripts/lib/install/bare.sh"
 
@@ -48,7 +50,7 @@ case "${1:-install}" in
     doctor|bare-doctor) bare_doctor ;;
     link) DOTFILES_RELINK_ONLY=1 link_bare_config; DOTFILES_RELINK_ONLY=1 setup_neovim_config ;;
     codex-link) link_codex_assets ;;
-    neovim) BOOTSTRAP_WORKSTATION=1 NVIM_CONFIG_REPO_URL="${NVIM_CONFIG_REPO_URL:-https://github.com/elijah-rou/lazyvim-config.git}" setup_neovim_config ;;
+    neovim) BOOTSTRAP_WORKSTATION=1 install_neovim_config ;;
     herdr) install_herdr ;;
     pi-packages) install_pi_packages "$HOME/.pi/agent/settings.json" ;;
     pi-version) printf '%s\n' "$PI_CLI_VERSION" ;;

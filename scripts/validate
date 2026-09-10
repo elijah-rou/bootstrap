@@ -19,7 +19,7 @@ git diff --check
 git diff --cached --check
 python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
-shell_files=(bootstrap.sh configure.sh install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/neovim_config_test.sh tests/codex_link_test.sh tests/pi_package_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace)
+shell_files=(bootstrap.sh configure.sh install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/neovim_config_test.sh tests/bundled_neovim_runtime_test.sh tests/codex_link_test.sh tests/pi_package_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
 for file in zshrc zshenv zprofile; do zsh -n "$file"; done
 shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"
@@ -83,6 +83,21 @@ bash tests/languages_test.sh
 bash tests/tools_test.sh
 bash tests/language_release_test.sh
 bash tests/neovim_config_test.sh
+python3 tests/bundled_neovim_test.py
+if command -v nvim >/dev/null; then
+    (
+        cd neovim/config
+        nvim --headless -u NONE -i NONE -l tests/file-picker-keymap.lua
+        nvim --headless -u NONE -i NONE -l tests/remote-clipboard.lua
+        nvim --headless -u NONE -i NONE -l tests/profile.lua
+        NVIM_BUNDLED_RUNTIME=0 nvim --headless -u NONE -i NONE -l tests/leetcode_mode.lua
+    )
+else
+    printf 'SKIP bundled Neovim Lua checks (nvim unavailable)\n'
+fi
+if [[ "${NVIM_BUNDLED_RUNTIME:-0}" == 1 ]]; then
+    bash tests/bundled_neovim_runtime_test.sh
+fi
 python3 tests/configure_contract_test.py
 python3 tests/snapshot_upgrade_test.py
 bash tests/codex_link_test.sh

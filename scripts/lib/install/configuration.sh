@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Configuration ownership shared by bare and workstation profiles.
 
-setup_neovim_config() (
+setup_external_neovim_config() (
     local checkout="${NVIM_CONFIG_CHECKOUT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles/lazyvim-config}"
     local target="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
     local repo_url="${NVIM_CONFIG_REPO_URL:-}" changes origin

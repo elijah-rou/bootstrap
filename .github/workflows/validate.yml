@@ -20,6 +20,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "24.18.0"
+      - uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7
+        with:
+          version: v0.12.5
+          neovim: true
       - name: Install test tools on Linux
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes ripgrep shellcheck zsh
