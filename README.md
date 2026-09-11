@@ -52,7 +52,10 @@ launcher is retained for hosts where Headroom is installed separately.
 code exploration. Use `/unveil-plan <task>` or `/unveil-understand <target>` to
 work through decisions or execution paths together, and `/unveil-off` to return
 to ordinary work. It is off by default and stores mode state only in the current
-Pi session. It does not change tool permissions or require quizzes.
+Pi session. The `/skill:unveil-plan` and `/skill:unveil-understand` methods also
+work independently without activating flow support. Planning starts with a brief
+problem and current-system view. Neither mode changes tool permissions or
+requires quizzes.
 
 ## Update Herdr separately
 
