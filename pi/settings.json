@@ -21,7 +21,7 @@
     "git:github.com/elijah-rou/pi-privileged-operations@8728b268bc8d1cc31d7e0f4b51a74974fc72216d",
     "git:github.com/elijah-rou/pi-sub-limits@b968a179c05d323f8fea126ba3ad3e5fdf1cfc09",
     "git:github.com/elijah-rou/pi-effort@9400dcea4a591b90c994187432e3bdcd0f3fa4ff",
-    "git:github.com/elijah-rou/pi-unveil@615bd0ce7a3c885c87b7e13758dddbc9aa6c930d"
+    "git:github.com/elijah-rou/pi-unveil@5bbea29d91fa30da0c0d36a31c8a472e40641229"
   ],
   "subagents": {
     "maxSubagentDepth": 2,
