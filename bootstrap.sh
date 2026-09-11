@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REVISION='b85c3cdab1459f77afb6d249d728a1c4abeca073'
-ARCHIVE_SHA256='231e69b6b20582f7b1abbc6cc520ef4b6ca0a684df79dbdc2a2028bb01dadc30'
+REVISION='1c393f127003910d22b4fb1aff9e07ff96b87a4c'
+ARCHIVE_SHA256='deb5453733d44da9959cfa19660fd28bee1e53c71b282923787745f8780ffb59'
 BOOTSTRAP_ROOT="${BOOTSTRAP_ROOT:-$HOME/.local/share/bootstrap}"
 snapshot="$BOOTSTRAP_ROOT/snapshots/$REVISION"
 command_name="${1:-install}"
