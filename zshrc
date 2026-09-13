@@ -53,9 +53,9 @@ elif command -v xsel &>/dev/null; then
 fi
 
 # Aliases
-alias ls='eza --icons'
-alias ll='eza -la --icons --git'
-alias tree='eza --tree --icons'
+alias ls='eza --icons=always'
+alias ll='eza -la --icons=always --git'
+alias tree='eza --tree --icons=always'
 alias cat='bat'
 alias ..='cd ..'
 alias ...='cd ../..'
