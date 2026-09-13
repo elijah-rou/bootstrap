@@ -9,7 +9,8 @@ resolve_path() {
         return
     fi
 
-    python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$path" 2>/dev/null || true
+    command -v node >/dev/null || return 0
+    node -e 'try { console.log(require("node:fs").realpathSync(process.argv[1])) } catch {}' "$path" 2>/dev/null || true
 }
 
 managed_source_matches() {
@@ -66,6 +67,20 @@ managed_backup_path() {
     return 1
 }
 
+record_managed_target() {
+    local target="$1" source="$2"
+    [[ -n "${BOOTSTRAP_PRIVATE_ROOT:-}" && ( "$target" == "$BOOTSTRAP_PRIVATE_ROOT" || "$target" == "$BOOTSTRAP_PRIVATE_ROOT"/* ) ]] && return 0
+    [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]] || return 0
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" prepare "$target" shared "$source"
+}
+
+activate_managed_target() {
+    local target="$1"
+    [[ -n "${BOOTSTRAP_PRIVATE_ROOT:-}" && ( "$target" == "$BOOTSTRAP_PRIVATE_ROOT" || "$target" == "$BOOTSTRAP_PRIVATE_ROOT"/* ) ]] && return 0
+    [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]] || return 0
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" activate "$target"
+}
+
 link_managed_file() {
     local source="$1"
     local target="$2"
@@ -80,13 +95,18 @@ link_managed_file() {
     if [[ -L "$target" ]]; then
         current_target="$(readlink "$target")"
         if [[ "$current_target" == "$source" ]]; then
+            record_managed_target "$target" "$source" || return 1
+            activate_managed_target "$target" || return 1
             return 0
         fi
         if [[ -e "$target" && "$(resolve_path "$target")" == "$(resolve_path "$source")" ]]; then
+            record_managed_target "$target" "$current_target" || return 1
+            activate_managed_target "$target" || return 1
             return 0
         fi
     fi
 
+    record_managed_target "$target" "$source" || return 1
     mkdir -p "$(dirname "$target")"
     if [[ -e "$target" || -L "$target" ]]; then
         if [[ -n "$backup_dir" ]]; then
@@ -98,10 +118,12 @@ link_managed_file() {
             warn "Failed to preserve existing path: $target"
             return 1
         fi
+        if [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]]; then node "$DOTFILES_DIR/scripts/state-helper.mjs" backup "$target" "$backup_path" || return 1; fi
         info "Backed up $target to $backup_path"
     fi
 
     if ln -s "$source" "$target"; then
+        activate_managed_target "$target" || return 1
         return 0
     fi
 
@@ -124,10 +146,12 @@ install_managed_file() {
         warn "Managed file source is missing: $source"
         return 1
     }
+    record_managed_target "$target" "" || return 1
     mkdir -p "$(dirname "$target")"
 
     if [[ -f "$target" && ! -L "$target" ]] && cmp -s "$source" "$target"; then
         chmod "$mode" "$target"
+        activate_managed_target "$target" || return 1
         return 0
     fi
 
@@ -146,10 +170,12 @@ install_managed_file() {
             rm -f "$staged_path"
             return 1
         fi
+        if [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]]; then node "$DOTFILES_DIR/scripts/state-helper.mjs" backup "$target" "$backup_path" || return 1; fi
         info "Backed up $target to $backup_path"
     fi
 
     if mv "$staged_path" "$target"; then
+        activate_managed_target "$target" || return 1
         return 0
     fi
 
@@ -167,50 +193,9 @@ materialize_json_config() {
     local rendered_path
     shift 3
 
-    command -v python3 &>/dev/null || {
-        warn "python3 is required to render JSON config: $target_path"
-        return 1
-    }
+    command -v node &>/dev/null || { warn "node is required to render JSON config: $target_path"; return 1; }
     rendered_path="$(mktemp)" || return 1
-    if ! python3 - "$base_path" "$overlay_path" "$rendered_path" "$@" <<'PY'
-import json
-import pathlib
-import sys
-
-base_path, overlay_path, output_path, *additional_overlays = sys.argv[1:]
-
-
-def reject_constant(value):
-    raise ValueError(f"Invalid JSON constant: {value}")
-
-
-def read_config(path):
-    with pathlib.Path(path).open(encoding="utf-8") as source:
-        value = json.load(source, parse_constant=reject_constant)
-    if not isinstance(value, dict):
-        raise ValueError(f"Configuration must be a JSON object: {path}")
-    return value
-
-
-result = read_config(base_path)
-
-
-def merge(base, overlay):
-    if isinstance(base, dict) and isinstance(overlay, dict):
-        merged = dict(base)
-        for key, value in overlay.items():
-            merged[key] = merge(merged[key], value) if key in merged else value
-        return merged
-    return overlay
-
-for path in [overlay_path, *additional_overlays]:
-    if path and pathlib.Path(path).exists():
-        result = merge(result, read_config(path))
-with pathlib.Path(output_path).open("w", encoding="utf-8") as output:
-    json.dump(result, output, indent=2, sort_keys=True)
-    output.write("\n")
-PY
-    then
+    if ! node "$DOTFILES_DIR/scripts/state-helper.mjs" json-merge "$rendered_path" "$base_path" "$overlay_path" "$@"; then
         rm -f "$rendered_path"
         return 1
     fi

@@ -1,11 +1,21 @@
-# Sourced by Bash/Zsh. The bare profile installs this link only on opted-in hosts.
-export DOTFILES_BARE_ROOT="$HOME/.local/share/dotfiles/bare"
-export MAMBA_ROOT_PREFIX="$DOTFILES_BARE_ROOT/mamba"
+# shellcheck shell=bash
+# Sourced by Bash/Zsh. Native tools remain usable without activation.
+export DOTFILES_BARE_ROOT="${DOTFILES_BARE_ROOT:-$HOME/.local/share/bootstrap/tools}"
+export BOOTSTRAP_PRIVATE_ROOT="${BOOTSTRAP_PRIVATE_ROOT:-$HOME/.local/share/bootstrap/private}"
+export BOOTSTRAP_STATE_ROOT="${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}"
 export CARGO_HOME="$DOTFILES_BARE_ROOT/cargo"
 export RUSTUP_HOME="$DOTFILES_BARE_ROOT/rustup"
 export BUN_INSTALL="$DOTFILES_BARE_ROOT/bun"
-# Retain the old npm prefix for tools installed before the Bun migration.
 export npm_config_prefix="$DOTFILES_BARE_ROOT/npm"
-export PATH="$DOTFILES_BARE_ROOT/bin:$CARGO_HOME/bin:$BUN_INSTALL/bin:$npm_config_prefix/bin:$DOTFILES_BARE_ROOT/env/bin:$HOME/.local/bin:$PATH"
+export GOPATH="$DOTFILES_BARE_ROOT/go"
+export GOBIN="$DOTFILES_BARE_ROOT/bin"
+export PI_CODING_AGENT_DIR="$BOOTSTRAP_PRIVATE_ROOT/pi/agent"
+export PI_CODING_AGENT_SESSION_DIR="$BOOTSTRAP_PRIVATE_ROOT/pi/sessions"
+export GH_CONFIG_DIR="$BOOTSTRAP_PRIVATE_ROOT/gh"
+export NVIM_APPNAME="bootstrap-nvim"
+export BOOTSTRAP_LSP_SELECTIONS="$BOOTSTRAP_PRIVATE_ROOT/neovim/lsp-selections.json"
+export HISTFILE="$BOOTSTRAP_PRIVATE_ROOT/bash/history"
+export TMUX_TMPDIR="$BOOTSTRAP_PRIVATE_ROOT/tmux"
+export PATH="$DOTFILES_BARE_ROOT/bin:$CARGO_HOME/bin:$BUN_INSTALL/bin:$npm_config_prefix/bin:$GOBIN:$HOME/.local/bin:$PATH"
 export EDITOR=nvim
 export VISUAL=nvim

@@ -52,7 +52,11 @@ def test_fresh_retry_and_profile_switch() -> None:
             _ = configure(env, 'configure.sh', 'neovim')
         assert not list(home.rglob('*.bak.*'))
         _ = configure(env, 'install.sh', 'link')
-        assert json.loads((runtime / 'bootstrap-profile.json').read_text())['profile'] == 'bare'
+        bare_runtime = home / '.local/share/bootstrap/private/neovim/config'
+        bare_target = home / '.config/bootstrap-nvim'
+        assert bare_target.resolve() == bare_runtime
+        assert json.loads((bare_runtime / 'bootstrap-profile.json').read_text())['profile'] == 'bare'
+        assert json.loads((runtime / 'bootstrap-profile.json').read_text())['profile'] == 'workstation'
         _ = configure(env, 'install.sh', 'neovim')
         assert json.loads((runtime / 'bootstrap-profile.json').read_text())['profile'] == 'workstation'
         assert not (runtime / '.git').exists()
@@ -176,40 +180,22 @@ def test_failed_activation_can_retry_without_losing_legacy_state() -> None:
     return
 
 
-def test_bare_doctor_rejects_workstation_profile() -> None:
-    with tempfile.TemporaryDirectory(prefix='bundled-nvim-doctor-') as temporary:
+def test_bare_and_workstation_profiles_are_isolated() -> None:
+    with tempfile.TemporaryDirectory(prefix='bundled-nvim-profiles-') as temporary:
         home, env = environment(Path(temporary).resolve())
         _ = configure(env, 'configure.sh', 'neovim')
-        activation = home / '.config/dotfiles/bare-env.sh'
-        activation.parent.mkdir(parents=True)
-        _ = activation.write_text('export DOTFILES_BARE_ROOT="$HOME/fake-bare"\n')
-        bare = home / 'fake-bare'
-        (bare / 'bin').mkdir(parents=True)
-        (bare / 'env/conda-meta').mkdir(parents=True)
-        _ = (bare / 'bin/micromamba').write_text('#!/bin/sh\nexit 0\n')
-        (bare / 'bin/micromamba').chmod(0o755)
-        probe = '''source "$1/install.sh"
-for tool in git delta gh ssh zsh tmux nvim rg fzf bat eza jq node bun herdr; do
-    eval "$tool() { :; }"
-done
-pi() { printf '%s\\n' "$PI_CLI_VERSION"; }
-check_pi_subagents_revision() { :; }
-bare_doctor
-'''
-        result = subprocess.run(['bash', '-c', probe, '_', str(ROOT)], env=env, text=True, capture_output=True)
-        assert result.returncode != 0, result.stdout + result.stderr
-        assert 'Bundled Neovim profile' in result.stdout + result.stderr
-        switch = subprocess.run(['bash', '-c', 'source "$1/install.sh"; BOOTSTRAP_WORKSTATION=0 setup_neovim_config', '_', str(ROOT)],
-                                env=env, text=True, capture_output=True)
-        assert switch.returncode == 0, switch.stdout + switch.stderr
-        result = subprocess.run(['bash', '-c', probe, '_', str(ROOT)], env=env, text=True, capture_output=True)
-        assert result.returncode == 0, result.stdout + result.stderr
+        workstation = home / '.config/nvim'
+        _ = configure(env, 'install.sh', 'link')
+        bare = home / '.config/bootstrap-nvim'
+        assert json.loads((workstation.resolve() / 'bootstrap-profile.json').read_text())['profile'] == 'workstation'
+        assert json.loads((bare.resolve() / 'bootstrap-profile.json').read_text())['profile'] == 'bare'
+        assert workstation.resolve() != bare.resolve()
     return
 
 
 if __name__ == '__main__':
     for check in [test_fresh_retry_and_profile_switch, test_legacy_migration_and_source_upgrade_preserve_local_state,
                   test_foreign_runtime_and_invalid_profiles_are_preserved, test_lock_and_partial_initialization_recovery,
-                  test_failed_activation_can_retry_without_losing_legacy_state, test_bare_doctor_rejects_workstation_profile]:
+                  test_failed_activation_can_retry_without_losing_legacy_state, test_bare_and_workstation_profiles_are_isolated]:
         check()
         print(f'PASS {check.__name__}')

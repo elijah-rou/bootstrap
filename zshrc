@@ -106,10 +106,7 @@ autoload -Uz compinit && compinit
 zstyle ':completion:*' menu select                    # Tab menu selection
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'   # Case-insensitive completion
 
-# micromamba shell integration (activate/deactivate)
-command -v micromamba &>/dev/null && eval "$(micromamba shell hook -s zsh)"
-
-command -v starship &>/dev/null && eval "$(starship init zsh)"
+[[ -L "$HOME/.config/starship.toml" ]] && command -v starship &>/dev/null && eval "$(starship init zsh)"
 
 
 # ============================================
@@ -161,8 +158,5 @@ ulimit -u 4000 2>/dev/null
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
-# Activate compiler flags as well as PATH in bare development shells.
-if [[ -f "$HOME/.config/dotfiles/bare-env.sh" ]]; then
-    source "$HOME/.config/dotfiles/bare-env.sh"
-    [[ "${CONDA_PREFIX:-}" == "$DOTFILES_BARE_ROOT/env" ]] || micromamba activate "$DOTFILES_BARE_ROOT/env"
-fi
+# Native tools need no shell activation.
+[[ -f "$HOME/.config/dotfiles/bare-env.sh" ]] && source "$HOME/.config/dotfiles/bare-env.sh"

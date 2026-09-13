@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 [[ "$HOME" == /* && "$HOME" != / ]] || { warn 'HOME must be an absolute user directory'; exit 2; }
-command -v python3 >/dev/null || { warn 'python3 is required for offline configuration'; exit 1; }
+command -v node >/dev/null || { warn 'Node.js is required for offline configuration'; exit 1; }
 
 # One owner prevents overlapping backup/move operations in the same user profile.
 configure_lock="${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap/configure.lock"

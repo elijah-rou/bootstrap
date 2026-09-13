@@ -117,7 +117,7 @@ Uninstall is not secure erasure. It cannot erase host snapshots, administrator c
 
 | Current owner | Migration work |
 |---|---|
-| `install.sh`, `configure.sh`, `packages/bare.txt` | Native dispatch, separate selections, prerequisite checks, uninstall entry point |
+| `install.sh`, `configure.sh`, `packages/catalog.json` | Native dispatch, separate selections, prerequisite checks, uninstall entry point |
 | `scripts/lib/install/bare.sh` | Replace Conda installation and combined language/LSP routing; retain compatible command aliases deliberately |
 | `scripts/lib/install/managed-files.sh` | Preserve existing backup/atomic-replacement behavior while adding ownership recording and inverse operations |
 | `scripts/lib/install/configuration.sh` | Replace Python helpers, make application paths explicit, register owned integrations |
@@ -213,4 +213,8 @@ Completion means the three core groups work without Conda, default Python, Zsh, 
 
 The user authorized committing and pushing this migration across bootstrap and dotfiles. First validate the coordinated work using `DOTFILES_BOOTSTRAP_SOURCE` against the implementation worktree. Push the verified bootstrap runtime, fetch/hash its public archive, and advance both `bootstrap.sh` and dotfiles `bootstrap.lock` to that runtime. Then run dotfiles validation without the development override to prove the published snapshot works through the real consumer. Publish the consumer changes and pins only after that check passes. Keep runtime/consumer/pin commits coherent and separate from unrelated changes, and preserve local authentication during any authorized activation.
 
-This deliverable is the plan only. Creating it does not change native packages, run an uninstall, access a remote machine, or publish changes.
+## 9. Bootstrap implementation progress
+
+Bootstrap-owned slices 1, 2, 3, 4, 6, and the local portion of 7 are implemented on `pi/bootstrap/native-bootstrap-78907ef9`. The implementation includes the versioned ownership record and inverse operations, native backends/catalog, Node runtime helpers, Bash-first profile, isolated Pi/Neovim state, explicit extras, real parser and LSP checks, guarded legacy migration, project enrollment, package dependency previews, and retryable uninstall. Tests use disposable homes; no host package manager or live personal state was mutated. A real disposable Neovim 0.12.5 run compiled the effective parser set, verified highlight/folding, reused identical parser artifacts on retry, and attached BasedPyright through the bundled selected-server configuration.
+
+Slice 5 remains owned by the dependent dotfiles worker. Publication-only slice 7 fields (`bootstrap.sh` `REVISION` and `ARCHIVE_SHA256`, plus the dotfiles lock) intentionally remain unchanged until the coordinated runtime is public and its codeload archive hash is known. Linux/macOS CI gates are runnable evidence; local package-manager availability is not claimed from mocked dispatch tests.

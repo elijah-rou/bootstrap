@@ -56,14 +56,16 @@ exit 1
         self.assertFalse((self.root / 'installed').exists())
         self.run_bootstrap('fetch')
         self.run_bootstrap()
-        self.run_bootstrap('--languages', 'c', 'cpp', 'rust', 'go', 'python', 'typescript', 'bash', 'elixir', 'zig')
+        self.run_bootstrap('--languages', 'c', 'cpp', 'rust', 'go', 'python', 'typescript', 'elixir', 'zig')
         self.run_bootstrap('-l', 'elixir', 'zig')
-        self.run_bootstrap('--tools', 'codex', 'just', 'wget', 'unzip')
+        self.run_bootstrap('--lsp', 'basedpyright', 'rust-analyzer')
+        self.run_bootstrap('-s', 'clangd')
+        self.run_bootstrap('--tools', 'zsh', 'starship', 'codex', 'just', 'wget', 'unzip', 'shellcheck', 'ruff', 'headroom')
         self.run_bootstrap('-t', 'just')
         self.run_bootstrap('doctor')
         self.run_bootstrap('herdr')
         self.assertEqual((self.root / 'downloads').read_text(), 'curl\n')
-        self.assertEqual((self.root / 'installed').read_text(), 'install\n--languages\nc\ncpp\nrust\ngo\npython\ntypescript\nbash\nelixir\nzig\n-l\nelixir\nzig\n--tools\ncodex\njust\nwget\nunzip\n-t\njust\ndoctor\nherdr\n')
+        self.assertEqual((self.root / 'installed').read_text(), 'install\n--languages\nc\ncpp\nrust\ngo\npython\ntypescript\nelixir\nzig\n-l\nelixir\nzig\n--lsp\nbasedpyright\nrust-analyzer\n-s\nclangd\n--tools\nzsh\nstarship\ncodex\njust\nwget\nunzip\nshellcheck\nruff\nheadroom\n-t\njust\ndoctor\nherdr\n')
         self.env['INSTALL_STATUS'] = '17'
         self.run_bootstrap(status=17)
         self.assertFalse((self.cache / 'install.lock').exists())
@@ -97,7 +99,7 @@ exit 1
     def test_rejects_arguments_before_writes(self):
         for args in [('unknown',), ('install', '--bad'), ('herdr', '--label', 'remote'), ('languages', 'rust'),
                      ('--languages',), ('-l',), ('--languages', 'rust', 'unknown'),
-                     ('-l', 'rust', '--bad'), ('--languages=rust',), ('--languages', ''), ('--tools',), ('-t',), ('--tools', 'just', 'unknown'),
+                     ('-l', 'rust', '--bad'), ('--languages=rust',), ('--languages', ''), ('--lsp',), ('-s', 'unknown'), ('--tools',), ('-t',), ('--tools', 'just', 'unknown'),
                      ('-t', 'rust'), ('--tools', '')]:
             self.run_bootstrap(*args, status=2)
             self.assertFalse(self.cache.exists())

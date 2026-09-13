@@ -51,7 +51,10 @@ if DOTFILES_RELINK_ONLY=1 setup_neovim_config; then
 fi
 rmdir "$NVIM_CONFIG_CHECKOUT_DIR.install.lock"
 if command -v nvim >/dev/null; then
-    nvim --headless -u NONE -i NONE -l "$ROOT/tests/neovim_config_test.lua" "$ROOT/neovim/bootstrap.lua" "$lazy_path"
+    cat >"$tmp/lsp-selections.json" <<'JSON'
+{"schemaVersion":1,"servers":{"basedpyright":{"selector":"basedpyright","cmd":["basedpyright-langserver","--stdio"],"filetypes":["python"]},"ts_ls":{"selector":"typescript-language-server","cmd":["typescript-language-server","--stdio"],"filetypes":["typescript"]}}}
+JSON
+    BOOTSTRAP_LSP_SELECTIONS="$tmp/lsp-selections.json" nvim --headless -u NONE -i NONE -l "$ROOT/tests/neovim_config_test.lua" "$ROOT/neovim/bootstrap.lua" "$lazy_path"
 else
     printf 'SKIP: Neovim Lua consumer check (nvim unavailable)\n'
 fi
