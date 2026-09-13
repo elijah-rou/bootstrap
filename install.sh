@@ -23,7 +23,7 @@ source "$DOTFILES_DIR/scripts/lib/install/bare.sh"
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
 
 usage() {
-    printf '%s\n' 'Usage: ./install.sh [install|preflight|doctor|link|codex-link|neovim|herdr|pi-packages|pi-version|pi-check]' \
+    printf '%s\n' 'Usage: ./install.sh [install|pi|preflight|doctor|link|codex-link|neovim|herdr|pi-packages|pi-version|pi-check]' \
         '       ./install.sh (--languages|-l) LANGUAGE...' \
         '       ./install.sh (--lsp|-s) SERVER...' \
         '       ./install.sh (--tools|-t) TOOL...' \
@@ -67,21 +67,22 @@ case "${1:-install}" in
         esac
         exit $?
         ;;
-    install|bare|preflight|bare-preflight|doctor|bare-doctor|link|codex-link|neovim|herdr|pi-packages|pi-version|pi-check|--help|-h)
+    install|bare|pi|preflight|bare-preflight|doctor|bare-doctor|link|codex-link|neovim|herdr|pi-packages|pi-version|pi-check|--help|-h)
         [[ $# -le 1 ]] || { warn 'This command accepts no additional arguments'; exit 2; } ;;
     *) warn "Unknown command: $1"; exit 2 ;;
 esac
 
 case "${1:-install}" in
     install|bare) install_bare ;;
+    pi) install_bare_pi ;;
     preflight|bare-preflight) bare_preflight ;;
     doctor|bare-doctor) bare_doctor ;;
-    link) DOTFILES_RELINK_ONLY=1 link_bare_config; DOTFILES_RELINK_ONLY=1 setup_neovim_config ;;
+    link) link_bare_offline ;;
     codex-link) link_codex_assets ;;
-    neovim) BOOTSTRAP_WORKSTATION=1 install_neovim_config ;;
+    neovim) install_workstation_neovim ;;
     herdr) install_herdr ;;
-    pi-packages) install_pi_packages "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/settings.json" ;;
+    pi-packages) source "$DOTFILES_DIR/scripts/bare-env.sh"; install_pi_packages "$PI_CODING_AGENT_DIR/settings.json" ;;
     pi-version) printf '%s\n' "$PI_CLI_VERSION" ;;
-    pi-check) check_pi_subagents_revision ;;
+    pi-check) source "$DOTFILES_DIR/scripts/bare-env.sh"; check_pi_subagents_revision ;;
     --help|-h) usage ;;
 esac

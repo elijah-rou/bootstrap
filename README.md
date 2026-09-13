@@ -10,6 +10,14 @@ From a checkout:
 ./install.sh
 ```
 
+Install or repair only pinned Pi and its Node/Bun runtime, configuration, extensions, skills, and launchers:
+
+```sh
+./install.sh pi
+```
+
+This targeted command does not install terminal core, Herdr, Neovim, parser/compiler dependencies, or shell configuration. Its component readiness is recorded independently, so a failed or partial run cannot claim full bootstrap readiness.
+
 The public launcher downloads a pinned archive, verifies its SHA-256, then dispatches the same commands. `REVISION` and `ARCHIVE_SHA256` in `bootstrap.sh` are publication fields and intentionally remain unchanged until this runtime is published.
 
 Core includes Git, Delta, GitHub CLI, the OpenSSH client, tmux, Herdr, ripgrep, fd, fzf, bat, eza, zoxide, jq, less, curl, Node, Bun, Neovim 0.12.5 or newer, Tree-sitter CLI 0.26 or newer, and a C compiler. Native packages are tried first. Node, Neovim, and Tree-sitter have pinned, checksum-verified official artifact fallbacks where stock versions are unusable. Bun uses its native package where available or its versioned official npm package in the owned prefix. No server/service, login-shell change, provider authentication, language toolchain, LSP, Zsh, or prompt is selected implicitly.
@@ -21,7 +29,7 @@ Run commands in the configured profile without an activation shell:
 ~/.local/bin/dev-shell pi --version
 ```
 
-The profile isolates Pi configuration/sessions and Neovim data/cache/state. Herdr's supported state root is `~/.config/herdr`; bootstrap adopts it only when absent, empty, or provably from an earlier managed config. Existing personal Herdr state blocks installation instead of being silently enrolled.
+`scripts/bare-env.sh` is the shared path contract used by installation, offline configuration, and ordinary configured Bash/Zsh sessions. The profile isolates Pi configuration/sessions and Neovim data/cache/state, including workstation overlay mode; normal `pi` and `nvim` commands use it without `dev-shell` activation. Overlays do not implicitly select Zsh, Starship, Mason, or LSPs. Herdr's supported state root is `~/.config/herdr`; bootstrap adopts it only when absent, empty, or provably from an earlier managed config. Existing personal Herdr state blocks installation instead of being silently enrolled.
 
 ## Independent selections
 
@@ -54,7 +62,7 @@ Neovim synchronizes pinned plugins, resolves the effective nvim-treesitter parse
 ./install.sh uninstall --yes
 ```
 
-`configure.sh` is offline and unprivileged. It accepts `terminal`, `pi`, `codex`, `neovim`, or `all`, ordered `--overlay ABS_DIR` values, and one `--legacy-root ABS_DIR`. It needs Node, not Python. Existing workstation overlay/profile/local-state contracts remain unchanged.
+`configure.sh` is offline and unprivileged and selects no packages. It accepts `terminal`, `pi`, `codex`, `neovim`, or `all`, ordered `--overlay ABS_DIR` values, and one `--legacy-root ABS_DIR`. It needs Node, not Python. Overlay precedence remains unchanged, while workstation and bare Neovim profiles share the enrolled runtime/app roots and writable local state.
 
 Legacy migration requires a provable managed profile. It copies legacy Pi state into the isolated profile and enrolls the exact old Pi root for cleanup. It deliberately preserves the old `~/.local/share/dotfiles/bare` prefix because separate Bun/Rust installations or user additions may live there. Ambiguous symlinks or unrelated Herdr state are refused.
 

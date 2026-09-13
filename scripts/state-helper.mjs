@@ -31,13 +31,32 @@ function validateTarget(value) {
   }
   return resolve(value);
 }
+function validatePolicyPlugin(item) {
+  if (!isAbsolute(item.target) || !isAbsolute(item.checkout) || !isAbsolute(item.source)) fail('External policy paths must be absolute');
+  const checkout = resolve(item.checkout);
+  const target = resolve(item.target);
+  if (target !== join(checkout, 'lua/plugins/zz-bootstrap-managed.lua')) fail('External policy target is not the fixed plugin path');
+  const checkoutStat = lstatSafe(checkout);
+  if (!checkoutStat?.isDirectory() || checkoutStat.isSymbolicLink() || realpathSync(checkout) !== checkout) fail('External Neovim checkout identity changed');
+  if (`${checkoutStat.dev}:${checkoutStat.ino}` !== item.checkoutIdentity) fail('External Neovim checkout was replaced');
+  let cursor = dirname(target);
+  while (cursor !== checkout) {
+    const stat = lstatSafe(cursor);
+    if (!stat?.isDirectory() || stat.isSymbolicLink()) fail(`External policy parent changed: ${cursor}`);
+    cursor = dirname(cursor);
+    if (!inside(checkout, cursor, true)) fail('External policy parent escaped checkout');
+  }
+  return target;
+}
 function blank() {
-  return { schemaVersion: 1, installationId: randomBytes(16).toString('hex'), status: 'installing', selections: { languages: [], lsp: [], tools: [] }, resources: [], packages: [], enrolledRoots: [], writers: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  return { schemaVersion: 1, installationId: randomBytes(16).toString('hex'), status: 'installing', components: {}, selections: { languages: [], lsp: [], tools: [] }, resources: [], packages: [], enrolledRoots: [], writers: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
 }
 function validate(record) {
   if (!record || Object.getPrototypeOf(record) !== Object.prototype || record.schemaVersion !== 1) fail('Unsupported or malformed installation record');
   if (typeof record.installationId !== 'string' || !/^[0-9a-f]{32}$/.test(record.installationId)) fail('Malformed installation ID');
-  if (!['installing', 'ready', 'uninstalling', 'cleanup-failed'].includes(record.status)) fail('Malformed installation status');
+  if (!['installing', 'partial', 'ready', 'uninstalling', 'cleanup-failed'].includes(record.status)) fail('Malformed installation status');
+  if (record.components === undefined) record.components = {};
+  if (!record.components || Object.getPrototypeOf(record.components) !== Object.prototype || Object.keys(record.components).length > 32 || Object.entries(record.components).some(([name,status]) => !/^[a-z][a-z-]*$/.test(name) || !['installing','ready'].includes(status))) fail('Malformed component readiness');
   for (const group of ['languages', 'lsp', 'tools']) {
     if (!Array.isArray(record.selections?.[group]) || record.selections[group].length > maxSelections || record.selections[group].some(v => typeof v !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(v))) fail('Malformed selections');
   }
@@ -46,7 +65,7 @@ function validate(record) {
   if (!Array.isArray(record.enrolledRoots) || record.enrolledRoots.length > maxResources) fail('Malformed enrolled roots');
   for (const item of record.resources) {
     if (!item || typeof item.target !== 'string' || !['absent','file','symlink'].includes(item.priorType) || !['shared','owned'].includes(item.class)) fail('Malformed resource');
-    validateTarget(item.target);
+    if (item.externalPolicyPlugin === true) validatePolicyPlugin(item); else validateTarget(item.target);
     if (item.backup && !inside(stateRoot, item.backup)) fail('Resource backup escaped state root');
     if (item.installerBackup) validateTarget(item.installerBackup);
   }
@@ -87,8 +106,9 @@ function lstatSafe(path) { try { return lstatSync(path); } catch { return undefi
 function removePath(path) { const stat = lstatSafe(path); if (!stat) return; if (stat.isDirectory() && !stat.isSymbolicLink()) rmSync(path, { recursive: true }); else rmSync(path); }
 function fileHash(path) { return createHash('sha256').update(readFileSync(path)).digest('hex'); }
 function restore(item, dryRun) {
-  const target = validateTarget(item.target);
+  const target = item.externalPolicyPlugin === true ? validatePolicyPlugin(item) : validateTarget(item.target);
   const stat = lstatSafe(target);
+  if (item.externalPolicyPlugin === true && !item.activeType && stat) fail(`Unactivated external policy target appeared; refusing cleanup: ${target}`);
   if (item.class === 'shared' && item.activeType) {
     if (!stat) fail(`Managed target disappeared; refusing complete cleanup: ${target}`);
     if (item.activeType === 'symlink' && (!stat.isSymbolicLink() || readlinkSync(target) !== item.activeLink)) fail(`Managed target changed; refusing cleanup: ${target}`);
@@ -106,8 +126,12 @@ function readObject(path) { const value = JSON.parse(readFileSync(path, 'utf8'))
 switch (command) {
   case 'init': { const record = load(false); record.status = 'installing'; save(record); break; }
   case 'ready': { const record = load(); record.status = 'ready'; save(record); break; }
+  case 'component-begin': { if(args.length!==1||!/^[a-z][a-z-]*$/.test(args[0]))fail('component-begin NAME');const record=load(false);record.components[args[0]]='installing';record.status='installing';save(record);break; }
+  case 'component-ready': { if(args.length!==1||!/^[a-z][a-z-]*$/.test(args[0]))fail('component-ready NAME');const record=load();record.components[args[0]]='ready';record.status=record.components.core==='ready'?'ready':'partial';save(record);break; }
   case 'validate': { load(); console.log(recordPath); break; }
   case 'prepare': { if (args.length < 2 || args.length > 3) fail('prepare TARGET CLASS [SOURCE]'); prepare(args[0], args[1], args[2] || ''); break; }
+  case 'prepare-policy-plugin': { if(args.length!==3)fail('prepare-policy-plugin TARGET CHECKOUT SOURCE');const checkout=resolve(args[1]),target=resolve(args[0]);const stat=lstatSafe(checkout);if(!stat?.isDirectory()||stat.isSymbolicLink()||realpathSync(checkout)!==checkout)fail('External Neovim checkout must be a canonical non-symlink directory');const draft={target,checkout,source:resolve(args[2]),checkoutIdentity:`${stat.dev}:${stat.ino}`,externalPolicyPlugin:true,class:'shared',priorType:'absent',backup:''};validatePolicyPlugin(draft);const record=load();const found=record.resources.find(item=>item.target===target);const targetStat=lstatSafe(target);if(found){if(found.externalPolicyPlugin!==true||found.checkout!==checkout)fail('External policy target ownership is ambiguous');if(targetStat&&(!targetStat.isSymbolicLink()||readlinkSync(target)!==found.activeLink))fail('External policy plugin identity changed');found.source=draft.source;}else{if(targetStat)fail('External policy plugin target must be absent before enrollment');record.resources.push(draft);}save(record);break; }
+  case 'activate-policy-plugin': { if(args.length!==1)fail('activate-policy-plugin TARGET');const target=resolve(args[0]);const record=load();const item=record.resources.find(value=>value.target===target&&value.externalPolicyPlugin===true);if(!item)fail('External policy plugin was not prepared');validatePolicyPlugin(item);const stat=lstatSafe(target);if(!stat?.isSymbolicLink()||readlinkSync(target)!==item.source)fail('External policy plugin activation identity mismatch');item.activeType='symlink';item.activeLink=item.source;save(record);break; }
   case 'adopt-link': { if(args.length!==2)fail('adopt-link TARGET SOURCE');const target=validateTarget(args[0]);const stat=lstatSafe(target);if(!stat?.isSymbolicLink()||readlinkSync(target)!==args[1])fail('Legacy link identity changed');const record=load();if(!record.resources.some(item=>item.target===target))record.resources.push({target,class:'shared',source:args[1],priorType:'absent',backup:'',activeType:'symlink',activeLink:args[1]});save(record);break; }
   case 'activate': { if (args.length !== 1) fail('activate TARGET'); const target = validateTarget(args[0]); const record = load(); const item = record.resources.find(value => value.target === target); if (!item) fail(`Unprepared target: ${target}`); const stat = lstatSafe(target); if (!stat) fail(`Managed target was not created: ${target}`); if (stat.isSymbolicLink()) { item.activeType = 'symlink'; item.activeLink = readlinkSync(target); } else if (stat.isFile()) { item.activeType = 'file'; item.activeHash = fileHash(target); } else fail(`Unsupported managed target type: ${target}`); save(record); break; }
   case 'backup': { if(args.length!==2)fail('backup TARGET BACKUP');const target=validateTarget(args[0]),backup=validateTarget(args[1]);const record=load();const item=record.resources.find(value=>value.target===target);if(!item)fail(`Unprepared target: ${target}`);item.installerBackup=backup;save(record);break; }

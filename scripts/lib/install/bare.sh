@@ -71,16 +71,114 @@ adopt_bootstrap_node_journal() {
     rm -f "$pending"
 }
 
-ensure_runtime_versions() {
-    local major minor
+ensure_pi_node_version() {
+    local major
     major="$(node -p 'process.versions.node.split(".")[0]')"
     if (( major < 22 )); then install_upstream_tool node || return 1; hash -r; fi
+    (( $(node -p 'process.versions.node.split(".")[0]') >= 22 )) || { warn 'Pi requires Node.js 22 or newer'; return 1; }
+}
+
+ensure_runtime_versions() {
+    local major minor
+    ensure_pi_node_version || return 1
     read -r _ major minor _ < <(nvim --version | head -1 | tr '.vV' '   ')
     if [[ -z "$major" ]] || (( major == 0 && minor < 12 )); then install_upstream_tool neovim || return 1; hash -r; fi
     local ts_version
     ts_version="$(tree-sitter --version 2>/dev/null | awk '{print $2}')"
     if [[ -z "$ts_version" ]] || ! node -e 'const [a,b]=process.argv[1].split(".").map(Number);process.exit(a>0||b>=26?0:1)' "$ts_version"; then install_upstream_tool tree-sitter || return 1; hash -r; fi
 }
+
+bootstrap_private_links_are_proven() {
+    local path source
+    while IFS= read -r path; do
+        [[ -L "$path" ]] || return 1
+        source="$(readlink "$path")" || return 1
+        [[ "$source" == "$DOTFILES_DIR"/* || ( -n "${BOOTSTRAP_LEGACY_ROOT:-}" && "$source" == "$BOOTSTRAP_LEGACY_ROOT"/* ) ]] || return 1
+    done < <(find "$BOOTSTRAP_PRIVATE_ROOT" -mindepth 1 ! -type d -print)
+}
+
+initialize_bootstrap_component() {
+    local component="$1"
+    if [[ ! -f "$BOOTSTRAP_STATE_ROOT/install.json" ]]; then
+        if [[ -d "$BOOTSTRAP_PRIVATE_ROOT" ]] && find "$BOOTSTRAP_PRIVATE_ROOT" -mindepth 1 ! -type d -print -quit | grep -q . && ! bootstrap_private_links_are_proven; then
+            warn "Refusing to adopt unrecorded bootstrap runtime state: $BOOTSTRAP_PRIVATE_ROOT"
+            return 1
+        fi
+        if [[ -d "$DOTFILES_BARE_ROOT" ]] && find "$DOTFILES_BARE_ROOT" -mindepth 1 ! -type d -print -quit | grep -q .; then
+            warn "Refusing to adopt unrecorded bootstrap runtime state: $DOTFILES_BARE_ROOT"
+            return 1
+        fi
+    fi
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" component-begin "$component" || return 1
+    mkdir -p "$DOTFILES_BARE_ROOT" "$BOOTSTRAP_PRIVATE_ROOT"/{bash,zsh,gh,pi/agent,pi/sessions,neovim} || return 1
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$DOTFILES_BARE_ROOT" || return 1
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT" || return 1
+}
+
+enroll_bootstrap_neovim_state() {
+    local root
+    for root in "${XDG_DATA_HOME:-$HOME/.local/share}/${NVIM_APPNAME:-bootstrap-nvim}" "${XDG_CACHE_HOME:-$HOME/.cache}/${NVIM_APPNAME:-bootstrap-nvim}" "${XDG_STATE_HOME:-$HOME/.local/state}/${NVIM_APPNAME:-bootstrap-nvim}"; do
+        node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$root" || return 1
+    done
+}
+
+pi_doctor() {
+    local failed=0
+    command -v node >/dev/null || { warn 'Pi Node.js runtime is missing'; failed=1; }
+    command -v bun >/dev/null || { warn 'Pi Bun package runtime is missing'; failed=1; }
+    [[ "$(pi --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; failed=1; }
+    check_pi_subagents_revision || failed=1
+    return "$failed"
+}
+
+install_pi_component() {
+    install_native_keys node bun || return 1
+    ensure_pi_node_version || return 1
+    bun install --global --exact "$PI_CLI_PACKAGE@$PI_CLI_VERSION" || return 1
+    [[ "$(pi --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; return 1; }
+    link_pi_config || return 1
+    link_pi_launchers || return 1
+    install_pi_packages "$PI_CODING_AGENT_DIR/settings.json" || return 1
+    pi_doctor || return 1
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" component-ready pi
+}
+
+link_bare_offline() (
+    source "$DOTFILES_DIR/scripts/bare-env.sh"
+    command -v node >/dev/null || { warn 'Node.js is required for offline configuration'; return 1; }
+    bootstrap_lock_acquire || return 1
+    trap 'bootstrap_lock_release' EXIT
+    initialize_bootstrap_component configuration || return 1
+    enroll_bootstrap_neovim_state || return 1
+    DOTFILES_RELINK_ONLY=1 link_bare_config || return 1
+    DOTFILES_RELINK_ONLY=1 setup_neovim_config || return 1
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" component-ready configuration
+)
+
+install_workstation_neovim() (
+    source "$DOTFILES_DIR/scripts/bare-env.sh"
+    command -v node >/dev/null || { warn 'Node.js is required for Neovim configuration'; return 1; }
+    bootstrap_lock_acquire || return 1
+    trap 'bootstrap_lock_release' EXIT
+    initialize_bootstrap_component configuration || return 1
+    enroll_bootstrap_neovim_state || return 1
+    BOOTSTRAP_NEOVIM_PROFILE=workstation install_neovim_config || return 1
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" component-ready configuration
+)
+
+install_bare_pi() (
+    bare_preflight || return 1
+    source "$DOTFILES_DIR/scripts/bare-env.sh"
+    bootstrap_lock_acquire || return 1
+    local bare_stage=''
+    bare_stage="$(mktemp -d "$BOOTSTRAP_STATE_ROOT/stage.XXXXXX")" || { bootstrap_lock_release; return 1; }
+    trap 'rm -rf "$bare_stage"; bootstrap_lock_release' EXIT
+    ensure_bootstrap_node || return 1
+    initialize_bootstrap_component pi || return 1
+    adopt_bootstrap_node_journal || return 1
+    install_pi_component || return 1
+    info 'Pi component installed in the owned runtime profile'
+)
 
 bare_doctor() (
     source "$DOTFILES_DIR/scripts/bare-env.sh"
@@ -106,19 +204,13 @@ install_bare() (
     ensure_bootstrap_node || return 1
     node "$DOTFILES_DIR/scripts/state-helper.mjs" init || return 1
     adopt_bootstrap_node_journal || return 1
-    mkdir -p "$DOTFILES_BARE_ROOT" "$BOOTSTRAP_PRIVATE_ROOT"/{bash,gh,pi/agent,pi/sessions,neovim} || return 1
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$DOTFILES_BARE_ROOT" || return 1
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT" || return 1
-    local nvim_root
-    for nvim_root in "${XDG_DATA_HOME:-$HOME/.local/share}/${NVIM_APPNAME:-bootstrap-nvim}" "${XDG_CACHE_HOME:-$HOME/.cache}/${NVIM_APPNAME:-bootstrap-nvim}" "${XDG_STATE_HOME:-$HOME/.local/state}/${NVIM_APPNAME:-bootstrap-nvim}"; do
-        node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$nvim_root" || return 1
-    done
+    initialize_bootstrap_component core || return 1
+    enroll_bootstrap_neovim_state || return 1
     local core=() key
     while IFS= read -r key; do [[ -z "$key" ]] || core+=("$key"); done < <(catalog_query core)
     install_native_keys "${core[@]}" || return 1
     ensure_runtime_versions || return 1
-    bun install --global --exact "$PI_CLI_PACKAGE@$PI_CLI_VERSION" || return 1
-    [[ "$(pi --version)" == "$PI_CLI_VERSION" ]] || return 1
+    install_pi_component || return 1
     local herdr_root="${XDG_CONFIG_HOME:-$HOME/.config}/herdr"
     if [[ -e "$herdr_root" ]]; then
         if find "$herdr_root" -mindepth 1 ! -name config.toml -print -quit | grep -q . ||
@@ -131,9 +223,9 @@ install_bare() (
     HERDR_INSTALL_DIR="$DOTFILES_BARE_ROOT/bin" install_herdr || return 1
     link_bare_config || return 1
     install_neovim_config || return 1
-    install_pi_packages "$PI_CODING_AGENT_DIR/settings.json" || return 1
     install_neovim_parsers || return 1
     report_install_failures || return 1
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" component-ready core || return 1
     node "$DOTFILES_DIR/scripts/state-helper.mjs" ready || return 1
     bare_doctor || return 1
     info 'Native bootstrap installed. Run ~/.local/bin/dev-shell COMMAND.'

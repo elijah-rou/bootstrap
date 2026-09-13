@@ -3,7 +3,7 @@
 
 setup_external_neovim_config() (
     local checkout="${NVIM_CONFIG_CHECKOUT_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles/lazyvim-config}"
-    local target="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
+    local target="${XDG_CONFIG_HOME:-$HOME/.config}/${NVIM_APPNAME:-bootstrap-nvim}"
     local repo_url="${NVIM_CONFIG_REPO_URL:-}" changes origin
 
     if [[ "${DOTFILES_RELINK_ONLY:-0}" == 1 || -z "$repo_url" ]]; then
@@ -28,6 +28,10 @@ setup_external_neovim_config() (
                 return 1
             fi
             changes="$(git -C "$checkout" status --porcelain)" || return 1
+            local policy_path="$checkout/lua/plugins/zz-bootstrap-managed.lua"
+            if [[ -L "$policy_path" ]] && managed_source_matches "$(readlink "$policy_path")" neovim/bootstrap.lua; then
+                changes="$(printf '%s\n' "$changes" | grep -vFx '?? lua/plugins/zz-bootstrap-managed.lua' || true)"
+            fi
             if [[ -n "$changes" ]]; then
                 warn 'Keeping locally modified Neovim config; skipping update'
             else
@@ -41,24 +45,15 @@ setup_external_neovim_config() (
     fi
 
     [[ -f "$checkout/init.lua" ]] || { warn "Neovim config is missing init.lua: $checkout"; return 1; }
-    if [[ "${BOOTSTRAP_WORKSTATION:-0}" != 1 && -f "$checkout/lua/config/lazy.lua" ]]; then
-        local plugin="lua/plugins/zz-bootstrap-managed.lua" exclude tracked
-        tracked="$(git -C "$checkout" ls-files -- "$plugin")" || return 1
+    if [[ -f "$checkout/lua/config/lazy.lua" ]]; then
+        local plugin="lua/plugins/zz-bootstrap-managed.lua" tracked
+        tracked=''
+        if [[ -d "$checkout/.git" ]]; then tracked="$(git -C "$checkout" ls-files -- "$plugin")" || return 1; fi
         if [[ -n "$tracked" ]]; then
             warn "Neovim checkout tracks $plugin; refusing to replace it"
             return 1
         fi
-        exclude="$(git -C "$checkout" rev-parse --git-path info/exclude)" || return 1
-        [[ "$exclude" == /* ]] || exclude="$checkout/$exclude"
-        mkdir -p "$(dirname "$exclude")" || return 1
-        if ! grep -qxF "/$plugin" "$exclude" 2>/dev/null; then
-            printf '\n/%s\n' "$plugin" >> "$exclude" || return 1
-        fi
-        link_managed_file "$DOTFILES_DIR/neovim/bootstrap.lua" "$checkout/$plugin" \
-            "${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap/neovim-backups" || return 1
-    fi
-    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]]; then
-        remove_owned_link "$checkout/lua/plugins/zz-bootstrap-managed.lua" neovim/bootstrap.lua || return 1
+        link_external_policy_plugin "$DOTFILES_DIR/neovim/bootstrap.lua" "$checkout" || return 1
     fi
     if [[ "$(resolve_path "$checkout")" != "$(resolve_path "$target")" ]]; then
         link_managed_file "$checkout" "$target" || return 1
@@ -69,6 +64,12 @@ setup_external_neovim_config() (
 selection_is_recorded() {
     local group="$1" name="$2"
     node "$DOTFILES_DIR/scripts/state-helper.mjs" selections 2>/dev/null | grep -qxF "$group"$'\t'"$name"
+}
+
+link_runtime_environment() {
+    mkdir -p "$HOME/.config/dotfiles" "$HOME/.local/bin" || return 1
+    link_managed_file "$DOTFILES_DIR/scripts/bare-env.sh" "$HOME/.config/dotfiles/bare-env.sh" || return 1
+    link_managed_file "$DOTFILES_DIR/scripts/dev-shell" "$HOME/.local/bin/dev-shell" || return 1
 }
 
 link_terminal_config() {
@@ -84,18 +85,15 @@ herdr/config.toml .config/herdr/config.toml
 gitignore_global .config/git/ignore
 ripgrep/config .config/ripgrep/config
 LINKS
-    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]] || selection_is_recorded tools zsh; then
+    if selection_is_recorded tools zsh; then
         for source in zshenv zshrc zprofile; do link_managed_file "$DOTFILES_DIR/$source" "$HOME/.$source" || return 1; done
     fi
-    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]] || selection_is_recorded tools starship; then
+    if selection_is_recorded tools starship; then
         link_managed_file "$DOTFILES_DIR/starship.toml" "$HOME/.config/starship.toml" || return 1
     fi
     configure_terminal_overlays || return 1
     link_managed_file "$DOTFILES_DIR/scripts/modelusage" "$HOME/.local/bin/modelusage" || return 1
-    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]]; then
-        remove_owned_link "$HOME/.config/dotfiles/bare-env.sh" scripts/bare-env.sh || return 1
-        remove_owned_link "$HOME/.local/bin/dev-shell" scripts/dev-shell || return 1
-    fi
+    link_runtime_environment || return 1
     info "Linked terminal configuration"
 }
 
@@ -218,7 +216,7 @@ LINKS
 materialize_pi_config() {
     local name="$1" directory
     local overlays=("$DOTFILES_DIR/local/pi-$name.json")
-    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]]; then
+    if [[ "${BOOTSTRAP_CONFIG_OVERLAYS:-0}" == 1 ]]; then
         overlays=()
         for directory in "${BOOTSTRAP_OVERLAYS[@]}"; do
             overlays+=("$directory/pi-$name.json")
@@ -230,7 +228,7 @@ materialize_pi_config() {
 configure_terminal_overlays() (
     local rendered directory source repos=''
     local overlays=("$DOTFILES_DIR/local")
-    if [[ "${BOOTSTRAP_WORKSTATION:-0}" == 1 ]]; then
+    if [[ "${BOOTSTRAP_CONFIG_OVERLAYS:-0}" == 1 ]]; then
         overlays=("${BOOTSTRAP_OVERLAYS[@]}")
     fi
     rendered="$(mktemp -d)" || return 1

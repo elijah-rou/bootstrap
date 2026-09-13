@@ -35,12 +35,8 @@ local ok, failure = xpcall(function()
   LazyVim.pick.picker.open = original_open
   assert(picked == "files", "leader-space must invoke file search")
   local plugins = require("lazy.core.config").plugins
-  if vim.g.bootstrap_neovim_profile == "bare" then
-    assert(plugins["mason.nvim"] == nil, "bare must not activate Mason")
-    assert(plugins["rustaceanvim"] == nil, "bare must retain PATH-based Rust LSP policy")
-  else
-    assert(plugins["mason.nvim"] ~= nil, "workstation must retain Mason policy")
-  end
+  assert(plugins["mason.nvim"] == nil, "all profiles must retain explicit LSP selection")
+  assert(plugins["rustaceanvim"] == nil, "all profiles must retain PATH-based Rust LSP policy")
   print(
     "PASS managed " .. vim.g.bootstrap_neovim_profile .. " startup, recovered commands, writable lock, and file picker"
   )

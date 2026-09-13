@@ -1,5 +1,8 @@
 -- Mason is disabled. Only explicitly persisted and ready servers are configured.
 local selection_path = vim.env.BOOTSTRAP_LSP_SELECTIONS
+if not selection_path or selection_path == "" then
+  selection_path = vim.fn.stdpath("config") .. "/lsp-selections.json"
+end
 local selected = {}
 if selection_path and vim.fn.filereadable(selection_path) == 1 then
   local value = vim.json.decode(table.concat(vim.fn.readfile(selection_path), "\n"))

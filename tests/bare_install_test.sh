@@ -10,23 +10,26 @@ source "$ROOT_DIR/install.sh"
 # Core journey uses native dispatch and records ownership without selecting extras.
 bare_preflight() { :; }
 catalog_query() { [[ "$1" == core ]] && printf 'git\nnode\nbun\n'; }
-install_native_keys() { printf '%s\n' "$*" >"$HOME/native-keys"; }
+install_native_keys() { printf '%s\n' "$*" >>"$HOME/native-keys"; }
 ensure_runtime_versions() { :; }
+ensure_pi_node_version() { :; }
 bun() { [[ "$*" == "install --global --exact $PI_CLI_PACKAGE@$PI_CLI_VERSION" ]]; }
 pi() { [[ "${1:-}" == --version ]] && printf '%s\n' "$PI_CLI_VERSION" || :; }
 install_herdr() { :; }
 link_bare_config() { :; }
 install_neovim_config() { :; }
 install_pi_packages() { [[ "$1" == "$PI_CODING_AGENT_DIR/settings.json" ]]; }
+pi_doctor() { :; }
 install_neovim_parsers() { :; }
 report_install_failures() { :; }
 bare_doctor() { :; }
 install_bare
-[[ "$(cat "$HOME/native-keys")" == 'git node bun' ]]
+[[ "$(cat "$HOME/native-keys")" == $'git node bun\nnode bun' ]]
 [[ -z "$(node "$ROOT_DIR/scripts/state-helper.mjs" selections)" ]]
 [[ ! -e "$HOME/.zshrc" && ! -e "$HOME/.config/starship.toml" ]]
 node "$ROOT_DIR/scripts/state-helper.mjs" validate >/dev/null
 install_bare
+[[ "$(cat "$HOME/native-keys")" == $'git node bun\nnode bun\ngit node bun\nnode bun' ]]
 [[ ! -d "$XDG_STATE_HOME/bootstrap/mutate.lock" ]]
 echo 'PASS native core install and retry record no implicit extras'
 

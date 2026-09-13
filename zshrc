@@ -15,7 +15,7 @@ export DISABLE_AUTOUPDATER="1"
 # History settings
 HISTSIZE=10000
 SAVEHIST=10000
-HISTFILE=~/.zsh_history
+HISTFILE="${BOOTSTRAP_PRIVATE_ROOT:-$HOME/.local/share/bootstrap/private}/zsh/history"
 setopt SHARE_HISTORY          # Share history between sessions
 setopt HIST_IGNORE_DUPS       # Don't record duplicates
 setopt HIST_IGNORE_SPACE      # Don't record commands starting with space

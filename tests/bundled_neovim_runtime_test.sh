@@ -7,7 +7,8 @@ site_root="${NVIM_SITE_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/nvim/site}"
 temporary="$(mktemp -d)"
 temporary="$(cd "$temporary" && pwd -P)"
 trap 'rm -rf "$temporary"' EXIT
-export HOME="$temporary/home" XDG_CONFIG_HOME="$temporary/config" XDG_DATA_HOME="$temporary/data" XDG_STATE_HOME="$temporary/state"
+export HOME="$temporary/home"
+export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" XDG_STATE_HOME="$HOME/.local/state"
 unset NVIM_CONFIG_REPO_URL NVIM_CONFIG_CHECKOUT_DIR
 export NVIM_LEETCODE_MODE=0
 mkdir -p "$HOME" "$XDG_DATA_HOME/nvim" "$XDG_DATA_HOME/bootstrap-nvim"
@@ -16,12 +17,11 @@ ln -s "$plugin_root" "$XDG_DATA_HOME/bootstrap-nvim/lazy"
 [[ ! -d "$site_root" ]] || { ln -s "$site_root" "$XDG_DATA_HOME/nvim/site"; ln -s "$site_root" "$XDG_DATA_HOME/bootstrap-nvim/site"; }
 cp "$ROOT/neovim/defaults/lazy-lock.json" "$temporary/source-lock"
 cp "$ROOT/neovim/defaults/lazyvim.json" "$temporary/source-extras"
+export NVIM_APPNAME=bootstrap-nvim
 for profile in workstation bare; do
     if [[ "$profile" == workstation ]]; then
-        unset NVIM_APPNAME
         bash "$ROOT/configure.sh" neovim
     else
-        export NVIM_APPNAME=bootstrap-nvim
         bash "$ROOT/install.sh" link
     fi
     nvim --headless -i NONE -u "$ROOT/neovim/config/tests/managed-startup.lua"

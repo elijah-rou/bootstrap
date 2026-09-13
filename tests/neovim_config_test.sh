@@ -4,9 +4,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 lazy_path="${NVIM_LAZY_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy/lazy.nvim}"
-export HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/config" XDG_DATA_HOME="$tmp/data" XDG_STATE_HOME="$tmp/state"
+export HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/home/.config" XDG_DATA_HOME="$tmp/home/.local/share" XDG_STATE_HOME="$tmp/home/.local/state"
 export DOTFILES_DIR="$ROOT" NVIM_CONFIG_CHECKOUT_DIR="$tmp/checkout"
-mkdir -p "$HOME" "$tmp/upstream/lua/config"
+mkdir -p "$HOME" "$tmp/upstream/lua/config" "$tmp/upstream/lua/plugins"
+: >"$tmp/upstream/lua/plugins/.keep"
 printf 'return {}\n' > "$tmp/upstream/init.lua"
 printf 'return {}\n' > "$tmp/upstream/lua/config/lazy.lua"
 git -C "$tmp/upstream" init -q
@@ -18,12 +19,17 @@ warn() { printf '%s\n' "$*" >&2; }
 source "$ROOT/scripts/lib/install/managed-files.sh"
 source "$ROOT/scripts/lib/install/configuration.sh"
 source "$ROOT/scripts/lib/install/neovim.sh"
+source "$ROOT/scripts/lib/install/bare.sh"
+source "$ROOT/scripts/bare-env.sh"
+node "$ROOT/scripts/state-helper.mjs" component-begin configuration
+mkdir -p "$BOOTSTRAP_PRIVATE_ROOT" "$DOTFILES_BARE_ROOT"
+node "$ROOT/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT"
+node "$ROOT/scripts/state-helper.mjs" enroll "$DOTFILES_BARE_ROOT"
 setup_neovim_config
 plugin="$NVIM_CONFIG_CHECKOUT_DIR/lua/plugins/zz-bootstrap-managed.lua"
-[[ -L "$plugin" && -L "$XDG_CONFIG_HOME/nvim" ]]
-[[ -z "$(git -C "$NVIM_CONFIG_CHECKOUT_DIR" status --porcelain)" ]]
+[[ -L "$plugin" && -L "$XDG_CONFIG_HOME/bootstrap-nvim" ]]
+[[ "$(git -C "$NVIM_CONFIG_CHECKOUT_DIR" status --porcelain -- "$plugin")" == '?? lua/plugins/zz-bootstrap-managed.lua' ]]
 setup_neovim_config
-[[ "$(grep -cxF '/lua/plugins/zz-bootstrap-managed.lua' "$NVIM_CONFIG_CHECKOUT_DIR/.git/info/exclude")" == 1 ]]
 # A new upstream commit must still fast-forward after materialization.
 printf '\n' >> "$tmp/upstream/init.lua"
 git -C "$tmp/upstream" -c user.name=Test -c user.email=test@example.invalid commit -qam update
@@ -31,10 +37,12 @@ setup_neovim_config
 [[ "$(git -C "$NVIM_CONFIG_CHECKOUT_DIR" rev-parse HEAD)" == "$(git -C "$tmp/upstream" rev-parse HEAD)" ]]
 rm "$plugin"
 printf 'user configuration\n' > "$plugin"
-DOTFILES_RELINK_ONLY=1 setup_neovim_config
-[[ -L "$plugin" ]]
-grep -qxF 'user configuration' "$XDG_STATE_HOME"/bootstrap/neovim-backups/*
-[[ -z "$(git -C "$NVIM_CONFIG_CHECKOUT_DIR" status --porcelain)" ]]
+if DOTFILES_RELINK_ONLY=1 setup_neovim_config; then
+    printf 'Custom collision was accepted\n' >&2
+    exit 1
+fi
+[[ -f "$plugin" && ! -L "$plugin" ]]
+grep -qxF 'user configuration' "$plugin"
 # An ignored path tracked by the user is not installer-owned.
 rm "$plugin"
 printf 'tracked configuration\n' > "$plugin"

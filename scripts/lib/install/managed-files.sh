@@ -67,18 +67,44 @@ managed_backup_path() {
     return 1
 }
 
+managed_target_is_private() {
+    local target="$1" target_parent private_parent private
+    [[ -n "${BOOTSTRAP_PRIVATE_ROOT:-}" ]] || return 1
+    target_parent="$(cd "$(dirname "$target")" 2>/dev/null && pwd -P)" || return 1
+    private_parent="$(cd "$(dirname "$BOOTSTRAP_PRIVATE_ROOT")" 2>/dev/null && pwd -P)" || return 1
+    target="$target_parent/$(basename "$target")"
+    private="$private_parent/$(basename "$BOOTSTRAP_PRIVATE_ROOT")"
+    [[ "$target" == "$private" || "$target" == "$private"/* ]]
+}
+
 record_managed_target() {
     local target="$1" source="$2"
-    [[ -n "${BOOTSTRAP_PRIVATE_ROOT:-}" && ( "$target" == "$BOOTSTRAP_PRIVATE_ROOT" || "$target" == "$BOOTSTRAP_PRIVATE_ROOT"/* ) ]] && return 0
+    managed_target_is_private "$target" && return 0
     [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]] || return 0
     node "$DOTFILES_DIR/scripts/state-helper.mjs" prepare "$target" shared "$source"
 }
 
 activate_managed_target() {
     local target="$1"
-    [[ -n "${BOOTSTRAP_PRIVATE_ROOT:-}" && ( "$target" == "$BOOTSTRAP_PRIVATE_ROOT" || "$target" == "$BOOTSTRAP_PRIVATE_ROOT"/* ) ]] && return 0
+    managed_target_is_private "$target" && return 0
     [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]] || return 0
     node "$DOTFILES_DIR/scripts/state-helper.mjs" activate "$target"
+}
+
+link_external_policy_plugin() {
+    local source="$1" checkout="$2" target current=''
+    [[ -f "$source" && -d "$checkout" && ! -L "$checkout" ]] || { warn 'External Neovim policy source/checkout is invalid'; return 1; }
+    checkout="$(cd "$checkout" && pwd -P)" || return 1
+    target="$checkout/lua/plugins/zz-bootstrap-managed.lua"
+    [[ -d "$(dirname "$target")" && ! -L "$(dirname "$target")" ]] || { warn 'External Neovim checkout must provide a non-symlink lua/plugins directory'; return 1; }
+    if [[ -e "$target" || -L "$target" ]]; then
+        [[ -L "$target" ]] || { warn 'External Neovim policy plugin is custom or tracked; refusing replacement'; return 1; }
+        current="$(readlink "$target")" || return 1
+        managed_source_matches "$current" neovim/bootstrap.lua || { warn 'External Neovim policy plugin is not bootstrap-managed'; return 1; }
+    fi
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" prepare-policy-plugin "$target" "$checkout" "$source" || return 1
+    if [[ "$current" != "$source" ]]; then rm -f "$target" || return 1; ln -s "$source" "$target" || return 1; fi
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" activate-policy-plugin "$target"
 }
 
 link_managed_file() {
@@ -118,7 +144,7 @@ link_managed_file() {
             warn "Failed to preserve existing path: $target"
             return 1
         fi
-        if [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]]; then node "$DOTFILES_DIR/scripts/state-helper.mjs" backup "$target" "$backup_path" || return 1; fi
+        if ! managed_target_is_private "$target" && [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]]; then node "$DOTFILES_DIR/scripts/state-helper.mjs" backup "$target" "$backup_path" || return 1; fi
         info "Backed up $target to $backup_path"
     fi
 
@@ -170,7 +196,7 @@ install_managed_file() {
             rm -f "$staged_path"
             return 1
         fi
-        if [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]]; then node "$DOTFILES_DIR/scripts/state-helper.mjs" backup "$target" "$backup_path" || return 1; fi
+        if ! managed_target_is_private "$target" && [[ -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/install.json" ]]; then node "$DOTFILES_DIR/scripts/state-helper.mjs" backup "$target" "$backup_path" || return 1; fi
         info "Backed up $target to $backup_path"
     fi
 

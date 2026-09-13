@@ -11,10 +11,9 @@ validate_neovim_profile() { [[ $# -ge 1 && $# -le 2 && -f "$1" && ! -L "$1" ]] &
 setup_bundled_neovim_config() (
     local data_home="${XDG_DATA_HOME:-$HOME/.local/share}" config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
     local source="$DOTFILES_DIR/neovim/config" defaults="$DOTFILES_DIR/neovim/defaults"
-    local app_name=nvim profile=workstation stage='' profile_file='' destination seed name active_runtime=0
-    if [[ "${BOOTSTRAP_WORKSTATION:-0}" != 1 ]]; then app_name="${NVIM_APPNAME:-bootstrap-nvim}"; profile=bare; fi
-    local runtime
-    if [[ "$profile" == bare ]]; then runtime="${BOOTSTRAP_PRIVATE_ROOT:-$data_home/bootstrap/private}/neovim/config"; else runtime="$data_home/bootstrap/neovim"; fi
+    local app_name="${NVIM_APPNAME:-bootstrap-nvim}" profile="${BOOTSTRAP_NEOVIM_PROFILE:-bare}" stage='' profile_file='' destination seed name active_runtime=0
+    [[ "$profile" == bare || "$profile" == workstation ]] || { warn "Unknown Neovim profile: $profile"; return 1; }
+    local runtime="${BOOTSTRAP_PRIVATE_ROOT:-$data_home/bootstrap/private}/neovim/config"
     local target="$config_home/$app_name"
     [[ "$data_home" == /* && "$data_home" != / && "$config_home" == /* && "$config_home" != / ]] || { warn 'Neovim requires absolute data/config homes below /'; return 1; }
     command -v node >/dev/null || { warn 'Node.js is required for Neovim configuration'; return 1; }
@@ -45,7 +44,7 @@ setup_bundled_neovim_config() (
 )
 
 write_neovim_lsp_selections() {
-    local output="${BOOTSTRAP_LSP_SELECTIONS:-$BOOTSTRAP_PRIVATE_ROOT/neovim/lsp-selections.json}"
+    local output="${BOOTSTRAP_LSP_SELECTIONS:-$BOOTSTRAP_PRIVATE_ROOT/neovim/config/lsp-selections.json}"
     node "$DOTFILES_DIR/scripts/state-helper.mjs" lsp-output "$DOTFILES_DIR/packages/catalog.json" "$output"
 }
 

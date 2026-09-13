@@ -38,8 +38,8 @@ def configure(env: dict[str, str], *arguments: str, source: Path = ROOT, success
 def test_fresh_retry_and_profile_switch() -> None:
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-') as temporary:
         home, env = environment(Path(temporary).resolve())
-        runtime = home / '.local/share/bootstrap/neovim'
-        target = home / '.config/nvim'
+        runtime = home / '.local/share/bootstrap/private/neovim/config'
+        target = home / '.config/bootstrap-nvim'
         _ = configure(env, 'configure.sh', 'neovim')
         assert target.resolve() == runtime
         assert (runtime / 'init.lua').resolve() == ROOT / 'neovim/config/init.lua'
@@ -56,7 +56,6 @@ def test_fresh_retry_and_profile_switch() -> None:
         bare_target = home / '.config/bootstrap-nvim'
         assert bare_target.resolve() == bare_runtime
         assert json.loads((bare_runtime / 'bootstrap-profile.json').read_text())['profile'] == 'bare'
-        assert json.loads((runtime / 'bootstrap-profile.json').read_text())['profile'] == 'workstation'
         _ = configure(env, 'install.sh', 'neovim')
         assert json.loads((runtime / 'bootstrap-profile.json').read_text())['profile'] == 'workstation'
         assert not (runtime / '.git').exists()
@@ -74,14 +73,14 @@ def test_legacy_migration_and_source_upgrade_preserve_local_state() -> None:
         for name in ['lazy-lock.json', 'lazyvim.json', '.neoconf.json']:
             _ = (old / name).write_text(json.dumps({'local': name}) + '\n')
         before = {p.relative_to(old): p.read_bytes() for p in old.rglob('*') if p.is_file()}
-        target = home / '.config/nvim'
+        target = home / '.config/bootstrap-nvim'
         target.parent.mkdir(parents=True)
         target.symlink_to(old)
         _ = configure(env, 'configure.sh', 'neovim')
         runtime = target.resolve()
         for name in ['lazy-lock.json', 'lazyvim.json', '.neoconf.json']:
             assert (runtime / name).read_bytes() == (old / name).read_bytes()
-        backups = list(target.parent.glob('nvim.bak.*'))
+        backups = list(target.parent.glob('bootstrap-nvim.bak.*'))
         assert len(backups) == 1 and backups[0].readlink() == old
         assert {p.relative_to(old): p.read_bytes() for p in old.rglob('*') if p.is_file()} == before
         _ = (runtime / 'lazy-lock.json').write_text('{"updated-locally":true}\n')
@@ -91,7 +90,7 @@ def test_legacy_migration_and_source_upgrade_preserve_local_state() -> None:
         assert (runtime / 'init.lua').resolve() == next_source / 'neovim/config/init.lua'
         assert (runtime / 'lazy-lock.json').read_text() == '{"updated-locally":true}\n'
         assert {p.relative_to(old): p.read_bytes() for p in old.rglob('*') if p.is_file()} == before
-        assert list(target.parent.glob('nvim.bak.*')) == backups
+        assert list(target.parent.glob('bootstrap-nvim.bak.*')) == backups
     return
 
 
@@ -102,7 +101,7 @@ def test_foreign_runtime_and_invalid_profiles_are_preserved() -> None:
                {'version': 1, 'profile': 'bare', 'extra': True}]
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-invalid-') as temporary:
         home, env = environment(Path(temporary).resolve())
-        runtime = home / '.local/share/bootstrap/neovim'
+        runtime = home / '.local/share/bootstrap/private/neovim/config'
         runtime.mkdir(parents=True)
         keep = runtime / 'keep'
         _ = keep.write_text('unowned')
@@ -114,7 +113,7 @@ def test_foreign_runtime_and_invalid_profiles_are_preserved() -> None:
             _ = configure(env, 'configure.sh', 'neovim', success=False)
             assert json.loads(marker.read_text()) == value
             assert keep.read_text() == 'unowned'
-            assert not (home / '.config/nvim').exists()
+            assert not (home / '.config/bootstrap-nvim').exists()
         marker.unlink()
         elsewhere = runtime.parent / 'elsewhere'
         _ = elsewhere.write_text('{"version":1,"profile":"bare"}')
@@ -127,13 +126,13 @@ def test_foreign_runtime_and_invalid_profiles_are_preserved() -> None:
 def test_lock_and_partial_initialization_recovery() -> None:
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-lock-') as temporary:
         home, env = environment(Path(temporary).resolve())
-        runtime = home / '.local/share/bootstrap/neovim'
-        lock = runtime.with_name('neovim.install.lock')
+        runtime = home / '.local/share/bootstrap/private/neovim/config'
+        lock = Path(str(runtime) + '.install.lock')
         lock.mkdir(parents=True)
         _ = configure(env, 'configure.sh', 'neovim', success=False)
         assert lock.is_dir() and not runtime.exists()
         lock.rmdir()
-        old = home / '.config/nvim'
+        old = home / '.config/bootstrap-nvim'
         old.mkdir(parents=True)
         _ = (old / 'lazyvim.json').write_text('{invalid')
         _ = configure(env, 'configure.sh', 'neovim', success=False)
@@ -142,9 +141,12 @@ def test_lock_and_partial_initialization_recovery() -> None:
         assert not list(runtime.parent.glob('.neovim-stage.*'))
         assert (old / 'lazyvim.json').read_text() == '{invalid'
         _ = (old / 'lazyvim.json').write_text('{"extras":[]}\n')
+        _ = configure(env, 'configure.sh', 'neovim', success=False)
+        preserved = old.with_name('bootstrap-nvim-user')
+        old.rename(preserved)
         _ = configure(env, 'configure.sh', 'neovim')
         assert old.is_symlink() and old.resolve() == runtime
-        assert (runtime / 'lazyvim.json').read_text() == '{"extras":[]}\n'
+        assert preserved.joinpath('lazyvim.json').read_text() == '{"extras":[]}\n'
         (runtime / 'lazy-lock.json').unlink()
         _ = configure(env, 'configure.sh', 'neovim')
         assert (runtime / 'lazy-lock.json').is_file()
@@ -155,47 +157,48 @@ def test_failed_activation_can_retry_without_losing_legacy_state() -> None:
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-activation-') as temporary:
         root = Path(temporary).resolve()
         home, env = environment(root)
-        target = home / '.config/nvim'
-        target.mkdir(parents=True)
-        _ = (target / 'init.lua').write_text('keep original')
-        _ = (target / 'lazy-lock.json').write_text('{"local-lock":true}\n')
+        target = home / '.config/bootstrap-nvim'
+        original = home / 'original-nvim'; original.mkdir()
+        _ = (original / 'init.lua').write_text('keep original')
+        _ = (original / 'lazy-lock.json').write_text('{"local-lock":true}\n')
+        target.parent.mkdir(parents=True); target.symlink_to(original)
         original_ln = shutil.which('ln')
         assert original_ln is not None
         guard_ln = root / 'guard/ln'
-        _ = guard_ln.write_text('#!/bin/bash\nif [[ "${!#}" == "$HOME/.config/nvim" ]]; then exit 29; fi\nexec ' + original_ln + ' "$@"\n')
+        _ = guard_ln.write_text('#!/bin/bash\nif [[ "${!#}" == "$HOME/.config/bootstrap-nvim" ]]; then exit 29; fi\nexec ' + original_ln + ' "$@"\n')
         guard_ln.chmod(0o755)
         _ = configure(env, 'configure.sh', 'neovim', success=False)
         assert (target / 'init.lua').read_text() == 'keep original'
         assert (target / 'lazy-lock.json').read_text() == '{"local-lock":true}\n'
-        runtime = home / '.local/share/bootstrap/neovim'
+        runtime = home / '.local/share/bootstrap/private/neovim/config'
         assert (runtime / 'bootstrap-profile.json').is_file()
-        assert not runtime.with_name('neovim.install.lock').exists()
+        assert not Path(str(runtime) + '.install.lock').exists()
         guard_ln.unlink()
         _ = (target / 'lazy-lock.json').write_text('{"edited-after-failure":true}\n')
         _ = configure(env, 'configure.sh', 'neovim')
         assert target.resolve() == runtime
         assert (runtime / 'lazy-lock.json').read_text() == '{"edited-after-failure":true}\n'
-        backups = list(target.parent.glob('nvim.bak.*'))
+        backups = list(target.parent.glob('bootstrap-nvim.bak.*'))
         assert len(backups) == 1 and (backups[0] / 'init.lua').read_text() == 'keep original'
     return
 
 
-def test_bare_and_workstation_profiles_are_isolated() -> None:
+def test_bare_and_workstation_profiles_share_owned_runtime() -> None:
     with tempfile.TemporaryDirectory(prefix='bundled-nvim-profiles-') as temporary:
         home, env = environment(Path(temporary).resolve())
         _ = configure(env, 'configure.sh', 'neovim')
-        workstation = home / '.config/nvim'
+        managed = home / '.config/bootstrap-nvim'
+        runtime = managed.resolve()
+        assert json.loads((runtime / 'bootstrap-profile.json').read_text())['profile'] == 'workstation'
         _ = configure(env, 'install.sh', 'link')
-        bare = home / '.config/bootstrap-nvim'
-        assert json.loads((workstation.resolve() / 'bootstrap-profile.json').read_text())['profile'] == 'workstation'
-        assert json.loads((bare.resolve() / 'bootstrap-profile.json').read_text())['profile'] == 'bare'
-        assert workstation.resolve() != bare.resolve()
+        assert managed.resolve() == runtime
+        assert json.loads((runtime / 'bootstrap-profile.json').read_text())['profile'] == 'bare'
     return
 
 
 if __name__ == '__main__':
     for check in [test_fresh_retry_and_profile_switch, test_legacy_migration_and_source_upgrade_preserve_local_state,
                   test_foreign_runtime_and_invalid_profiles_are_preserved, test_lock_and_partial_initialization_recovery,
-                  test_failed_activation_can_retry_without_losing_legacy_state, test_bare_and_workstation_profiles_are_isolated]:
+                  test_failed_activation_can_retry_without_losing_legacy_state, test_bare_and_workstation_profiles_share_owned_runtime]:
         check()
         print(f'PASS {check.__name__}')

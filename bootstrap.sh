@@ -8,7 +8,7 @@ snapshot="$BOOTSTRAP_ROOT/snapshots/$REVISION"
 command_name="${1:-install}"
 
 case "$command_name" in
-    install|fetch|preflight|doctor|link|codex-link|herdr) [[ $# -le 1 ]] || { printf 'Unexpected arguments\n' >&2; exit 2; } ;;
+    install|pi|fetch|preflight|doctor|link|codex-link|herdr) [[ $# -le 1 ]] || { printf 'Unexpected arguments\n' >&2; exit 2; } ;;
     uninstall) case "${2:-}" in --dry-run|--yes) [[ $# -eq 2 ]] ;; '') [[ $# -eq 1 ]] ;; *) false ;; esac || { printf 'Usage: bootstrap.sh uninstall [--dry-run|--yes]\n' >&2; exit 2; } ;;
     migrate-legacy) [[ $# -eq 2 && "$2" == --yes ]] || { printf 'Usage: bootstrap.sh migrate-legacy --yes\n' >&2; exit 2; } ;;
     enroll-project) [[ $# -eq 3 && "$2" == /* && "$3" == --yes ]] || { printf 'Usage: bootstrap.sh enroll-project ABS_DIR --yes\n' >&2; exit 2; } ;;
@@ -29,7 +29,7 @@ case "$command_name" in
         done
         ;;
     --help|-h)
-        printf '%s\n' 'Usage: bash bootstrap.sh [install|fetch|preflight|doctor|link|codex-link|herdr]' \
+        printf '%s\n' 'Usage: bash bootstrap.sh [install|pi|fetch|preflight|doctor|link|codex-link|herdr]' \
             '       bash bootstrap.sh (--languages|-l) LANGUAGE...' \
             '       bash bootstrap.sh (--lsp|-s) SERVER...' \
             '       bash bootstrap.sh (--tools|-t) TOOL...' \
