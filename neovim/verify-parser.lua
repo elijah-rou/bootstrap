@@ -23,7 +23,8 @@ local ok, failure = xpcall(function()
   assert(vim.treesitter.highlighter.active[vim.api.nvim_get_current_buf()], 'highlighter did not start')
   vim.wo.foldmethod = 'expr'
   vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
-  assert(vim.fn.foldlevel(1) >= 0, 'Tree-sitter folding unavailable')
+  vim.cmd('normal! zx')
+  assert(vim.fn.foldlevel(2) > 0, 'Tree-sitter fixture did not produce a fold')
   vim.list_extend(receipt, { 'highlight=true', 'fold=true' })
   vim.fn.writefile(receipt, assert(vim.env.BOOTSTRAP_PARSER_RECEIPT))
 end, debug.traceback)

@@ -55,7 +55,7 @@ install_neovim_parsers() (
     temporary="$(mktemp -d "$BOOTSTRAP_STATE_ROOT/parsers.XXXXXX")" || return 1
     trap 'rm -rf "$temporary"' EXIT
     fixture="$temporary/fixture.lua"; receipt="$temporary/receipt"; parser_set="$temporary/parsers"
-    printf 'local value = { nested = true }\nreturn value\n' >"$fixture"
+    printf 'local value = {\n  nested = {\n    enabled = true,\n  },\n}\nreturn value\n' >"$fixture"
     BOOTSTRAP_NVIM_INIT="$config_init" BOOTSTRAP_PLUGIN_RECEIPT="$temporary/plugins" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 300 nvim --headless -i NONE -u NONE -l "$DOTFILES_DIR/neovim/install-plugins.lua" || { warn 'Neovim locked plugin repair failed or timed out'; return 1; }
     [[ -s "$temporary/plugins" ]] || { warn 'Neovim plugin repair receipt missing'; return 1; }
     BOOTSTRAP_PARSER_SET_RECEIPT="$parser_set" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 620 nvim --headless -i NONE -u "$config_init" -l "$DOTFILES_DIR/neovim/install-parsers.lua" || { warn 'Effective Neovim parser installation failed or timed out'; return 1; }
