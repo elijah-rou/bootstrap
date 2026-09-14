@@ -4,7 +4,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 for command in nvim node basedpyright-langserver; do command -v "$command" >/dev/null || { printf '%s is required\n' "$command" >&2; exit 1; }; done
 rust_analyzer="${RUST_ANALYZER_TEST_BIN:-$(command -v rust-analyzer || true)}"
 [[ -x "$rust_analyzer" ]] || { printf 'Standalone rust-analyzer required (RUST_ANALYZER_TEST_BIN)\n' >&2; exit 1; }
-node_bin="$(command -v node)"; nvim_bin="$(command -v nvim)"; basedpyright_bin="$(command -v basedpyright-langserver)"
+node_bin="$(command -v node)"; nvim_bin="$(command -v nvim)"; basedpyright_bin="$(command -v basedpyright-langserver)"; fd_bin="$(command -v fd || command -v fdfind || true)"
+[[ -n "$fd_bin" ]] || { printf 'fd is required\n' >&2; exit 1; }
 temporary="$(mktemp -d)"; temporary="$(cd "$temporary" && pwd -P)"; trap 'rm -rf "$temporary"' EXIT
 source "$ROOT/tests/bundled_neovim_fixture.sh"
 prepare_bundled_neovim_fixture "$temporary"
@@ -17,7 +18,7 @@ write_neovim_lsp_selections
 node -e 'const v=require(process.argv[1]).servers; if(v.rust_analyzer.root_policy!=="rust-standalone" || !v.basedpyright.verification) throw Error("Production lsp-output is missing root/verification metadata")' "$BOOTSTRAP_PRIVATE_ROOT/neovim/config/lsp-selections.json"
 mkdir "$temporary/bin"
 ln -s "$node_bin" "$temporary/bin/node"; ln -s "$nvim_bin" "$temporary/bin/nvim"
-ln -s "$basedpyright_bin" "$temporary/bin/basedpyright-langserver"; ln -s "$rust_analyzer" "$temporary/bin/rust-analyzer"
+ln -s "$basedpyright_bin" "$temporary/bin/basedpyright-langserver"; ln -s "$rust_analyzer" "$temporary/bin/rust-analyzer"; ln -s "$fd_bin" "$temporary/bin/fd"
 for command in clangd lua-language-server rustup; do
     printf '#!/bin/sh\nprintf forbidden >> "$UNSELECTED_MARKER"\nexit 99\n' >"$temporary/bin/$command"; chmod +x "$temporary/bin/$command"
 done
