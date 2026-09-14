@@ -31,6 +31,41 @@ return {
           settings.mason = false
           settings.cmd = selection.cmd
           settings.filetypes = selection.filetypes
+          if selection.root_markers then
+            assert(type(selection.root_markers) == "table" and #selection.root_markers > 0 and #selection.root_markers <= 16, "invalid root markers")
+            for _, marker in ipairs(selection.root_markers) do
+              assert(type(marker) == "string" and #marker > 0 and #marker <= 128 and not marker:find("[/\\%z]"), "invalid root marker")
+            end
+            settings.root_markers = selection.root_markers
+          end
+          if selection.root_policy then
+            assert(selection.root_policy == "rust-standalone" and server == "rust_analyzer", "unknown root policy")
+            assert(selection.root_markers, "Rust root policy requires explicit markers")
+            if vim.fn.executable("rustc") == 0 or vim.fn.executable("cargo") == 0 then
+              -- The pinned upstream root finder invokes rustc before checking markers.
+              settings.root_dir = function(bufnr, on_dir)
+                local filename = vim.api.nvim_buf_get_name(bufnr)
+                on_dir(vim.fs.root(filename, selection.root_markers) or vim.fs.dirname(filename))
+              end
+              settings.before_init = function(params, config)
+                local rust = vim.deepcopy((config.settings or {})["rust-analyzer"] or {})
+                rust.linkedProjects = {}
+                local buffers = vim.api.nvim_list_bufs()
+                rust.detachedFiles = {}
+                for _, bufnr in ipairs(buffers) do
+                  if vim.bo[bufnr].filetype == "rust" then
+                    table.insert(rust.detachedFiles, vim.api.nvim_buf_get_name(bufnr))
+                  end
+                end
+                rust.cargo = vim.tbl_deep_extend("force", rust.cargo or {}, { sysroot = vim.NIL, buildScripts = { enable = false } })
+                rust.procMacro = { enable = false }
+                rust.checkOnSave = false
+                config.settings = config.settings or {}
+                config.settings["rust-analyzer"] = rust
+                params.initializationOptions = rust
+              end
+            end
+          end
           opts.servers[server] = settings
         end
       end

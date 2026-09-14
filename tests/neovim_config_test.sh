@@ -60,7 +60,7 @@ fi
 rmdir "$NVIM_CONFIG_CHECKOUT_DIR.install.lock"
 if command -v nvim >/dev/null; then
     cat >"$tmp/lsp-selections.json" <<'JSON'
-{"schemaVersion":1,"servers":{"basedpyright":{"selector":"basedpyright","cmd":["basedpyright-langserver","--stdio"],"filetypes":["python"]},"ts_ls":{"selector":"typescript-language-server","cmd":["typescript-language-server","--stdio"],"filetypes":["typescript"]}}}
+{"schemaVersion":1,"servers":{"basedpyright":{"selector":"basedpyright","cmd":["basedpyright-langserver","--stdio"],"filetypes":["python"]},"ts_ls":{"selector":"typescript-language-server","cmd":["typescript-language-server","--stdio"],"filetypes":["typescript"]},"rust_analyzer":{"selector":"rust-analyzer","cmd":["rust-analyzer"],"filetypes":["rust"],"root_markers":["Cargo.toml","rust-project.json",".git"],"root_policy":"rust-standalone","verification":{"method":"textDocument/documentSymbol"}}}}
 JSON
     BOOTSTRAP_LSP_SELECTIONS="$tmp/lsp-selections.json" nvim --headless -u NONE -i NONE -l "$ROOT/tests/neovim_config_test.lua" "$ROOT/neovim/bootstrap.lua" "$lazy_path"
 else
