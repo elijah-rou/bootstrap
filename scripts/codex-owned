@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+profile="$HOME/.config/dotfiles/bare-env.sh"
+[[ -f "$profile" ]] || { printf 'Owned Codex profile is missing\n' >&2; exit 1; }
+# shellcheck source=scripts/bare-env.sh
+source "$profile"
+export CODEX_HOME="$BOOTSTRAP_PRIVATE_ROOT/codex"
+cli="$BUN_INSTALL/install/global/node_modules/@openai/codex/bin/codex.js"
+[[ -f "$cli" ]] || { printf 'Owned Codex CLI is missing\n' >&2; exit 1; }
+exec node "$cli" "$@"

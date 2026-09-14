@@ -7,10 +7,13 @@ node "$ROOT/scripts/state-helper.mjs" init
 original="$HOME/.bashrc"; printf 'original\n' >"$original"; link_managed_file "$ROOT/bashrc" "$original"
 mkdir -p "$BOOTSTRAP_PRIVATE_ROOT/credentials"; printf secret >"$BOOTSTRAP_PRIVATE_ROOT/credentials/auth.json"; node "$ROOT/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT"
 node "$ROOT/scripts/state-helper.mjs" package apt bootstrap-added 0 absent installed; node "$ROOT/scripts/state-helper.mjs" ready
-native_package_installed() { return 0; }
-native_preview_remove() { return 0; }
-native_remove_names() { [[ "$1" == apt && "$2" == bootstrap-added ]]; printf '%s\n' "$*" >>"$HOME/removed"; }
-ps() { return 1; }
+printf installed >"$HOME/package-present"
+dpkg-query() { [[ ! -f "$HOME/package-present" ]] || printf 'bootstrap-added\tinstall ok installed\n'; return 0; }
+apt-get() { [[ "$*" == '--simulate remove bootstrap-added' ]] || return 99; printf 'Remv bootstrap-added [1]\n'; }
+dpkg() { [[ "$*" == '--remove -- bootstrap-added' ]] || return 99; printf 'apt bootstrap-added\n' >>"$HOME/removed"; rm "$HOME/package-present"; }
+native_privileged() { "$@"; }
+ps() { return 0; }
+export -f dpkg-query apt-get dpkg ps
 uninstall_bare --dry-run >/dev/null
 [[ -f "$BOOTSTRAP_PRIVATE_ROOT/credentials/auth.json" && -L "$original" && ! -e "$HOME/removed" ]]
 uninstall_bare
@@ -28,7 +31,7 @@ ln -s "$ROOT/scripts/bare-env.sh" "$HOME/.config/dotfiles/bare-env.sh"
 printf secret >"$HOME/.pi/agent/auth.json"; printf session >"$HOME/.pi/agent/sessions/one"; printf unrelated >"$HOME/.local/share/dotfiles/bare/user-addition"
 migrate_legacy_bootstrap
 [[ "$(cat "$HOME/.local/share/bootstrap/private/pi/agent/auth.json")" == secret ]]
-ps() { return 1; }; uninstall_bare
+ps() { return 0; }; uninstall_bare
 [[ ! -e "$HOME/.pi/agent" && ! -e "$HOME/.local/share/bootstrap/private" && ! -e "$HOME/.config/dotfiles/bare-env.sh" ]]
 [[ "$(cat "$HOME/.local/share/dotfiles/bare/user-addition")" == unrelated ]]
 echo 'PASS legacy migration enrolls sensitive copies and preserves ambiguous old tool additions'

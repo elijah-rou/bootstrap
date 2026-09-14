@@ -13,7 +13,14 @@ catalog_query() { [[ "$1" == core ]] && printf 'git\nnode\nbun\n'; }
 install_native_keys() { printf '%s\n' "$*" >>"$HOME/native-keys"; }
 ensure_runtime_versions() { :; }
 ensure_pi_node_version() { :; }
-bun() { [[ "$*" == "install --global --exact $PI_CLI_PACKAGE@$PI_CLI_VERSION" ]]; }
+bun() {
+    if [[ "$*" == --version ]]; then printf '1.4.0\n'; return; fi
+    [[ "$*" == "install --global --exact $PI_CLI_PACKAGE@$PI_CLI_VERSION" ]]
+
+    mkdir -p "$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist"
+    printf 'console.log("%s");\n' "$PI_CLI_VERSION" >"$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+}
+
 pi() { [[ "${1:-}" == --version ]] && printf '%s\n' "$PI_CLI_VERSION" || :; }
 install_herdr() { :; }
 link_bare_config() { :; }

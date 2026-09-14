@@ -36,26 +36,42 @@ jobs:
           npm install --global basedpyright@1.38.3
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
       - run: ./scripts/validate
+      - name: Verified official binary and Pi entrypoint smoke
+        run: bash tests/native_artifact_smoke.sh --pi
+      - name: Disposable toolchain cache and interpreter smoke
+        run: bash tests/native_toolchain_smoke.sh
 
-  native-catalog:
+  native-runtime:
     strategy:
       fail-fast: false
       matrix:
-        container: [debian:bookworm, fedora:latest, archlinux:latest]
-    runs-on: ubuntu-latest
+        include:
+          - {container: 'ubuntu:24.04', runner: ubuntu-latest}
+          - {container: 'debian:bookworm', runner: ubuntu-latest}
+          - {container: 'fedora:latest', runner: ubuntu-latest}
+          - {container: 'archlinux:latest', runner: ubuntu-latest}
+          - {container: 'ubuntu:24.04', runner: ubuntu-24.04-arm}
+          - {container: 'fedora:latest', runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - name: Install gate prerequisites
         run: |
-          if command -v apt-get; then apt-get update && apt-get install -y --no-install-recommends ca-certificates git nodejs bash; fi
-          if command -v dnf; then dnf install -y --setopt=install_weak_deps=False ca-certificates git nodejs bash; fi
-          if command -v pacman; then pacman -Syu --noconfirm ca-certificates git nodejs bash; fi
+          if command -v apt-get; then apt-get update && apt-get install -y --no-install-recommends ca-certificates git curl tar xz-utils procps bash; fi
+          if command -v dnf; then dnf install -y --setopt=install_weak_deps=False ca-certificates git curl tar xz procps-ng bash; fi
+          if command -v pacman; then pacman -Syu --noconfirm ca-certificates git curl tar xz procps-ng bash; fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Check backend catalog and non-destructive package contracts
-        run: bash tests/native_package_test.sh && bash tests/native_candidate_probe.sh
+      - name: Clean native runtime and cleanup journey
+        env:
+          BOOTSTRAP_NATIVE_DISPOSABLE: "1"
+        run: |
+          export HOME=/root USER=root
+          bash tests/native_runtime_journey.sh
+      - name: Verified official binary fallback smoke
+        run: bash tests/native_artifact_smoke.sh --node
 
   runtime:
     runs-on: ubuntu-latest

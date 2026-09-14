@@ -72,6 +72,32 @@ link_runtime_environment() {
     link_managed_file "$DOTFILES_DIR/scripts/dev-shell" "$HOME/.local/bin/dev-shell" || return 1
 }
 
+link_selected_shell_config() {
+    local source
+    if selection_is_recorded tools zsh; then
+        for source in zshenv zshrc zprofile; do link_managed_file "$DOTFILES_DIR/$source" "$HOME/.$source" || return 1; done
+    fi
+    if selection_is_recorded tools starship; then
+        link_managed_file "$DOTFILES_DIR/starship.toml" "$HOME/.config/starship.toml" || return 1
+    fi
+}
+
+link_bash_login_profile() (
+    local target="$HOME/.bash_profile" candidate rendered
+    for candidate in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+        if [[ -e "$candidate" || -L "$candidate" ]]; then target="$candidate"; break; fi
+    done
+    # A shared login profile is a reversible file edit, not a shell replacement.
+    [[ ! -L "$target" ]] || { warn 'Refusing ambiguous symlinked Bash login profile'; return 1; }
+    rendered="$(mktemp)" || return 1
+    trap 'rm -f "$rendered"' EXIT
+    [[ ! -f "$target" ]] || cat "$target" >"$rendered"
+    if ! grep -qFx '# bootstrap native login environment' "$rendered"; then
+        printf '\n# bootstrap native login environment\n[ ! -f "$HOME/.config/dotfiles/bare-env.sh" ] || . "$HOME/.config/dotfiles/bare-env.sh"\n' >>"$rendered"
+    fi
+    install_managed_file "$rendered" "$target" 0644
+)
+
 link_terminal_config() {
     local source target
     mkdir -p "$HOME/.config/dotfiles" "$HOME/.local/bin" || return 1
@@ -85,12 +111,8 @@ herdr/config.toml .config/herdr/config.toml
 gitignore_global .config/git/ignore
 ripgrep/config .config/ripgrep/config
 LINKS
-    if selection_is_recorded tools zsh; then
-        for source in zshenv zshrc zprofile; do link_managed_file "$DOTFILES_DIR/$source" "$HOME/.$source" || return 1; done
-    fi
-    if selection_is_recorded tools starship; then
-        link_managed_file "$DOTFILES_DIR/starship.toml" "$HOME/.config/starship.toml" || return 1
-    fi
+    link_selected_shell_config || return 1
+    link_bash_login_profile || return 1
     configure_terminal_overlays || return 1
     link_managed_file "$DOTFILES_DIR/scripts/modelusage" "$HOME/.local/bin/modelusage" || return 1
     link_runtime_environment || return 1
@@ -247,6 +269,11 @@ configure_terminal_overlays() (
 )
 
 link_pi_launchers() {
+    link_runtime_environment || return 1
+    if [[ -f "$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" ]]; then
+        link_managed_file "$DOTFILES_DIR/scripts/pi-owned" "$HOME/.local/bin/pi" || return 1
+        link_managed_file "$DOTFILES_DIR/scripts/pi-owned" "$DOTFILES_BARE_ROOT/bin/pi" || return 1
+    fi
     link_managed_file "$DOTFILES_DIR/scripts/pi-workspace" "$HOME/.local/bin/pi-workspace" || return 1
     link_managed_file "$DOTFILES_DIR/scripts/pi-workspace" "$HOME/.local/bin/piw" || return 1
     link_pi_headroom || return 1

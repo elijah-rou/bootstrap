@@ -70,6 +70,21 @@ function validate(record) {
     if (item.backup && !inside(stateRoot, item.backup)) fail('Resource backup escaped state root');
     if (item.installerBackup) validateTarget(item.installerBackup);
   }
+  const packageIdentities = new Set();
+  for (const item of record.packages) {
+    if (!item || !['apt', 'dnf', 'pacman', 'brew'].includes(item.backend) || typeof item.name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9+_.@:/-]{0,191}$/.test(item.name) || typeof item.preexisting !== 'boolean' || typeof item.installed !== 'boolean' || typeof item.priorVersion !== 'string') fail('Malformed native package identity');
+    const identity = `${item.backend}/${item.name}`;
+    if (packageIdentities.has(identity)) fail('Duplicate native package identity');
+    packageIdentities.add(identity);
+  }
+  if (record.enrolledRootIdentities !== undefined) {
+    if (!record.enrolledRootIdentities || Object.getPrototypeOf(record.enrolledRootIdentities) !== Object.prototype || Object.keys(record.enrolledRootIdentities).length > maxResources) fail('Malformed enrolled root identities');
+    for (const [root, identity] of Object.entries(record.enrolledRootIdentities)) {
+      if (!record.enrolledRoots.includes(root) || typeof identity !== 'string' || !/^(pending|[0-9]+:[0-9]+)$/.test(identity)) fail('Malformed enrolled root identity');
+      const stat = lstatSafe(root);
+      if (stat && (identity === 'pending' || !stat.isDirectory() || stat.isSymbolicLink() || `${stat.dev}:${stat.ino}` !== identity)) fail(`Enrolled location identity changed: ${root}`);
+    }
+  }
   for (const root of record.enrolledRoots) validateTarget(root);
   return record;
 }
@@ -173,6 +188,24 @@ switch (command) {
     }
     for (const item of record.packages.filter(value => !value.preexisting && value.installed)) console.log(`remove-package\t${item.backend}\t${item.name}`);
     if (!dryRun) { record.status = 'cleanup-failed'; save(record); }
+    break;
+  }
+  case 'claim-location': {
+    if (args.length !== 1) fail('claim-location ROOT');
+    const target = validateTarget(args[0]);
+    const record = load();
+    const stat = lstatSafe(target);
+    if (stat && (!stat.isDirectory() || stat.isSymbolicLink() || !record.enrolledRoots.includes(target))) fail(`Existing tool state requires explicit enrollment before use: ${target}`);
+    if (!record.enrolledRoots.includes(target)) record.enrolledRoots.push(target);
+    record.enrolledRootIdentities ||= {};
+    if (!stat) {
+      record.enrolledRootIdentities[target] = 'pending'; save(record);
+      mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+      mkdirSync(target, { mode: 0o700 });
+    }
+    const current = lstatSync(target);
+    record.enrolledRootIdentities[target] = `${current.dev}:${current.ino}`;
+    save(record);
     break;
   }
   case 'owns-root': {

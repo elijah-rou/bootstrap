@@ -11,7 +11,14 @@ source "$ROOT/install.sh"
 bare_preflight() { :; }
 install_native_keys() { printf '%s\n' "$*" >>"$HOME/native-components"; }
 ensure_pi_node_version() { :; }
-bun() { [[ "$*" == "install --global --exact $PI_CLI_PACKAGE@$PI_CLI_VERSION" ]]; printf 'pi-cli\n' >>"$HOME/bun-installs"; }
+bun() {
+    if [[ "$*" == --version ]]; then printf '1.4.0\n'; return; fi
+    [[ "$*" == "install --global --exact $PI_CLI_PACKAGE@$PI_CLI_VERSION" ]]
+    printf 'pi-cli\n' >>"$HOME/bun-installs";
+    mkdir -p "$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist"
+    printf 'console.log("%s");\n' "$PI_CLI_VERSION" >"$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+}
+
 pi() {
     if [[ "${1:-}" == --version ]]; then printf '%s\n' "$PI_CLI_VERSION"; return; fi
     [[ "${1:-}" == install && -n "${2:-}" ]] || return 97
@@ -39,6 +46,14 @@ first_packages="$(cat "$HOME/pi-packages")"
 install_bare_pi
 [[ "$(cat "$HOME/bun-installs")" == $'pi-cli\npi-cli' && "$(cat "$HOME/pi-packages")" == "$first_packages"$'\n'"$first_packages" ]]
 [[ -z "$(find "$HOME" -name '*.bak.*' -print)" ]]
+# Installed entrypoints must ignore a foreign Pi even without shell configuration.
+mkdir -p "$HOME/foreign" "$HOME/.local/share/bootstrap/tools/bin"
+ln -sf "$(command -v node)" "$HOME/.local/share/bootstrap/tools/bin/node"
+printf '#!/bin/sh\necho foreign >"$HOME/foreign-used"; exit 99\n' >"$HOME/foreign/pi"
+chmod +x "$HOME/foreign/pi"
+[[ "$(env -i HOME="$HOME" PATH="$HOME/foreign:/usr/bin:/bin" "$HOME/.local/bin/pi" --version)" == "$PI_CLI_VERSION" ]]
+[[ "$(env -i HOME="$HOME" PATH="$HOME/foreign:/usr/bin:/bin" "$HOME/.local/bin/piw" --main -- --version)" == "$PI_CLI_VERSION" ]]
+[[ ! -e "$HOME/foreign-used" ]]
 printf secret >"$private/pi/agent/auth.json"; printf session >"$private/pi/sessions/one"; printf history >"$private/bash/history"
 printf dotfiles-only >"$HOME/.pi/agent/dotfiles-only"
 bootstrap_live_writers() { return 1; }

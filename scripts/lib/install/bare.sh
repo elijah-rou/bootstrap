@@ -9,11 +9,15 @@ link_bare_config() {
     link_pi_launchers || return 1
 }
 
-link_bare_codex_config() {
+link_bare_codex_config() (
+    export CODEX_HOME="$BOOTSTRAP_PRIVATE_ROOT/codex"
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT" || return 1
     link_codex_assets || return 1
-    local codex_home="${CODEX_HOME:-$HOME/.codex}"
-    [[ -e "$codex_home/config.toml" || -L "$codex_home/config.toml" ]] || install_managed_file "$DOTFILES_DIR/codex/config.toml" "$codex_home/config.toml" 0600
-}
+    [[ -e "$CODEX_HOME/config.toml" || -L "$CODEX_HOME/config.toml" ]] || install_managed_file "$DOTFILES_DIR/codex/config.toml" "$CODEX_HOME/config.toml" 0600 || return 1
+    link_runtime_environment || return 1
+    link_managed_file "$DOTFILES_DIR/scripts/codex-owned" "$DOTFILES_BARE_ROOT/bin/codex" || return 1
+    link_managed_file "$DOTFILES_DIR/scripts/codex-owned" "$HOME/.local/bin/codex"
+)
 
 bare_platform() {
     case "$(uname -s)/$(uname -m)" in
@@ -47,45 +51,84 @@ bootstrap_lock_acquire() {
 }
 bootstrap_lock_release() { rmdir "$BOOTSTRAP_STATE_ROOT/mutate.lock" 2>/dev/null || [[ ! -e "$BOOTSTRAP_STATE_ROOT" ]]; }
 
+version_at_least() {
+    local actual="${1#v}" minimum="$2" major minor patch min_major min_minor min_patch
+    [[ "$actual" =~ ^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$ ]] || return 1
+    IFS=. read -r major minor patch <<<"$actual"
+    IFS=. read -r min_major min_minor min_patch <<<"$minimum"
+    (( 10#$major > 10#$min_major || (10#$major == 10#$min_major && (10#$minor > 10#$min_minor || (10#$minor == 10#$min_minor && 10#$patch >= 10#$min_patch))) ))
+}
+
 ensure_bootstrap_node() {
-    command -v node >/dev/null 2>&1 && return 0
-    local backend package pending="$BOOTSTRAP_STATE_ROOT/bootstrap-node.pending"
-    backend="$(native_backend)" || return 1
-    case "$backend" in apt) package=nodejs ;; dnf) package=nodejs ;; pacman) package=nodejs ;; brew) package=node@24 ;; esac
-    native_package_available "$backend" "$package" || { warn "Native Node package unavailable: $package"; return 1; }
-    if [[ ! -f "$pending" ]]; then
-        ( umask 077; printf 'version=1\nbackend=%s\npackage=%s\npreexisting=0\n' "$backend" "$package" >"$pending" ) || return 1
-    else
-        grep -qx 'version=1' "$pending" && grep -qx "backend=$backend" "$pending" && grep -qx "package=$package" "$pending" || { warn "Malformed bootstrap Node recovery journal: $pending"; return 1; }
+    local backend package existed=0 status prefix version pending="$BOOTSTRAP_STATE_ROOT/bootstrap-node.pending"
+    if ! command -v node >/dev/null 2>&1; then
+        backend="$(native_backend)" || return 1
+        case "$backend" in apt|dnf|pacman) package=nodejs ;; brew) package=node@24 ;; *) return 2 ;; esac
+        if native_package_present "$backend" "$package"; then existed=1; else status=$?; [[ "$status" == 1 ]] || return 1; fi
+        if [[ "$existed" == 1 ]] || native_package_available "$backend" "$package"; then
+            if [[ ! -f "$pending" ]]; then
+                ( umask 077; printf 'version=1\nbackend=%s\npackage=%s\npreexisting=%s\n' "$backend" "$package" "$existed" >"$pending" ) || return 1
+            else
+                grep -qx 'version=1' "$pending" && grep -qx "backend=$backend" "$pending" && grep -qx "package=$package" "$pending" && grep -qEx 'preexisting=[01]' "$pending" || { warn "Malformed bootstrap Node recovery journal: $pending"; return 1; }
+            fi
+            [[ "$existed" == 1 ]] || native_install_names "$backend" "$package" || return 1
+            if [[ "$backend" == brew ]]; then
+                prefix="$(brew --prefix "$package")" || return 1
+                [[ -x "$prefix/bin/node" ]] || { warn 'Homebrew Node keg has no executable'; return 1; }
+                export PATH="$prefix/bin:$PATH"
+                BOOTSTRAP_NODE_KEG="$prefix"
+            fi
+        fi
     fi
-    native_install_names "$backend" "$package" || return 1
-    command -v node >/dev/null || { warn 'Native Node package installed without a node executable'; return 1; }
+    # No modern helper or package client executes on an old/absent runtime.
+    if ! version="$(node --version 2>/dev/null)" || ! version_at_least "$version" 22.19.0; then
+        BOOTSTRAP_NODE_STAGING_ONLY=1 install_upstream_tool node || return 1
+        BOOTSTRAP_NODE_FALLBACK=1
+    fi
+    version="$(node --version)" || return 1
+    version_at_least "$version" 22.19.0
 }
 
 adopt_bootstrap_node_journal() {
-    local pending="$BOOTSTRAP_STATE_ROOT/bootstrap-node.pending" backend package
-    [[ -f "$pending" ]] || return 0
-    backend="$(sed -n 's/^backend=//p' "$pending")"; package="$(sed -n 's/^package=//p' "$pending")"
-    [[ -n "$backend" && -n "$package" ]] || return 1
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" package "$backend" "$package" 0 absent installed || return 1
-    rm -f "$pending"
+    local pending="$BOOTSTRAP_STATE_ROOT/bootstrap-node.pending" backend package existed executable
+    if [[ -f "$pending" ]]; then
+        backend="$(sed -n 's/^backend=//p' "$pending")"; package="$(sed -n 's/^package=//p' "$pending")"; existed="$(sed -n 's/^preexisting=//p' "$pending")"
+        [[ -n "$backend" && -n "$package" && "$existed" =~ ^[01]$ ]] || return 1
+        node "$DOTFILES_DIR/scripts/state-helper.mjs" package "$backend" "$package" "$existed" "$(native_package_version "$backend" "$package")" installed || return 1
+    fi
+    if [[ "${BOOTSTRAP_NODE_FALLBACK:-0}" == 1 ]]; then
+        install_upstream_tool node || return 1
+        export PATH="$DOTFILES_BARE_ROOT/bin:$PATH"
+    elif [[ -n "${BOOTSTRAP_NODE_KEG:-}" ]]; then
+        for executable in node npm npx corepack; do
+            [[ ! -x "$BOOTSTRAP_NODE_KEG/bin/$executable" ]] || link_managed_file "$BOOTSTRAP_NODE_KEG/bin/$executable" "$DOTFILES_BARE_ROOT/bin/$executable" || return 1
+        done
+    fi
+    [[ ! -f "$pending" ]] || rm -f "$pending"
 }
 
 ensure_pi_node_version() {
-    local major
-    major="$(node -p 'process.versions.node.split(".")[0]')"
-    if (( major < 22 )); then install_upstream_tool node || return 1; hash -r; fi
-    (( $(node -p 'process.versions.node.split(".")[0]') >= 22 )) || { warn 'Pi requires Node.js 22 or newer'; return 1; }
+    local version
+    if ! version="$(node --version 2>/dev/null)" || ! version_at_least "$version" 22.19.0; then install_upstream_tool node || return 1; hash -r; fi
+    version="$(node --version 2>/dev/null)" || return 1
+    version_at_least "$version" 22.19.0 || { warn 'Pi requires Node.js >=22.19.0'; return 1; }
 }
 
 ensure_runtime_versions() {
-    local major minor
     ensure_pi_node_version || return 1
-    read -r _ major minor _ < <(nvim --version | head -1 | tr '.vV' '   ')
-    if [[ -z "$major" ]] || (( major == 0 && minor < 12 )); then install_upstream_tool neovim || return 1; hash -r; fi
-    local ts_version
-    ts_version="$(tree-sitter --version 2>/dev/null | awk '{print $2}')"
-    if [[ -z "$ts_version" ]] || ! node -e 'const [a,b]=process.argv[1].split(".").map(Number);process.exit(a>0||b>=26?0:1)' "$ts_version"; then install_upstream_tool tree-sitter || return 1; hash -r; fi
+    local output version
+    output="$(nvim --version 2>/dev/null)" || output=''
+    read -r _ version _ <<<"$output"
+    if ! version_at_least "$version" 0.12.0; then install_upstream_tool neovim || return 1; hash -r; fi
+    output="$(nvim --version 2>/dev/null)" || return 1
+    read -r _ version _ <<<"$output"
+    version_at_least "$version" 0.12.0 || return 1
+    output="$(tree-sitter --version 2>/dev/null)" || output=''
+    read -r _ version _ <<<"$output"
+    if ! version_at_least "$version" 0.26.1; then install_upstream_tool tree-sitter || return 1; hash -r; fi
+    output="$(tree-sitter --version 2>/dev/null)" || return 1
+    read -r _ version _ <<<"$output"
+    version_at_least "$version" 0.26.1 || { warn 'Tree-sitter requires >=0.26.1'; return 1; }
 }
 
 bootstrap_private_links_are_proven() {
@@ -126,7 +169,7 @@ pi_doctor() {
     local failed=0
     command -v node >/dev/null || { warn 'Pi Node.js runtime is missing'; failed=1; }
     command -v bun >/dev/null || { warn 'Pi Bun package runtime is missing'; failed=1; }
-    [[ "$(pi --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; failed=1; }
+    [[ "$("$HOME/.local/bin/pi" --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; failed=1; }
     check_pi_subagents_revision || failed=1
     return "$failed"
 }
@@ -134,8 +177,13 @@ pi_doctor() {
 install_pi_component() {
     install_native_keys node bun || return 1
     ensure_pi_node_version || return 1
+    local bun_version
+    if ! bun_version="$(bun --version 2>/dev/null)" || ! version_at_least "$bun_version" 0.0.0; then install_upstream_tool bun || return 1; hash -r; fi
+    bun_version="$(bun --version 2>/dev/null)" || return 1
+    version_at_least "$bun_version" 0.0.0 || return 1
     bun install --global --exact "$PI_CLI_PACKAGE@$PI_CLI_VERSION" || return 1
-    [[ "$(pi --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; return 1; }
+    link_pi_launchers || return 1
+    [[ "$("$HOME/.local/bin/pi" --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; return 1; }
     link_pi_config || return 1
     link_pi_launchers || return 1
     install_pi_packages "$PI_CODING_AGENT_DIR/settings.json" || return 1
@@ -187,7 +235,7 @@ bare_doctor() (
     for command in git delta gh ssh tmux nvim tree-sitter cc rg fd fzf bat eza zoxide jq less curl node bun pi herdr; do
         if command -v "$command" >/dev/null 2>&1; then info "$command: $(command -v "$command")"; else warn "Missing required command: $command"; failed=1; fi
     done
-    [[ "$(pi --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; failed=1; }
+    [[ "$("$HOME/.local/bin/pi" --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; failed=1; }
     check_pi_subagents_revision || failed=1
     verify_neovim_runtime || failed=1
     info 'Optional integrations remain unselected unless recorded explicitly'
@@ -203,8 +251,8 @@ install_bare() (
     trap 'rm -rf "$bare_stage"; bootstrap_lock_release' EXIT
     ensure_bootstrap_node || return 1
     node "$DOTFILES_DIR/scripts/state-helper.mjs" init || return 1
-    adopt_bootstrap_node_journal || return 1
     initialize_bootstrap_component core || return 1
+    adopt_bootstrap_node_journal || return 1
     enroll_bootstrap_neovim_state || return 1
     local core=() key
     while IFS= read -r key; do [[ -z "$key" ]] || core+=("$key"); done < <(catalog_query core)
@@ -224,6 +272,7 @@ install_bare() (
     link_bare_config || return 1
     install_neovim_config || return 1
     install_neovim_parsers || return 1
+    reconcile_bootstrap_selections || return 1
     report_install_failures || return 1
     node "$DOTFILES_DIR/scripts/state-helper.mjs" component-ready core || return 1
     node "$DOTFILES_DIR/scripts/state-helper.mjs" ready || return 1
@@ -249,9 +298,9 @@ install_bare_elixir_ls() {
         download_verified 'https://github.com/elixir-lsp/elixir-ls/releases/download/v0.31.1/elixir-ls-v0.31.1.zip' bac08322ea3698157eb2373bb5b65e38c15df9dd41e1c06f142f874367fa472f "$bare_stage/elixir-ls.zip" || return 1
         command -v unzip >/dev/null || { warn 'ElixirLS installation requires the independently selectable unzip tool'; return 1; }
         mkdir -p "$source"; unzip -q "$bare_stage/elixir-ls.zip" -d "$source" || return 1
-        MIX_ENV=prod elixir "$source/quiet_install.exs" </dev/null || return 1
         mv "$source" "$destination" || return 1
     fi
+    MIX_ENV=prod node "$DOTFILES_DIR/scripts/run-bounded.mjs" 600 elixir "$destination/quiet_install.exs" </dev/null || return 1
     [[ -x "$destination/language_server.sh" ]] || return 1
     link_managed_file "$destination/language_server.sh" "$DOTFILES_BARE_ROOT/bin/elixir-ls"
 }
@@ -264,17 +313,35 @@ install_bare_zls() {
     link_managed_file "$destination/zls" "$DOTFILES_BARE_ROOT/bin/zls"
 }
 
+enroll_go_telemetry() {
+    local root
+    case "$(uname -s)" in
+        Darwin) root="$HOME/Library/Application Support/go/telemetry" ;;
+        Linux) root="${XDG_CONFIG_HOME:-$HOME/.config}/go/telemetry" ;;
+        *) warn 'Unsupported Go telemetry location'; return 1 ;;
+    esac
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" claim-location "$root"
+}
+
 install_lsp_selection() {
     local selection="$1" metadata executable prerequisite packages=()
+    [[ "$selection" != gopls ]] || enroll_go_telemetry || return 1
     metadata="$(catalog_query lsp "$selection")" || { warn "Unknown LSP selection: $selection"; return 2; }
     executable="$(node -e 'console.log(JSON.parse(process.argv[1]).executable)' "$metadata")"
     while IFS= read -r prerequisite; do [[ -z "$prerequisite" ]] || command -v "$prerequisite" >/dev/null || { warn "$selection blocked by missing prerequisite: $prerequisite"; return 1; }; done < <(node -e 'console.log(JSON.parse(process.argv[1]).prerequisites.join("\n"))' "$metadata")
     while IFS= read -r prerequisite; do [[ -z "$prerequisite" ]] || packages+=("$prerequisite"); done < <(catalog_query group lsp "$selection")
     [[ ${#packages[@]} -eq 0 ]] || install_native_keys "${packages[@]}" || return 1
+    if [[ "$selection" == typescript-language-server ]]; then
+        # The server needs its implementation package even when a foreign server
+        # executable already exists. This does not select the TS development extra.
+        bun install --global --exact typescript@6.0.2 typescript-language-server@6.0.1 || return 1
+        node -e 'require.resolve("typescript/lib/tsserver.js", {paths:[process.argv[1]]})' "$BUN_INSTALL/install/global/node_modules/typescript-language-server" || return 1
+        link_managed_file "$BUN_INSTALL/bin/typescript-language-server" "$DOTFILES_BARE_ROOT/bin/typescript-language-server" || return 1
+    fi
     if ! command -v "$executable" >/dev/null; then
         case "$selection" in
             basedpyright) bun install --global --exact basedpyright@1.38.3 ;;
-            typescript-language-server) bun install --global --exact typescript@6.0.2 typescript-language-server@6.0.1 ;;
+
             bash-language-server) bun install --global --exact bash-language-server@5.6.0 ;;
             gopls) command -v go >/dev/null || { warn 'gopls blocked by missing Go build prerequisite'; return 1; }; GOBIN="$DOTFILES_BARE_ROOT/bin" go install golang.org/x/tools/gopls@v0.23.0 ;;
             rust-analyzer) warn 'rust-analyzer has no native package candidate on this host'; return 1 ;;
@@ -289,6 +356,41 @@ install_lsp_selection() {
     verify_selected_lsp "$selection"
 }
 
+install_bootstrap_selections() {
+    local group="$1" selection
+    shift
+    for selection in "$@"; do
+        case "$group" in
+            languages)
+                [[ "$selection" != go ]] || enroll_go_telemetry || return 1
+                local keys=() key; while IFS= read -r key; do [[ -z "$key" ]] || keys+=("$key"); done < <(catalog_query group languages "$selection")
+                [[ ${#keys[@]} -eq 0 ]] || install_native_keys "${keys[@]}" || return 1
+                case "$selection" in
+                    python)
+                        if ! python3 -c 'import sys; assert sys.version_info.major == 3'; then install_upstream_tool python || return 1; hash -r; fi
+                        python3 -c 'import sys; assert sys.version_info.major == 3' || return 1 ;;
+                    rust) install_bare_rust || return 1 ;; typescript) bun install --global --exact typescript@6.0.2 || return 1 ;; esac
+                node "$DOTFILES_DIR/scripts/state-helper.mjs" select languages "$selection" || return 1 ;;
+            lsp) install_lsp_selection "$selection" || return 1 ;;
+            tools)
+                local keys=() key; while IFS= read -r key; do [[ -z "$key" ]] || keys+=("$key"); done < <(catalog_query group tools "$selection")
+                [[ ${#keys[@]} -eq 0 ]] || install_native_keys "${keys[@]}" || return 1
+                case "$selection" in codex) bun install --global --exact @openai/codex@0.153.4; link_bare_codex_config ;; headroom) command -v headroom >/dev/null || { warn 'Headroom external application is not installed'; return 1; } ;; esac
+                node "$DOTFILES_DIR/scripts/state-helper.mjs" select tools "$selection" || return 1
+                case "$selection" in zsh|starship) link_selected_shell_config || return 1 ;; esac ;;
+        esac
+    done
+}
+
+reconcile_bootstrap_selections() {
+    local selections group selection
+    selections="$(node "$DOTFILES_DIR/scripts/state-helper.mjs" selections)" || return 1
+    while IFS=$'\t' read -r group selection; do
+        [[ -z "$group" ]] || install_bootstrap_selections "$group" "$selection" || return 1
+    done <<<"$selections"
+    write_neovim_lsp_selections
+}
+
 install_bare_optional() (
     local group="${1:-}" selection choices
     case "$group" in languages) choices='c cpp rust go python typescript elixir zig' ;; lsp) choices='clangd rust-analyzer gopls basedpyright ruff typescript-language-server bash-language-server elixirls zls' ;; tools) choices='zsh starship codex just wget unzip shellcheck ruff headroom' ;; *) warn "Unknown optional group: $group"; return 2 ;; esac
@@ -299,21 +401,7 @@ install_bare_optional() (
     bootstrap_lock_acquire || return 1
     local bare_stage; bare_stage="$(mktemp -d "$BOOTSTRAP_STATE_ROOT/stage.XXXXXX")" || { bootstrap_lock_release; return 1; }
     trap 'rm -rf "$bare_stage"; bootstrap_lock_release' EXIT
-    for selection in "$@"; do
-        case "$group" in
-            languages)
-                local keys=() key; while IFS= read -r key; do [[ -z "$key" ]] || keys+=("$key"); done < <(catalog_query group languages "$selection")
-                [[ ${#keys[@]} -eq 0 ]] || install_native_keys "${keys[@]}" || return 1
-                case "$selection" in rust) install_bare_rust || return 1 ;; typescript) bun install --global --exact typescript@6.0.2 || return 1 ;; esac
-                node "$DOTFILES_DIR/scripts/state-helper.mjs" select languages "$selection" || return 1 ;;
-            lsp) install_lsp_selection "$selection" || return 1 ;;
-            tools)
-                local keys=() key; while IFS= read -r key; do [[ -z "$key" ]] || keys+=("$key"); done < <(catalog_query group tools "$selection")
-                [[ ${#keys[@]} -eq 0 ]] || install_native_keys "${keys[@]}" || return 1
-                case "$selection" in codex) bun install --global --exact @openai/codex@0.153.4; link_bare_codex_config ;; headroom) command -v headroom >/dev/null || { warn 'Headroom external application is not installed'; return 1; } ;; esac
-                node "$DOTFILES_DIR/scripts/state-helper.mjs" select tools "$selection" || return 1 ;;
-        esac
-    done
+    install_bootstrap_selections "$group" "$@" || return 1
     info "Selected $group installed"
 )
 
@@ -348,49 +436,66 @@ migrate_legacy_bootstrap() (
 )
 
 bootstrap_live_writers() {
-    ps -axo command= 2>/dev/null | awk -v bun="$BUN_INSTALL" '
-        { command=$0; executable=$1; sub(/^.*\//,"",executable) }
-        executable=="pi" || executable=="nvim" { print executable; found=1; next }
-        index(command,bun)>0 && index(command,"pi-coding-agent")>0 { print "pi"; found=1 }
-        END { exit(found ? 0 : 1) }
-    '
+    local output uid pid executable arguments environment found=1 own_uid
+    own_uid="$(id -u)" || return 2
+    output="$(ps -axo uid=,pid=,comm=,args=)" || { warn 'Unable to inspect active writers'; return 2; }
+    while read -r uid pid executable arguments; do
+        [[ "$uid" == "$own_uid" ]] || continue
+        if [[ "$arguments" == *"$DOTFILES_BARE_ROOT/"* || "$arguments" == *"$BOOTSTRAP_PRIVATE_ROOT/"* ]]; then
+            printf '%s %s\n' "$pid" "$executable"; found=0; continue
+        fi
+        case "${executable##*/}" in
+            nvim|pi)
+                # Native executables need profile identity, not a broad name match.
+                environment="$(ps eww -p "$pid" -o command=)" || { warn 'Writer disappeared during identity check; retry cleanup'; return 2; }
+                if [[ " $environment " == *" BOOTSTRAP_PRIVATE_ROOT=$BOOTSTRAP_PRIVATE_ROOT "* ]]; then printf '%s %s\n' "$pid" "$executable"; found=0; fi
+                ;;
+        esac
+    done <<<"$output"
+    return "$found"
+}
+
+bootstrap_stop_owned_servers() {
+    local socket status
+    # Ownership comes from enrollment, not an ambient TMUX/TMUX_TMPDIR value.
+    if node "$DOTFILES_DIR/scripts/state-helper.mjs" owns-root "$BOOTSTRAP_PRIVATE_ROOT"; then
+        for socket in "$TMUX_TMPDIR"/tmux-"$(id -u)"/*; do
+            [[ -S "$socket" && ! -L "$socket" ]] || continue
+            [[ "${TMUX:-}" != "$socket,"* ]] || { warn 'Run uninstall outside the bootstrap-owned tmux server'; return 1; }
+            command -v tmux >/dev/null || return 1
+            env -u TMUX tmux -S "$socket" kill-server || return 1
+        done
+    else status=$?; [[ "$status" == 3 ]] || return 1; fi
+    local herdr_root="${XDG_CONFIG_HOME:-$HOME/.config}/herdr"
+    if node "$DOTFILES_DIR/scripts/state-helper.mjs" owns-root "$herdr_root"; then
+        if [[ -S "$herdr_root/herdr.sock" ]]; then
+            herdr server stop || return 1
+            local attempt=0; while (( attempt < 50 )) && [[ -S "$herdr_root/herdr.sock" ]]; do sleep 0.1; attempt=$((attempt + 1)); done
+            [[ ! -S "$herdr_root/herdr.sock" ]] || { warn 'Herdr server is still writing bootstrap-owned state'; return 1; }
+        fi
+    else status=$?; [[ "$status" == 3 ]] || return 1; fi
 }
 
 uninstall_bare() (
-    local dry_run="${1:-}" state_output backend name packages=()
+    local dry_run="${1:-}" state_output backend name writers status packages=()
     source "$DOTFILES_DIR/scripts/bare-env.sh"
     if [[ ! -f "$BOOTSTRAP_STATE_ROOT/install.json" ]]; then info 'Bootstrap is already uninstalled'; return 0; fi
-    bootstrap_lock_acquire || return 1
-    trap 'bootstrap_lock_release' EXIT
-    if bootstrap_live_writers >"$BOOTSTRAP_STATE_ROOT/live-writers"; then
-        warn "Refusing cleanup while possible Pi/Neovim writers are active: $(tr '\n' ' ' <"$BOOTSTRAP_STATE_ROOT/live-writers")"
-        return 1
-    fi
-    rm -f "$BOOTSTRAP_STATE_ROOT/live-writers"
-    if [[ -n "${TMUX:-}" && "$TMUX" == "$TMUX_TMPDIR"/* ]]; then warn 'Run uninstall outside the bootstrap-owned tmux server'; return 1; fi
-    if [[ -d "$TMUX_TMPDIR" ]] && command -v tmux >/dev/null; then tmux kill-server 2>/dev/null || true; fi
-    local herdr_socket="${XDG_CONFIG_HOME:-$HOME/.config}/herdr/herdr.sock"
-    if [[ -S "$herdr_socket" ]] && command -v herdr >/dev/null; then
-        herdr server stop || { warn 'Failed to stop bootstrap-owned Herdr server'; return 1; }
-        local attempt=0; while (( attempt < 50 )) && [[ -S "$herdr_socket" ]]; do sleep 0.1; attempt=$((attempt + 1)); done
-        [[ ! -S "$herdr_socket" ]] || { warn 'Herdr server is still writing bootstrap-owned state'; return 1; }
-    fi
-    state_output="$(mktemp "$BOOTSTRAP_STATE_ROOT/uninstall.XXXXXX")" || return 1
-    trap 'rm -f "$state_output"; bootstrap_lock_release' EXIT
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" uninstall ${dry_run:+--dry-run} | tee "$state_output" || return 1
+    # Preview allocates no files, locks, journals, or services, and never elevates.
+    state_output="$(node "$DOTFILES_DIR/scripts/state-helper.mjs" uninstall --dry-run)" || return 1
+    printf '%s\n' "$state_output"
     for backend in apt dnf pacman brew; do
         packages=()
-        while IFS=$'\t' read -r _ name; do [[ -z "$name" ]] || packages+=("$name"); done < <(awk -F '\t' -v backend="$backend" '$1=="remove-package" && $2==backend { print $1 "\t" $3 }' "$state_output")
-        [[ ${#packages[@]} -eq 0 ]] && continue
-        if [[ "$dry_run" == --dry-run ]]; then native_preview_remove "$backend" "${packages[@]}" || return 1
-        else
-            native_remove_names "$backend" "${packages[@]}" || return 1
-            for name in "${packages[@]}"; do node "$DOTFILES_DIR/scripts/state-helper.mjs" package-removed "$backend" "$name" || return 1; done
-        fi
+        while IFS= read -r name; do [[ -z "$name" ]] || packages+=("$name"); done < <(printf '%s\n' "$state_output" | awk -F '\t' -v backend="$backend" '$1=="remove-package" && $2==backend { print $3 }')
+        [[ ${#packages[@]} -eq 0 ]] || native_preview_remove "$backend" "${packages[@]}" || return 1
     done
     [[ "$dry_run" == --dry-run ]] && return 0
-    if bootstrap_live_writers >"$BOOTSTRAP_STATE_ROOT/live-writers"; then warn 'A Pi/Neovim writer started during cleanup; recovery state was retained'; return 1; fi
-    rm -f "$BOOTSTRAP_STATE_ROOT/live-writers"
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" finish-uninstall || return 1
+    bootstrap_lock_acquire || return 1
+    trap 'bootstrap_lock_release' EXIT
+    if writers="$(bootstrap_live_writers)"; then warn "Refusing cleanup while owned writers are active: $writers"; return 1; else status=$?; [[ "$status" == 1 ]] || return 1; fi
+    bootstrap_stop_owned_servers || return 1
+    # One already-loaded Node controller survives unlinking its own binary and
+    # native package. It performs every journal update and final check in-process.
+    export -f bootstrap_live_writers native_preview_remove native_remove_names native_package_present native_privileged warn
+    node "$DOTFILES_DIR/scripts/state-helper.mjs" uninstall-complete || return 1
     info 'Bootstrap uninstall complete. Provider-side credentials and host snapshots are outside this cleanup boundary.'
 )

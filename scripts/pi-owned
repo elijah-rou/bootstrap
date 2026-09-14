@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+profile="$HOME/.config/dotfiles/bare-env.sh"
+[[ -f "$profile" ]] || { printf 'Owned Pi profile is missing; rerun the Pi installer.\n' >&2; exit 1; }
+# shellcheck source=scripts/bare-env.sh
+source "$profile"
+cli="$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+[[ -f "$cli" ]] || { printf 'Owned Pi CLI is missing; rerun the Pi installer.\n' >&2; exit 1; }
+exec node "$cli" --session-dir "$PI_CODING_AGENT_SESSION_DIR" "$@"

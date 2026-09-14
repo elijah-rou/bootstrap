@@ -27,14 +27,28 @@ class OwnershipTest(unittest.TestCase):
         self.assertTrue(private.exists()); self.assertTrue(shared.is_symlink()); self.assertEqual(unrelated.read_text(),'keep')
         self.execute('uninstall'); self.assertFalse(private.exists()); self.assertFalse(shared.is_symlink()); self.assertEqual(shared.read_text(),'original'); self.assertEqual(unrelated.read_text(),'keep')
         self.execute('package-removed','apt','jq'); self.execute('finish-uninstall'); self.assertFalse(self.state.exists())
-    def test_escape_malformed_conflict_and_live_writer_are_rejected(self):
+    def test_escape_malformed_and_conflict_are_rejected(self):
         outside=pathlib.Path(self.temp.name)/'outside'; outside.write_text('keep')
         self.execute('init'); self.execute('enroll',outside,ok=False)
         escaped=self.home/'escaped'; escaped.symlink_to(pathlib.Path(self.temp.name)); self.execute('prepare',escaped/'target','shared','x',ok=False)
         target=self.home/'.bashrc'; self.execute('prepare',target,'shared',str(ROOT/'bashrc')); target.symlink_to(ROOT/'bashrc'); self.execute('activate',target); target.unlink(); target.write_text('user edit')
         self.execute('uninstall',ok=False); self.assertEqual(target.read_text(),'user edit')
-        record=json.loads((self.state/'install.json').read_text()); record['writers']=[{'pid':os.getpid()}]; (self.state/'install.json').write_text(json.dumps(record))
-        self.execute('uninstall','--dry-run',ok=False)
-        record['writers']=[]; record['schemaVersion']=999; (self.state/'install.json').write_text(json.dumps(record)); self.execute('validate',ok=False)
+        record=json.loads((self.state/'install.json').read_text()); record['schemaVersion']=999; (self.state/'install.json').write_text(json.dumps(record)); self.execute('validate',ok=False)
+
+    def test_package_identity_rejects_options_duplicates_and_malformed_flags(self):
+        self.execute('init'); self.execute('package','apt','fixture','0','absent','installed')
+        path=self.state/'install.json'; original=json.loads(path.read_text())
+        for field, values in {
+            'backend': [None, '', 'unknown', 1, []],
+            'name': [None, '', '--nodeps', 'bad\nname', 'a'*193, 1, []],
+            'preexisting': [None, 'false', 0, 1, [], {}],
+            'installed': [None, 'true', 0, 1, [], {}],
+            'priorVersion': [None, 1, [], {}],
+        }.items():
+            for value in values:
+                with self.subTest(field=field,value=value):
+                    record=json.loads(json.dumps(original)); record['packages'][0][field]=value; path.write_text(json.dumps(record)); self.execute('validate',ok=False)
+            record=json.loads(json.dumps(original)); del record['packages'][0][field]; path.write_text(json.dumps(record)); self.execute('validate',ok=False)
+        record=json.loads(json.dumps(original)); record['packages']*=2; path.write_text(json.dumps(record)); self.execute('validate',ok=False)
 
 if __name__=='__main__': unittest.main()

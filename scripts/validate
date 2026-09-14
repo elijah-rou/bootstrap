@@ -19,7 +19,7 @@ git diff --check
 git diff --cached --check
 python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
-shell_files=(bootstrap.sh configure.sh install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/native_package_test.sh tests/native_candidate_probe.sh tests/real_nvim_lsp_test.sh tests/uninstall_test.sh tests/neovim_config_test.sh tests/bundled_neovim_runtime_test.sh tests/codex_link_test.sh tests/pi_package_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace)
+shell_files=(bootstrap.sh configure.sh install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/native_package_test.sh tests/native_artifact_smoke.sh tests/native_runtime_journey.sh tests/native_toolchain_smoke.sh tests/native_candidate_probe.sh tests/real_nvim_lsp_test.sh tests/uninstall_test.sh tests/neovim_config_test.sh tests/bundled_neovim_runtime_test.sh tests/codex_link_test.sh tests/pi_package_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace scripts/pi-owned scripts/codex-owned)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
 for file in zshrc zshenv zprofile; do zsh -n "$file"; done
 shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"
@@ -86,6 +86,8 @@ bash tests/language_release_test.sh
 bash tests/native_package_test.sh
 bash tests/native_candidate_probe.sh
 python3 tests/native_bootstrap_test.py
+python3 tests/native_corrections_test.py
+python3 tests/selection_metadata_test.py
 bash tests/uninstall_test.sh
 bash tests/neovim_config_test.sh
 (
