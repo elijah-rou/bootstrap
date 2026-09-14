@@ -89,7 +89,7 @@ native_install_names() {
 native_apt_install_plan() {
     local output
     output="$(native_privileged apt-get --simulate install --no-install-recommends "$@")" || return 1
-    printf '%s\n' "$output" | awk '$1 == "Inst" { sub(/:.*/, "", $2); print $2 }' | sort -u
+    printf '%s\n' "$output" | awk '$1 == "Inst" { sub(/:.*/, "", $2); if (!seen[$2]++) print $2 }'
 }
 
 install_native_keys() {
