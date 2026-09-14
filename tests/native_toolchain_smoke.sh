@@ -12,6 +12,7 @@ node "$ROOT/scripts/state-helper.mjs" init
 node "$ROOT/scripts/state-helper.mjs" enroll "$DOTFILES_BARE_ROOT"
 node "$ROOT/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT"
 mkdir -p "$DOTFILES_BARE_ROOT/bin" "$BOOTSTRAP_PRIVATE_ROOT"
+cd "$fixture"
 command -v uv >/dev/null || install_upstream_tool uv
 install_upstream_tool python
 [[ "$("$DOTFILES_BARE_ROOT/bin/python3" -c 'print(6*7)')" == 42 ]]
