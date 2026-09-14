@@ -86,8 +86,14 @@ native_install_names() {
     esac
 }
 
+native_apt_install_plan() {
+    local output
+    output="$(native_privileged apt-get --simulate install --no-install-recommends "$@")" || return 1
+    printf '%s\n' "$output" | awk '$1 == "Inst" { sub(/:.*/, "", $2); print $2 }' | sort -u
+}
+
 install_native_keys() {
-    local backend key metadata executable package existed version prefix
+    local backend key metadata executable package existed version prefix planned planned_package planned_output
     local pending_records=()
     backend="$(native_backend)" || return 1
     local install_names=() pending=()
@@ -95,13 +101,42 @@ install_native_keys() {
         metadata="$(catalog_query package "$key" "$backend")" || { warn "Unknown package catalog key: $key"; return 2; }
         IFS=$'\t' read -r executable package <<<"$metadata"
         if command -v "$executable" >/dev/null 2>&1; then continue; fi
-        [[ -n "$package" ]] && native_package_available "$backend" "$package" || { pending+=("$key"); continue; }
+        if [[ -n "$package" ]]; then
+            native_package_available "$backend" "$package" || { pending+=("$key"); continue; }
+        else
+            pending+=("$key")
+            continue
+        fi
         existed=0; if native_package_present "$backend" "$package"; then existed=1; else [[ $? == 1 ]] || return 1; fi
         version="$(native_package_version "$backend" "$package")"
         node "$DOTFILES_DIR/scripts/state-helper.mjs" package "$backend" "$package" "$existed" "$version" pending || return 1
         pending_records+=("$package"$'\t'"$existed"$'\t'"$version")
         install_names+=("$package")
     done
+    if [[ "$backend" == apt && ${#install_names[@]} -gt 0 ]]; then
+        planned_output="$(native_apt_install_plan "${install_names[@]}")" || return 1
+        while IFS= read -r planned; do
+            [[ -n "$planned" ]] || continue
+            planned_package="${planned%%:*}"
+            local already_recorded=0 plan_record plan_package
+            for plan_record in "${pending_records[@]}"; do
+                IFS=$'\t' read -r plan_package _ _ <<<"$plan_record"
+                [[ "$plan_package" == "$planned_package" ]] || continue
+                already_recorded=1
+                break
+            done
+            [[ "$already_recorded" -eq 1 ]] && continue
+            existed=0
+            if native_package_present "$backend" "$planned_package"; then
+                existed=1
+            else
+                [[ $? == 1 ]] || return 1
+            fi
+            version="$(native_package_version "$backend" "$planned_package")"
+            node "$DOTFILES_DIR/scripts/state-helper.mjs" package "$backend" "$planned_package" "$existed" "$version" pending || return 1
+            pending_records+=("$planned_package"$'\t'"$existed"$'\t'"$version")
+        done <<<"$planned_output"
+    fi
     [[ ${#install_names[@]} -eq 0 ]] || native_install_names "$backend" "${install_names[@]}" || return 1
     local record
     for record in "${pending_records[@]}"; do IFS=$'\t' read -r package existed version <<<"$record"; node "$DOTFILES_DIR/scripts/state-helper.mjs" package "$backend" "$package" "$existed" "$version" installed || return 1; done

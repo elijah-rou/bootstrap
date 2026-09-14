@@ -363,7 +363,7 @@ if node "$DOTFILES_DIR/scripts/state-helper.mjs" finish-uninstall; then exit 1; 
 node "$DOTFILES_DIR/scripts/state-helper.mjs" init
 mkdir -p "$DOTFILES_BARE_ROOT/bin"
 real_node="$(command -v node)"
-cp "$real_node" "$DOTFILES_BARE_ROOT/bin/node"
+ln -s "$real_node" "$DOTFILES_BARE_ROOT/bin/node"
 node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$DOTFILES_BARE_ROOT"
 mkdir -p "$HOME/guard"
 printf '#!/bin/sh\\necho unavailable >&2; exit 97\\n' >"$HOME/guard/node"; chmod +x "$HOME/guard/node"

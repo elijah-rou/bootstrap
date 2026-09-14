@@ -26,10 +26,11 @@ jobs:
           neovim: true
       - name: Install test tools on Linux
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes build-essential ripgrep shellcheck zsh && npm install --global basedpyright@1.38.3
+        run: sudo apt-get update && sudo apt-get install --yes build-essential fd-find ripgrep shellcheck zsh && npm install --global basedpyright@1.38.3
       - name: Install test tools on macOS
         if: runner.os == 'macOS'
         run: |
+          brew list fd || brew install fd
           brew list ripgrep || brew install ripgrep
           brew list shellcheck || brew install shellcheck
           brew list coreutils || brew install coreutils
@@ -103,7 +104,7 @@ jobs:
         with:
           bun-version: "1.4.0"
       - name: Install test tools
-        run: sudo apt-get update && sudo apt-get install --yes ripgrep shellcheck zsh
+        run: sudo apt-get update && sudo apt-get install --yes fd-find ripgrep shellcheck zsh
       - name: Install isolated pinned runtime dependencies
         run: |
           source ./install.sh
