@@ -60,7 +60,7 @@ version_at_least() {
 }
 
 ensure_bootstrap_node() {
-    local backend package existed=0 status prefix version pending="$BOOTSTRAP_STATE_ROOT/bootstrap-node.pending"
+    local backend package existed=0 status prefix version pending="$BOOTSTRAP_STATE_ROOT/bootstrap-node.pending" dependency_plan dependency dependency_existed dependency_version
     if ! command -v node >/dev/null 2>&1; then
         backend="$(native_backend)" || return 1
         case "$backend" in apt|dnf|pacman) package=nodejs ;; brew) package=node@24 ;; *) return 2 ;; esac
@@ -70,6 +70,27 @@ ensure_bootstrap_node() {
                 ( umask 077; printf 'version=1\nbackend=%s\npackage=%s\npreexisting=%s\n' "$backend" "$package" "$existed" >"$pending" ) || return 1
             else
                 grep -qx 'version=1' "$pending" && grep -qx "backend=$backend" "$pending" && grep -qx "package=$package" "$pending" && grep -qEx 'preexisting=[01]' "$pending" || { warn "Malformed bootstrap Node recovery journal: $pending"; return 1; }
+            fi
+            if [[ "$existed" != 1 && "$backend" == apt ]]; then
+                dependency_plan="$(native_apt_install_plan "$package")" || return 1
+                local dependency_records=''
+                while IFS= read -r dependency; do
+                    [[ -n "$dependency" ]] || continue
+                    dependency="${dependency%%:*}"
+                    [[ "$dependency" == "$package" ]] && continue
+                    dependency_existed=0
+                    if native_package_present "$backend" "$dependency"; then
+                        dependency_existed=1
+                    else
+                        [[ $? == 1 ]] || return 1
+                    fi
+                    dependency_version="$(native_package_version "$backend" "$dependency")"
+                    dependency_records+="dependency=$dependency|$dependency_existed|$dependency_version"$'\n'
+                done <<<"$dependency_plan"
+                {
+                    printf 'version=1\nbackend=%s\npackage=%s\npreexisting=%s\n' "$backend" "$package" "$existed"
+                    printf '%s' "$dependency_records"
+                } >"$pending" || return 1
             fi
             [[ "$existed" == 1 ]] || native_install_names "$backend" "$package" || return 1
             if [[ "$backend" == brew ]]; then
@@ -90,11 +111,16 @@ ensure_bootstrap_node() {
 }
 
 adopt_bootstrap_node_journal() {
-    local pending="$BOOTSTRAP_STATE_ROOT/bootstrap-node.pending" backend package existed executable
+    local pending="$BOOTSTRAP_STATE_ROOT/bootstrap-node.pending" backend package existed executable dependency dependency_existed dependency_version
     if [[ -f "$pending" ]]; then
         backend="$(sed -n 's/^backend=//p' "$pending")"; package="$(sed -n 's/^package=//p' "$pending")"; existed="$(sed -n 's/^preexisting=//p' "$pending")"
         [[ -n "$backend" && -n "$package" && "$existed" =~ ^[01]$ ]] || return 1
         node "$DOTFILES_DIR/scripts/state-helper.mjs" package "$backend" "$package" "$existed" "$(native_package_version "$backend" "$package")" installed || return 1
+        while IFS='|' read -r dependency dependency_existed dependency_version; do
+            [[ -n "$dependency" ]] || continue
+            node "$DOTFILES_DIR/scripts/state-helper.mjs" package "$backend" "$dependency" "$dependency_existed" "$dependency_version" pending || return 1
+            node "$DOTFILES_DIR/scripts/state-helper.mjs" package "$backend" "$dependency" "$dependency_existed" "$dependency_version" installed || return 1
+        done < <(sed -n 's/^dependency=//p' "$pending")
     fi
     if [[ "${BOOTSTRAP_NODE_FALLBACK:-0}" == 1 ]]; then
         install_upstream_tool node || return 1
