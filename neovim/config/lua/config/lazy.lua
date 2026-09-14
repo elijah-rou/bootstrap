@@ -27,7 +27,8 @@ require("lazy").setup({
     lazy = false,
     version = false, -- always use the latest git commit
   },
-  checker = { enabled = true }, -- automatically check for plugin updates
+  install = { missing = not vim.g.bootstrap_neovim_repair },
+  checker = { enabled = not vim.g.bootstrap_neovim_repair },
   performance = {
     cache = {
       enabled = true,

@@ -48,26 +48,35 @@ write_neovim_lsp_selections() {
     node "$DOTFILES_DIR/scripts/state-helper.mjs" lsp-output "$DOTFILES_DIR/packages/catalog.json" "$output"
 }
 
-install_neovim_parsers() {
-    local fixture receipt parser_set before after config_init="${XDG_CONFIG_HOME:-$HOME/.config}/${NVIM_APPNAME:-bootstrap-nvim}/init.lua"
+install_neovim_parsers() (
+    export NVIM_APPNAME="${NVIM_APPNAME:-bootstrap-nvim}"
+    local temporary fixture receipt parser_set config_init="${XDG_CONFIG_HOME:-$HOME/.config}/${NVIM_APPNAME:-bootstrap-nvim}/init.lua"
     command -v nvim >/dev/null && command -v tree-sitter >/dev/null && command -v cc >/dev/null || { warn 'Neovim parser setup requires nvim, tree-sitter and a C compiler'; return 1; }
-    fixture="$(mktemp "$BOOTSTRAP_STATE_ROOT/parser.XXXXXX.lua")"; receipt="$fixture.receipt"; parser_set="$fixture.parsers"
+    temporary="$(mktemp -d "$BOOTSTRAP_STATE_ROOT/parsers.XXXXXX")" || return 1
+    trap 'rm -rf "$temporary"' EXIT
+    fixture="$temporary/fixture.lua"; receipt="$temporary/receipt"; parser_set="$temporary/parsers"
     printf 'local value = { nested = true }\nreturn value\n' >"$fixture"
-    before="$(find "${XDG_DATA_HOME:-$HOME/.local/share}/${NVIM_APPNAME:-bootstrap-nvim}" -path '*/parser/*' -type f 2>/dev/null | sort | xargs shasum 2>/dev/null || true)"
-    node "$DOTFILES_DIR/scripts/run-bounded.mjs" 300 nvim --headless -i NONE -u "$config_init" '+Lazy! sync' '+qa' || { warn 'Neovim plugin installation failed or timed out'; return 1; }
-    BOOTSTRAP_PARSER_SET_RECEIPT="$parser_set" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 320 nvim --headless -i NONE -u "$config_init" -l "$DOTFILES_DIR/neovim/install-parsers.lua" || { warn 'Effective Neovim parser installation failed or timed out'; return 1; }
-    BOOTSTRAP_PARSER_FIXTURE="$fixture" BOOTSTRAP_PARSER_RECEIPT="$receipt" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 30 nvim --headless -i NONE -u "$config_init" -l "$DOTFILES_DIR/neovim/verify-parser.lua" || return 1
+    BOOTSTRAP_NVIM_INIT="$config_init" BOOTSTRAP_PLUGIN_RECEIPT="$temporary/plugins" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 300 nvim --headless -i NONE -u NONE -l "$DOTFILES_DIR/neovim/install-plugins.lua" || { warn 'Neovim locked plugin repair failed or timed out'; return 1; }
+    [[ -s "$temporary/plugins" ]] || { warn 'Neovim plugin repair receipt missing'; return 1; }
+    BOOTSTRAP_PARSER_SET_RECEIPT="$parser_set" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 620 nvim --headless -i NONE -u "$config_init" -l "$DOTFILES_DIR/neovim/install-parsers.lua" || { warn 'Effective Neovim parser installation failed or timed out'; return 1; }
+    BOOTSTRAP_PARSER_SET_RECEIPT="$parser_set" BOOTSTRAP_PARSER_FIXTURE="$fixture" BOOTSTRAP_PARSER_RECEIPT="$receipt" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 30 nvim --headless -i NONE -u "$config_init" -l "$DOTFILES_DIR/neovim/verify-parser.lua" || return 1
     [[ -s "$receipt" && -s "$parser_set" ]] || return 1
-    after="$(find "${XDG_DATA_HOME:-$HOME/.local/share}/${NVIM_APPNAME:-bootstrap-nvim}" -path '*/parser/*' -type f 2>/dev/null | sort | xargs shasum 2>/dev/null || true)"
-    [[ -z "$before" || "$before" == "$after" ]] || info 'Neovim parsers updated'
-    rm -f "$fixture" "$receipt" "$parser_set"
-}
+)
 
-verify_neovim_runtime() {
-    local app_name="${NVIM_APPNAME:-bootstrap-nvim}" config="${XDG_CONFIG_HOME:-$HOME/.config}/${NVIM_APPNAME:-bootstrap-nvim}"
-    [[ -L "$config" && -f "$config/init.lua" ]] || { warn "Neovim config missing: $config"; return 1; }
-    nvim --headless -i NONE '+lua assert(vim.g.bootstrap_neovim_profile == "bare")' '+qa' >/dev/null 2>&1 || { warn 'Neovim ordinary startup failed'; return 1; }
-}
+verify_neovim_runtime() (
+    export NVIM_APPNAME="${NVIM_APPNAME:-bootstrap-nvim}"
+    local config="${XDG_CONFIG_HOME:-$HOME/.config}/${NVIM_APPNAME:-bootstrap-nvim}" expected temporary
+    [[ -f "$config/init.lua" ]] || { warn "Neovim config missing: $config"; return 1; }
+    if [[ -n "${NVIM_CONFIG_REPO_URL:-}${NVIM_CONFIG_CHECKOUT_DIR:-}" ]]; then expected=external
+    else
+        validate_neovim_profile "$config/bootstrap-profile.json" "${BOOTSTRAP_NEOVIM_PROFILE:-}" || return 1
+        expected="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1])).profile)' "$config/bootstrap-profile.json")" || return 1
+    fi
+    temporary="$(mktemp -d)" || return 1
+    trap 'rm -rf "$temporary"' EXIT
+    BOOTSTRAP_EXPECTED_NVIM_PROFILE="$expected" BOOTSTRAP_NVIM_RECEIPT="$temporary/receipt" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 30 nvim --headless -i NONE "+lua dofile(vim.env.DOTFILES_DIR .. '/neovim/verify-runtime.lua')" >"$temporary/output" 2>&1 || { cat "$temporary/output" >&2; warn 'Neovim ordinary startup failed'; return 1; }
+    [[ -s "$temporary/receipt" ]] && grep -qxF "$expected" "$temporary/receipt" || { cat "$temporary/output" >&2; warn 'Neovim startup receipt missing'; return 1; }
+)
 
 verify_selected_lsp() {
     local selection="$1" metadata server fixture_name contents temporary receipt config_init="${XDG_CONFIG_HOME:-$HOME/.config}/${NVIM_APPNAME:-bootstrap-nvim}/init.lua"
@@ -76,7 +85,8 @@ verify_selected_lsp() {
     contents="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).contents)' "$metadata")"
     temporary="$(mktemp -d "$BOOTSTRAP_STATE_ROOT/lsp.XXXXXX")" || return 1
     receipt="$temporary/receipt.json"; printf '%s' "$contents" >"$temporary/$fixture_name"
-    BOOTSTRAP_EXPECTED_LSP="$server" BOOTSTRAP_LSP_RECEIPT="$receipt" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 40 nvim --headless -i NONE -u "$config_init" "$temporary/$fixture_name" -l "$DOTFILES_DIR/neovim/verify-lsp.lua" || { rm -rf "$temporary"; warn "$selection installed and configured but did not attach in Neovim"; return 1; }
+    NVIM_APPNAME="${NVIM_APPNAME:-bootstrap-nvim}" BOOTSTRAP_EXPECTED_LSP="$server" BOOTSTRAP_LSP_RECEIPT="$receipt" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 40 nvim --headless -i NONE -u "$config_init" "$temporary/$fixture_name" -l "$DOTFILES_DIR/neovim/verify-lsp.lua" || { rm -rf "$temporary"; warn "$selection installed and configured but did not attach in Neovim"; return 1; }
     node -e 'const v=JSON.parse(require("node:fs").readFileSync(process.argv[1])); if(!v.initialized||!v.attached||!v.request)process.exit(1)' "$receipt" || { rm -rf "$temporary"; return 1; }
     rm -rf "$temporary"; info "$selection installed, configured, initialized, attached, and answered a request"
+    node -e 'const v=JSON.parse(process.argv[1]); if(v.limitations)console.log(v.limitations)' "$metadata"
 }

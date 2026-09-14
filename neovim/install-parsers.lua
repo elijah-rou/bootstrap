@@ -1,13 +1,42 @@
-local lazy_config = require("lazy.core.config")
-local lazy_plugin = require("lazy.core.plugin")
-local plugin = assert(lazy_config.plugins["nvim-treesitter"], "nvim-treesitter is not configured")
-local options = lazy_plugin.values(plugin, "opts", false) or {}
-local languages = options.ensure_installed or {}
-assert(type(languages) == "table" and #languages > 0, "effective parser set is empty")
-local task = require("nvim-treesitter").install(languages)
-task:wait(300000)
-for _, language in ipairs(languages) do
-  assert(vim.list_contains(require("nvim-treesitter").get_installed(), language), "parser not installed: " .. language)
-end
-vim.fn.writefile(languages, assert(vim.env.BOOTSTRAP_PARSER_SET_RECEIPT))
-vim.cmd("qa!")
+local ok, failure = xpcall(function()
+  local lazy_config = require('lazy.core.config')
+  local plugin = assert(lazy_config.plugins['nvim-treesitter'], 'nvim-treesitter is not configured')
+  local options = require('lazy.core.plugin').values(plugin, 'opts', false) or {}
+  local configured = options.ensure_installed or {}
+  assert(type(configured) == 'table' and #configured > 0, 'effective parser set is empty')
+  local config = require('nvim-treesitter.config')
+  local languages = config.norm_languages(configured)
+  assert(#languages > 0, 'no supported parsers configured')
+  local ts = require('nvim-treesitter')
+  local parsers = require('nvim-treesitter.parsers')
+  local missing = {}
+  for _, language in ipairs(languages) do
+    assert(parsers[language], 'unknown configured parser: ' .. language)
+    if parsers[language].install_info and vim.fn.filereadable(config.get_install_dir('parser') .. '/' .. language .. '.so') == 0 then
+      missing[#missing + 1] = language
+    end
+  end
+  -- Upstream's installed set includes query directories even if the library is missing.
+  if #missing > 0 then assert(ts.install(missing, { force = true }):wait(300000), 'missing parser installation failed') end
+  assert(ts.install(languages):wait(300000), 'parser installation failed')
+  assert(ts.update(languages):wait(300000), 'parser revision reconciliation failed')
+  parsers = require('nvim-treesitter.parsers')
+  for _, language in ipairs(languages) do
+    local info = parsers[language].install_info
+    if info and info.revision then
+      local revision = table.concat(vim.fn.readfile(config.get_install_dir('parser-info') .. '/' .. language .. '.revision'), '\n')
+      assert(revision == info.revision, 'parser revision mismatch: ' .. language)
+    end
+    if info then
+      local loaded, result = pcall(vim.treesitter.language.add, language)
+      if not loaded or not result then
+        assert(ts.install({ language }, { force = true }):wait(300000), 'incompatible parser repair failed: ' .. language)
+        assert(vim.treesitter.language.add(language), 'parser did not load after repair: ' .. language)
+      end
+    end
+  end
+  table.sort(languages)
+  vim.fn.writefile(languages, assert(vim.env.BOOTSTRAP_PARSER_SET_RECEIPT))
+end, debug.traceback)
+if not ok then print(failure); vim.cmd('cquit 1') end
+vim.cmd('qa!')
