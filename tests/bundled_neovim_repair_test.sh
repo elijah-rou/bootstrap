@@ -63,6 +63,9 @@ grep -q 'parser revision reconciliation failed' "$temporary/failure.log"
 printf 'PASS R9 failed compiler propagates failure and removes temporary receipts\n'
 # Restore readiness before exercising both ordinary startup profiles.
 install_neovim_parsers >"$temporary/recovery.log" 2>&1 || { cat "$temporary/recovery.log"; exit 1; }
+# install.sh owns this shell variable but does not export it to Neovim.
+export -n DOTFILES_DIR
+node -e 'if (Object.hasOwn(process.env, "DOTFILES_DIR")) process.exit(1)'
 for profile in bare workstation; do
     printf '{"version":1,"profile":"%s"}\n' "$profile" >"$config/bootstrap-profile.json"
     BOOTSTRAP_NEOVIM_PROFILE="$profile" verify_neovim_runtime

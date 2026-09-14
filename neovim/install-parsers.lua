@@ -28,10 +28,13 @@ local ok, failure = xpcall(function()
       assert(revision == info.revision, 'parser revision mismatch: ' .. language)
     end
     if info then
-      local loaded, result = pcall(vim.treesitter.language.add, language)
+      -- Runtime lookup can cache the absent site directory during first startup.
+      -- The separate fresh-process verifier checks ordinary runtime discovery.
+      local library = { path = config.get_install_dir('parser') .. '/' .. language .. '.so' }
+      local loaded, result = pcall(vim.treesitter.language.add, language, library)
       if not loaded or not result then
         assert(ts.install({ language }, { force = true }):wait(300000), 'incompatible parser repair failed: ' .. language)
-        assert(vim.treesitter.language.add(language), 'parser did not load after repair: ' .. language)
+        assert(vim.treesitter.language.add(language, library), 'parser did not load after repair: ' .. language)
       end
     end
   end

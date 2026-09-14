@@ -234,7 +234,7 @@ node "$DOTFILES_DIR/scripts/state-helper.mjs" init
 mkdir -p "$DOTFILES_BARE_ROOT/bin"
 typescript-language-server() { return 0; }
 bun() {
-  [[ "$*" == 'install --global --exact typescript@6.0.2 typescript-language-server@6.0.1' ]] || return 99
+  [[ "$*" == 'install --global --exact typescript@6.0.2 typescript-language-server@5.3.0' ]] || return 99
   mkdir -p "$BUN_INSTALL/bin" "$BUN_INSTALL/install/global/node_modules/typescript/lib" "$BUN_INSTALL/install/global/node_modules/typescript-language-server"
   printf 'module.exports={};\\n' >"$BUN_INSTALL/install/global/node_modules/typescript/lib/tsserver.js"
   printf '#!/bin/sh\\nexit 0\\n' >"$BUN_INSTALL/bin/typescript-language-server"; chmod +x "$BUN_INSTALL/bin/typescript-language-server"

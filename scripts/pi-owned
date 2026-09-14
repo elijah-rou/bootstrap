@@ -6,4 +6,8 @@ profile="$HOME/.config/dotfiles/bare-env.sh"
 source "$profile"
 cli="$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
 [[ -f "$cli" ]] || { printf 'Owned Pi CLI is missing; rerun the Pi installer.\n' >&2; exit 1; }
-exec node "$cli" --session-dir "$PI_CODING_AGENT_SESSION_DIR" "$@"
+# Pi dispatches management commands before parsing session options.
+case "${1:-}" in
+    install|remove|update|list|uninstall|config|auth) exec node "$cli" "$@" ;;
+    *) exec node "$cli" --session-dir "$PI_CODING_AGENT_SESSION_DIR" "$@" ;;
+esac

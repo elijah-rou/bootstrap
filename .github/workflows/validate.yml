@@ -9,7 +9,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -26,7 +26,7 @@ jobs:
           neovim: true
       - name: Install test tools on Linux
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes ripgrep shellcheck zsh && npm install --global basedpyright@1.38.3
+        run: sudo apt-get update && sudo apt-get install --yes build-essential ripgrep shellcheck zsh && npm install --global basedpyright@1.38.3
       - name: Install test tools on macOS
         if: runner.os == 'macOS'
         run: |
@@ -35,9 +35,22 @@ jobs:
           brew list coreutils || brew install coreutils
           npm install --global basedpyright@1.38.3
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+      - name: Prepare cold locked Neovim and standalone LSP fixtures
+        run: |
+          fixture="$RUNNER_TEMP/bootstrap-neovim-runtime"
+          bash tests/prepare_neovim_runtime.sh "$fixture"
+          {
+            echo "NVIM_PLUGIN_ROOT=$fixture/home/.local/share/bootstrap-nvim/lazy"
+            echo "NVIM_SITE_ROOT=$fixture/home/.local/share/bootstrap-nvim/site"
+            echo "RUST_ANALYZER_TEST_BIN=$fixture/bin/rust-analyzer"
+            echo "NVIM_BUNDLED_RUNTIME=1"
+          } >> "$GITHUB_ENV"
+          echo "$fixture/home/.local/share/bootstrap/tools/bin" >> "$GITHUB_PATH"
       - run: ./scripts/validate
       - name: Verified official binary and Pi entrypoint smoke
         run: bash tests/native_artifact_smoke.sh --pi
+      - name: Installed TypeScript server through bundled Neovim
+        run: bash tests/native_selected_lsp_smoke.sh
       - name: Disposable toolchain cache and interpreter smoke
         run: bash tests/native_toolchain_smoke.sh
 

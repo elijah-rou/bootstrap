@@ -20,6 +20,18 @@ if [[ "${1:-}" == --pi ]]; then
     bun install --global --exact "$PI_CLI_PACKAGE@$PI_CLI_VERSION"
     link_pi_launchers
     [[ "$(env -i HOME="$HOME" PATH=/usr/bin:/bin "$HOME/.local/bin/pi" --version)" == "$PI_CLI_VERSION" ]]
+    (
+        cd "$fixture"
+        env -i HOME="$HOME" PATH=/usr/bin:/bin "$HOME/.local/bin/pi" list --help > "$fixture/list-help"
+        grep -q 'List installed packages' "$fixture/list-help"
+        mkdir "$fixture/local-package"
+        printf '{"name":"bootstrap-command-smoke","version":"1.0.0","pi":{"extensions":[],"skills":[]}}\n' > "$fixture/local-package/package.json"
+        env -i HOME="$HOME" PATH=/usr/bin:/bin "$HOME/.local/bin/pi" install "$fixture/local-package"
+        env -i HOME="$HOME" PATH=/usr/bin:/bin "$HOME/.local/bin/pi" list > "$fixture/packages"
+        grep -Fq "$fixture/local-package" "$fixture/packages"
+        env -i HOME="$HOME" PATH=/usr/bin:/bin "$HOME/.local/bin/pi" remove "$fixture/local-package"
+        [[ -f "$fixture/local-package/package.json" ]]
+    )
 fi
 if [[ "$(uname -s)" == Linux ]]; then
     install_upstream_tool eza

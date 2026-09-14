@@ -334,7 +334,7 @@ install_lsp_selection() {
     if [[ "$selection" == typescript-language-server ]]; then
         # The server needs its implementation package even when a foreign server
         # executable already exists. This does not select the TS development extra.
-        bun install --global --exact typescript@6.0.2 typescript-language-server@6.0.1 || return 1
+        bun install --global --exact typescript@6.0.2 typescript-language-server@5.3.0 || return 1
         node -e 'require.resolve("typescript/lib/tsserver.js", {paths:[process.argv[1]]})' "$BUN_INSTALL/install/global/node_modules/typescript-language-server" || return 1
         link_managed_file "$BUN_INSTALL/bin/typescript-language-server" "$DOTFILES_BARE_ROOT/bin/typescript-language-server" || return 1
     fi

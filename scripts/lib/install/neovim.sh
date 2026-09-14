@@ -74,7 +74,7 @@ verify_neovim_runtime() (
     fi
     temporary="$(mktemp -d)" || return 1
     trap 'rm -rf "$temporary"' EXIT
-    BOOTSTRAP_EXPECTED_NVIM_PROFILE="$expected" BOOTSTRAP_NVIM_RECEIPT="$temporary/receipt" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 30 nvim --headless -i NONE "+lua dofile(vim.env.DOTFILES_DIR .. '/neovim/verify-runtime.lua')" >"$temporary/output" 2>&1 || { cat "$temporary/output" >&2; warn 'Neovim ordinary startup failed'; return 1; }
+    BOOTSTRAP_NVIM_VERIFY="$DOTFILES_DIR/neovim/verify-runtime.lua" BOOTSTRAP_EXPECTED_NVIM_PROFILE="$expected" BOOTSTRAP_NVIM_RECEIPT="$temporary/receipt" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 30 nvim --headless -i NONE "+lua dofile(vim.env.BOOTSTRAP_NVIM_VERIFY)" >"$temporary/output" 2>&1 || { cat "$temporary/output" >&2; warn 'Neovim ordinary startup failed'; return 1; }
     [[ -s "$temporary/receipt" ]] && grep -qxF "$expected" "$temporary/receipt" || { cat "$temporary/output" >&2; warn 'Neovim startup receipt missing'; return 1; }
 )
 
