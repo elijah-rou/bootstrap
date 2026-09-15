@@ -166,10 +166,49 @@ bootstrap_private_links_are_proven() {
     done < <(find "$BOOTSTRAP_PRIVATE_ROOT" -mindepth 1 ! -type d -print)
 }
 
+bootstrap_herdr_state_is_accepted() {
+    local herdr_root="${XDG_CONFIG_HOME:-$HOME/.config}/herdr" status path
+    [[ -e "$herdr_root" || -L "$herdr_root" ]] || return 0
+    if node "$DOTFILES_DIR/scripts/state-helper.mjs" owns-root "$herdr_root" >/dev/null 2>&1; then
+        return 0
+    else
+        status=$?
+        [[ "$status" == 3 || "$status" == 1 ]] || return 1
+    fi
+    if [[ -d "$herdr_root" && ! -L "$herdr_root" ]]; then
+        while IFS= read -r path; do
+            case "${path##*/}" in
+                config.toml|config.toml.bak.*) ;;
+                *) warn "Herdr already has personal state at $herdr_root; explicit verified enrollment is required before bootstrap can own it"; return 1 ;;
+            esac
+            if [[ ! -L "$path" ]] || ! managed_source_matches "$(readlink "$path")" herdr/config.toml; then
+                warn "Herdr already has personal state at $herdr_root; explicit verified enrollment is required before bootstrap can own it"
+                return 1
+            fi
+        done < <(find "$herdr_root" -mindepth 1 -maxdepth 1 -print)
+        return 0
+    fi
+    warn "Herdr already has personal state at $herdr_root; explicit verified enrollment is required before bootstrap can own it"
+    return 1
+}
+
+bootstrap_migration_allows_activation() {
+    local legacy_pi="${BOOTSTRAP_LEGACY_PI_ROOT:-$HOME/.pi/agent}" journal="${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/migration.json" phase
+    if [[ ! -f "$journal" ]]; then
+        [[ -d "$legacy_pi" && ! -L "$legacy_pi" ]] || return 0
+        find "$legacy_pi" -mindepth 1 ! -type d ! -type l -print -quit | grep -q . || return 0
+    fi
+    phase="$(node "$DOTFILES_DIR/scripts/migration-helper.mjs" status 2>/dev/null | sed -n 's/.*"phase": "\([^"]*\)".*/\1/p')" || return 1
+    case "$phase" in activated|verified|retiring|retired) return 0 ;; esac
+    warn "Legacy Pi state requires the explicit migration inspect -> prepare -> transfer -> activate flow before configuration can switch profiles"
+    return 1
+}
+
 initialize_bootstrap_component() {
     local component="$1"
     if [[ ! -f "$BOOTSTRAP_STATE_ROOT/install.json" ]]; then
-        if [[ -d "$BOOTSTRAP_PRIVATE_ROOT" ]] && find "$BOOTSTRAP_PRIVATE_ROOT" -mindepth 1 ! -type d -print -quit | grep -q . && ! bootstrap_private_links_are_proven; then
+        if [[ -d "$BOOTSTRAP_PRIVATE_ROOT" ]] && find "$BOOTSTRAP_PRIVATE_ROOT" -mindepth 1 ! -type d -print -quit | grep -q . &&
+            ! bootstrap_private_links_are_proven && ! node "$DOTFILES_DIR/scripts/migration-helper.mjs" allows-adoption >/dev/null 2>&1; then
             warn "Refusing to adopt unrecorded bootstrap runtime state: $BOOTSTRAP_PRIVATE_ROOT"
             return 1
         fi
@@ -220,6 +259,8 @@ install_pi_component() {
 link_bare_offline() (
     source "$DOTFILES_DIR/scripts/bare-env.sh"
     command -v node >/dev/null || { warn 'Node.js is required for offline configuration'; return 1; }
+    bootstrap_migration_allows_activation || return 1
+    bootstrap_herdr_state_is_accepted || return 1
     bootstrap_lock_acquire || return 1
     trap 'bootstrap_lock_release' EXIT
     initialize_bootstrap_component configuration || return 1
@@ -232,6 +273,8 @@ link_bare_offline() (
 install_workstation_neovim() (
     source "$DOTFILES_DIR/scripts/bare-env.sh"
     command -v node >/dev/null || { warn 'Node.js is required for Neovim configuration'; return 1; }
+    bootstrap_migration_allows_activation || return 1
+    bootstrap_herdr_state_is_accepted || return 1
     bootstrap_lock_acquire || return 1
     trap 'bootstrap_lock_release' EXIT
     initialize_bootstrap_component configuration || return 1
@@ -243,6 +286,8 @@ install_workstation_neovim() (
 install_bare_pi() (
     bare_preflight || return 1
     source "$DOTFILES_DIR/scripts/bare-env.sh"
+    bootstrap_migration_allows_activation || return 1
+    bootstrap_herdr_state_is_accepted || return 1
     bootstrap_lock_acquire || return 1
     local bare_stage=''
     bare_stage="$(mktemp -d "$BOOTSTRAP_STATE_ROOT/stage.XXXXXX")" || { bootstrap_lock_release; return 1; }
@@ -271,12 +316,13 @@ bare_doctor() (
 install_bare() (
     bare_preflight || return 1
     source "$DOTFILES_DIR/scripts/bare-env.sh"
+    bootstrap_migration_allows_activation || return 1
+    bootstrap_herdr_state_is_accepted || return 1
     bootstrap_lock_acquire || return 1
     local bare_stage=''
     bare_stage="$(mktemp -d "$BOOTSTRAP_STATE_ROOT/stage.XXXXXX")" || { bootstrap_lock_release; return 1; }
     trap 'rm -rf "$bare_stage"; bootstrap_lock_release' EXIT
     ensure_bootstrap_node || return 1
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" init || return 1
     initialize_bootstrap_component core || return 1
     adopt_bootstrap_node_journal || return 1
     enroll_bootstrap_neovim_state || return 1
@@ -286,13 +332,6 @@ install_bare() (
     ensure_runtime_versions || return 1
     install_pi_component || return 1
     local herdr_root="${XDG_CONFIG_HOME:-$HOME/.config}/herdr"
-    if [[ -e "$herdr_root" ]]; then
-        if find "$herdr_root" -mindepth 1 ! -name config.toml -print -quit | grep -q . ||
-            { [[ -e "$herdr_root/config.toml" || -L "$herdr_root/config.toml" ]] && { [[ ! -L "$herdr_root/config.toml" ]] || ! managed_source_matches "$(readlink "$herdr_root/config.toml")" herdr/config.toml; }; }; then
-            warn "Herdr already has personal state at $herdr_root; explicit enrollment is required before bootstrap can own it"
-            return 1
-        fi
-    fi
     node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$herdr_root" || return 1
     HERDR_INSTALL_DIR="$DOTFILES_BARE_ROOT/bin" install_herdr || return 1
     link_bare_config || return 1
@@ -441,24 +480,44 @@ enroll_bootstrap_project() (
     info "Enrolled project copy for deletion on uninstall: $root"
 )
 
-migrate_legacy_bootstrap() (
+migrate_legacy_bootstrap() {
+    warn 'migrate-legacy no longer performs an all-at-once copy. Run: install.sh migration inspect, prepare, transfer --yes, activate --yes, verify, then retire --yes.'
+    return 1
+}
+
+bootstrap_migration_quiescent() {
+    local writers status
+    if writers="$(bootstrap_live_writers)"; then
+        warn "Migration requires operator-owned quiescence; active writers: $writers"
+        return 1
+    else
+        status=$?
+        [[ "$status" == 1 ]] || return 1
+    fi
+}
+
+bootstrap_migration() (
+    local phase="${1:-}" confirmation="${2:-}"
     source "$DOTFILES_DIR/scripts/bare-env.sh"
-    local marker="$HOME/.config/dotfiles/bare-env.sh" legacy_pi="$HOME/.pi/agent"
-    [[ -L "$marker" ]] && managed_source_matches "$(readlink "$marker")" scripts/bare-env.sh || { warn 'No provable legacy bootstrap profile was found'; return 1; }
-    if [[ -d "$legacy_pi" ]]; then
-        if find "$legacy_pi" -type l -print -quit | grep -q .; then warn 'Legacy Pi state contains symlinks; refusing ambiguous enrollment'; return 1; fi
-    fi
-    bootstrap_lock_acquire || return 1; trap 'bootstrap_lock_release' EXIT
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" init || return 1
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" adopt-link "$marker" "$(readlink "$marker")" || return 1
-    mkdir -p "$PI_CODING_AGENT_DIR" || return 1
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT" || return 1
-    if [[ -d "$legacy_pi" ]]; then
-        cp -a "$legacy_pi"/. "$PI_CODING_AGENT_DIR"/ || return 1
-        node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$legacy_pi" || return 1
-    fi
-    node "$DOTFILES_DIR/scripts/state-helper.mjs" ready || return 1
-    info 'Legacy Pi credentials and sessions migrated into the isolated profile; the old tool prefix was preserved because it may contain unrelated Bun/Rust additions'
+    command -v node >/dev/null || { warn 'Node.js is required for migration'; return 1; }
+    case "$phase" in
+        inspect)
+            [[ $# -eq 1 ]] || return 2
+            node "$DOTFILES_DIR/scripts/migration-helper.mjs" inspect
+            return
+            ;;
+        prepare|verify)
+            [[ $# -eq 1 ]] || return 2
+            ;;
+        transfer|activate|rollback|retire)
+            [[ $# -eq 2 && "$confirmation" == --yes ]] || { warn "migration $phase requires --yes"; return 2; }
+            bootstrap_migration_quiescent || return 1
+            ;;
+        *) warn 'Usage: install.sh migration <inspect|prepare|transfer|activate|verify|rollback|retire> [--yes]'; return 2 ;;
+    esac
+    bootstrap_lock_acquire || return 1
+    trap 'bootstrap_lock_release' EXIT
+    node "$DOTFILES_DIR/scripts/migration-helper.mjs" "$phase"
 )
 
 bootstrap_live_writers() {
@@ -467,7 +526,8 @@ bootstrap_live_writers() {
     output="$(ps -axo uid=,pid=,comm=,args=)" || { warn 'Unable to inspect active writers'; return 2; }
     while read -r uid pid executable arguments; do
         [[ "$uid" == "$own_uid" ]] || continue
-        if [[ "$arguments" == *"$DOTFILES_BARE_ROOT/"* || "$arguments" == *"$BOOTSTRAP_PRIVATE_ROOT/"* ]]; then
+        if [[ "$arguments" == *"$DOTFILES_BARE_ROOT/"* || "$arguments" == *"$BOOTSTRAP_PRIVATE_ROOT/"* ||
+              "$arguments" == *"${BOOTSTRAP_LEGACY_PI_ROOT:-$HOME/.pi/agent}/"* ]]; then
             printf '%s %s\n' "$pid" "$executable"; found=0; continue
         fi
         case "${executable##*/}" in

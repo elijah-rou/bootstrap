@@ -30,9 +30,16 @@ install_neovim_config() { printf forbidden-neovim >"$HOME/forbidden"; return 98;
 install_neovim_parsers() { printf forbidden-parser >"$HOME/forbidden"; return 98; }
 link_terminal_config() { printf forbidden-terminal >"$HOME/forbidden"; return 98; }
 
+if install_bare_pi; then exit 1; fi
+[[ ! -e "$HOME/native-components" && ! -e "$HOME/.local/bin/pi" ]]
+bootstrap_migration prepare >/dev/null
+bootstrap_migration transfer --yes >/dev/null
+bootstrap_migration activate --yes >/dev/null
+bootstrap_migration verify >/dev/null
 install_bare_pi
 private="$HOME/.local/share/bootstrap/private"
 [[ "$(cat "$HOME/.pi/agent/sentinel")" == unrelated && ! -e "$HOME/.pi/agent/settings.json" ]]
+[[ "$(cat "$private/pi/agent/sentinel")" == unrelated ]]
 [[ -f "$private/pi/agent/settings.json" && -L "$private/pi/agent/AGENTS.md" ]]
 [[ -L "$private/pi/agent/extensions/subagent/config.json" && -L "$private/pi/agent/skills/blast-radius" ]]
 [[ -L "$HOME/.local/bin/pi-workspace" && -L "$HOME/.local/bin/pi-headroom" ]]
@@ -62,6 +69,7 @@ uninstall_bare
 [[ ! -e "$private" && ! -e "$HOME/.local/share/bootstrap/tools" ]]
 [[ "$(cat "$HOME/.pi/agent/sentinel")" == unrelated && "$(cat "$HOME/.pi/agent/dotfiles-only")" == dotfiles-only ]]
 [[ ! -e "$HOME/.local/bin/pi-workspace" && ! -e "$HOME/.local/bin/pi-headroom" ]]
+mv "$HOME/.pi/agent" "$HOME/legacy-pi-agent"
 mkdir -p "$private/pi/agent"; printf unowned >"$private/pi/agent/auth.json"
 if install_bare_pi; then exit 1; fi
 [[ "$(cat "$private/pi/agent/auth.json")" == unowned && ! -f "$HOME/.local/state/bootstrap/install.json" ]]
@@ -70,5 +78,6 @@ ln -s "$ROOT/pi/extensions/notify.ts" "$private/pi/agent/extensions/notify.ts"
 install_bare_pi
 [[ "$(readlink "$private/pi/agent/extensions/notify.ts")" == "$ROOT/pi/extensions/notify.ts" ]]
 uninstall_bare
+mv "$HOME/legacy-pi-agent" "$HOME/.pi/agent"
 [[ ! -e "$private" && "$(cat "$HOME/.pi/agent/sentinel")" == unrelated ]]
 echo 'PASS targeted Pi install owns only Pi runtime/configuration, retries, guarded adoption, and sensitive cleanup'

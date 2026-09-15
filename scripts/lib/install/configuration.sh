@@ -141,6 +141,8 @@ sync_pi_links() (
 
 link_pi_config() {
     if [[ -d "$DOTFILES_DIR/pi" ]]; then
+        local BOOTSTRAP_MIGRATION_PROTECTED_PATHS
+        BOOTSTRAP_MIGRATION_PROTECTED_PATHS="$(node "$DOTFILES_DIR/scripts/migration-helper.mjs" protected-list)" || return 1
         mkdir -p "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"/{extensions,agents,prompts,skills,themes} "${XDG_CONFIG_HOME:-$HOME/.config}/pi" || return 1
         link_managed_file "$DOTFILES_DIR/pi/web-search.json" "${XDG_CONFIG_HOME:-$HOME/.config}/pi/web-search.json" || return 1
         link_managed_file "$DOTFILES_DIR/pi/profile-router.json" "${XDG_CONFIG_HOME:-$HOME/.config}/pi/profile-router.json" || return 1
@@ -235,8 +237,22 @@ themes *.json
 LINKS
 )
 
+migration_preserves_pi_target() {
+    local target="$1"
+    [[ -n "${BOOTSTRAP_MIGRATION_PROTECTED_PATHS:-}" ]] || return 1
+    printf '%s\n' "$BOOTSTRAP_MIGRATION_PROTECTED_PATHS" | grep -qxF "$target"
+}
+
 materialize_pi_config() {
-    local name="$1" directory
+    local name="$1" directory target status
+    target="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/$name.json"
+    if migration_preserves_pi_target "$target"; then
+        info "Preserved migrated Pi $name.json"
+        return 0
+    else
+        status=$?
+        [[ "$status" == 1 ]] || return 1
+    fi
     local overlays=("$DOTFILES_DIR/local/pi-$name.json")
     if [[ "${BOOTSTRAP_CONFIG_OVERLAYS:-0}" == 1 ]]; then
         overlays=()
@@ -244,7 +260,7 @@ materialize_pi_config() {
             overlays+=("$directory/pi-$name.json")
         done
     fi
-    materialize_json_config "$DOTFILES_DIR/pi/$name.json" "" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/$name.json" "${overlays[@]}" || return 1
+    materialize_json_config "$DOTFILES_DIR/pi/$name.json" "" "$target" "${overlays[@]}" || return 1
 }
 
 configure_terminal_overlays() (

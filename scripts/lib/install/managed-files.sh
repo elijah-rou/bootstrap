@@ -113,6 +113,11 @@ link_managed_file() {
     local backup_dir="${3:-}" backup_target="$target"
     local current_target backup_path=""
 
+    if [[ -n "${BOOTSTRAP_MIGRATION_PROTECTED_PATHS:-}" ]] &&
+        printf '%s\n' "$BOOTSTRAP_MIGRATION_PROTECTED_PATHS" | grep -qxF "$target"; then
+        info "Preserved migrated personal file: $target"
+        return 0
+    fi
     if [[ ! -e "$source" && ! -L "$source" ]]; then
         warn "Managed link source is missing: $source"
         return 1

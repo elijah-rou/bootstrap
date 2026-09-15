@@ -40,6 +40,8 @@ done
 [[ "$HOME" == /* && "$HOME" != / ]] || { warn 'HOME must be an absolute user directory'; exit 2; }
 source "$DOTFILES_DIR/scripts/bare-env.sh"
 command -v node >/dev/null || { warn 'Node.js is required for offline configuration'; exit 1; }
+bootstrap_migration_allows_activation || exit 1
+bootstrap_herdr_state_is_accepted || exit 1
 
 # One owner prevents overlapping backup/move operations in the same user profile.
 configure_lock="${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap/configure.lock"

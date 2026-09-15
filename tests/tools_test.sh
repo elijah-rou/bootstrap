@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; fixture="$(mktemp -d)"; trap 'rm -rf "$fixture"' EXIT
 export HOME="$fixture/home"
 export XDG_STATE_HOME="$HOME/.local/state" XDG_DATA_HOME="$HOME/.local/share" XDG_CACHE_HOME="$HOME/.cache" XDG_CONFIG_HOME="$HOME/.config"
-mkdir -p "$HOME"; source "$ROOT/install.sh"; source "$ROOT/scripts/bare-env.sh"; node "$ROOT/scripts/state-helper.mjs" init; node "$ROOT/scripts/state-helper.mjs" ready
+mkdir -p "$HOME"; source "$ROOT/install.sh"; source "$ROOT/scripts/bare-env.sh"; node "$ROOT/scripts/state-helper.mjs" init
 install_native_keys() { printf '%s\n' "$*" >>"$HOME/native"; }
 bun() { printf '%s\n' "$*" >"$HOME/bun"; }
 link_bare_codex_config() { touch "$HOME/codex-linked"; }

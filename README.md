@@ -18,7 +18,7 @@ Install or repair only pinned Pi and its Node/Bun runtime, configuration, extens
 
 This targeted command does not install terminal core, Herdr, Neovim, parser/compiler dependencies, or shell configuration. Its component readiness is recorded independently, so a failed or partial run cannot claim full bootstrap readiness.
 
-The public launcher downloads a pinned archive, verifies its SHA-256, then dispatches the same commands. `REVISION` and `ARCHIVE_SHA256` in `bootstrap.sh` are publication fields and intentionally remain unchanged until this runtime is published.
+The public launcher downloads a pinned archive, verifies its SHA-256, then dispatches the same commands. `REVISION` and `ARCHIVE_SHA256` in `bootstrap.sh` are publication fields and intentionally remain unchanged until this runtime is published. Before updating them, `node scripts/release-pin.mjs FULL_40_HEX_REVISION DOWNLOADED_ARCHIVE.tar.gz` verifies that the revision is a local commit, every archive entry carries that full revision prefix, and reports the actual SHA-256. It never guesses a digest or changes the publication pin.
 
 Core includes Git, Delta, GitHub CLI, the OpenSSH client, tmux, Herdr, ripgrep, fd, fzf, bat, eza, zoxide, jq, less, curl, Node >=22.19.0, Bun, Neovim 0.12.5 or newer, Tree-sitter CLI >=0.26.1, and a C compiler. Native packages are tried first. Node, Neovim, Tree-sitter, and Linux eza have pinned, checksum-verified official artifact fallbacks where stock packages are absent or unusable. Bun uses a native package or a directly downloaded official `@oven/bun-<platform>` binary archive, never the npm placeholder or package lifecycle scripts. Downloaded Bun and Node binaries run version checks before activation. No server/service, login-shell change, provider authentication, language toolchain, LSP, Zsh, or prompt is selected implicitly.
 
@@ -56,7 +56,13 @@ Neovim synchronizes pinned plugins, resolves the effective nvim-treesitter parse
 ```sh
 ./install.sh doctor
 ./configure.sh all --overlay /absolute/workstation --legacy-root /absolute/old-checkout
-./install.sh migrate-legacy --yes
+./install.sh migration inspect
+./install.sh migration prepare
+# After the operator stops Pi/Neovim and other writers:
+./install.sh migration transfer --yes
+./install.sh migration activate --yes
+./install.sh migration verify
+./install.sh migration retire --yes
 ./install.sh enroll-project /absolute/path/below/home --yes
 ./install.sh uninstall --dry-run
 ./install.sh uninstall --yes
@@ -64,7 +70,9 @@ Neovim synchronizes pinned plugins, resolves the effective nvim-treesitter parse
 
 `configure.sh` is offline and unprivileged and selects no packages. It accepts `terminal`, `pi`, `codex`, `neovim`, or `all`, ordered `--overlay ABS_DIR` values, and one `--legacy-root ABS_DIR`. It needs Node, not Python. Overlay precedence remains unchanged, while workstation and bare Neovim profiles share the enrolled runtime/app roots and writable local state.
 
-Legacy migration requires a provable managed profile. It copies legacy Pi state into the isolated profile and enrolls the exact old Pi root for cleanup. It deliberately preserves the old `~/.local/share/dotfiles/bare` prefix because separate Bun/Rust installations or user additions may live there. Ambiguous symlinks or unrelated Herdr state are refused.
+Legacy migration is an explicit `inspect -> prepare -> transfer -> activate -> verify -> retire` lifecycle. `inspect` is read-only and emits a versioned JSON report. `prepare` records an immutable source inventory but does not switch shell/profile links, launchers, shared skill discovery, or legacy state. Transfer requires `--yes`, rejects active writers, maps `~/.pi/agent/sessions` to the launcher-selected private session root, and copies credentials, settings, modes, nested sessions, and custom files only into absent or byte-identical destinations. Internal links are remapped into the new ownership roots, completed-snapshot managed links are retargeted, and unknown external links or unrelated Herdr state block before personal-data writes.
+
+Activation, rollback, and retirement also require `--yes`; Bootstrap never stops writers automatically. Verification checks the source identity, transferred files, modes, links, and activation links. Rollback restores the prior launchers only when the complete destination inventory is unchanged, so post-cutover tokens, sessions, additions, deletions, or mode changes cause an explicit refusal instead of data loss. Retirement separately requires verified activation, quiescence, and an unchanged legacy inventory, then deletes only the legacy Pi root, never external link targets. `migrate-legacy --yes` remains as a compatibility notice and does not run the phases. The old tool prefix remains outside this lifecycle because separate Bun/Rust installations or user additions may live there.
 
 Uninstall validates the journal, rejects path/symlink escapes and live processes identified by the owned runtime/profile, previews destructive roots and eligible native packages, removes enrolled credentials/sessions/projects/caches/backups, restores exact pre-install shared files, and removes bootstrap-added packages only after dependency previews. Pre-existing and shared packages are preserved; no autoremove or downgrade is used. Apt/dnf cleanup uses exact-name dpkg/RPM removal with dependency checks, not an expanding frontend transaction. Dpkg conffiles can remain and are reported; they are not blanket-purged. See [ownership tradeoffs](docs/ADR-002-native-ownership.md). Dry-run does not stop servers or create cleanup locks/journals. Real cleanup targets only enrolled multiplexer sockets. Changed shared files stop cleanup and retain recovery state for a retry. One already-running Node controller completes all package effects and restoration checks even when its own runtime is removed; recovery state is deleted last. Repeated uninstall is successful. Uninstall is not secure erasure and cannot remove remote provider data, host snapshots, administrator copies, or audit logs. Revoke short-lived host credentials provider-side when appropriate.
 

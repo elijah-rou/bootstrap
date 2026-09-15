@@ -28,8 +28,9 @@ usage() {
         '       ./install.sh (--lsp|-s) SERVER...' \
         '       ./install.sh (--tools|-t) TOOL...' \
         '       ./install.sh uninstall [--dry-run|--yes]' \
+        '       ./install.sh migration <inspect|prepare|transfer|activate|verify|rollback|retire> [--yes]' \
         '       ./install.sh enroll-project ABS_DIR --yes' \
-        '       ./install.sh migrate-legacy --yes' \
+        '       ./install.sh migrate-legacy --yes  # compatibility notice only' \
         'Languages: c cpp rust go python typescript elixir zig.' \
         'LSPs: clangd rust-analyzer gopls basedpyright ruff typescript-language-server bash-language-server elixirls zls.' \
         'Tools: zsh starship codex just wget unzip shellcheck ruff headroom.' \
@@ -37,6 +38,10 @@ usage() {
 }
 
 case "${1:-install}" in
+    migration)
+        shift
+        bootstrap_migration "$@"; exit $?
+        ;;
     enroll-project)
         [[ $# -eq 3 && "$2" == /* && "$3" == --yes ]] || { usage >&2; exit 2; }
         enroll_bootstrap_project "$2"; exit $?

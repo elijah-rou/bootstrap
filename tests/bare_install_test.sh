@@ -55,3 +55,29 @@ for args in '--languages' '--lsp unknown' '--tools nope' 'uninstall --bad'; do
   [[ $status -eq 2 && ! -e "$fixture/reject" ]]
 done
 echo 'PASS selectors reject before mutation'
+
+readiness_home="$fixture/readiness"
+mkdir -p "$readiness_home"
+readiness_env=(HOME="$readiness_home" XDG_STATE_HOME="$readiness_home/.state")
+env "${readiness_env[@]}" node "$ROOT_DIR/scripts/state-helper.mjs" init
+if env "${readiness_env[@]}" node "$ROOT_DIR/scripts/state-helper.mjs" ready >/dev/null 2>&1; then exit 1; fi
+env "${readiness_env[@]}" node "$ROOT_DIR/scripts/state-helper.mjs" component-begin core
+env "${readiness_env[@]}" node "$ROOT_DIR/scripts/state-helper.mjs" component-ready core
+env "${readiness_env[@]}" node "$ROOT_DIR/scripts/state-helper.mjs" component-begin pi
+if env "${readiness_env[@]}" node "$ROOT_DIR/scripts/state-helper.mjs" ready >/dev/null 2>&1; then exit 1; fi
+node -e 'const r=require(process.argv[1]);if(r.status!=="partial")process.exit(1)' "$readiness_home/.state/bootstrap/install.json"
+echo 'PASS readiness is derived from verified component state'
+
+(
+    export HOME="$fixture/herdr-conflict" XDG_CONFIG_HOME="$fixture/herdr-conflict/.config" XDG_STATE_HOME="$fixture/herdr-conflict/.state"
+    export XDG_DATA_HOME="$fixture/herdr-conflict/.data" XDG_CACHE_HOME="$fixture/herdr-conflict/.cache"
+    unset DOTFILES_BARE_ROOT BOOTSTRAP_PRIVATE_ROOT BOOTSTRAP_STATE_ROOT
+    mkdir -p "$XDG_CONFIG_HOME/herdr"
+    printf personal >"$XDG_CONFIG_HOME/herdr/personal.db"
+    source "$ROOT_DIR/install.sh"
+    bare_preflight() { :; }
+    install_native_keys() { printf effect >"$HOME/effect"; }
+    if install_bare; then exit 1; fi
+    [[ ! -e "$HOME/effect" && ! -e "$XDG_STATE_HOME/bootstrap" ]]
+)
+echo 'PASS Herdr conflicts stop before installer effects'

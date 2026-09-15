@@ -21,7 +21,8 @@ class OwnershipTest(unittest.TestCase):
         for name in ['credentials/auth.json','sessions/live.json','projects/enrolled/secret','cache/token','backups/auth.copy']:
             path=private/name; path.parent.mkdir(parents=True,exist_ok=True); path.write_text('sensitive')
         self.execute('enroll',private); self.execute('select','languages','rust'); self.execute('select','lsp','basedpyright')
-        self.execute('package','apt','git','1','2.0','installed'); self.execute('package','apt','jq','0','1.0','installed'); self.execute('ready')
+        self.execute('package','apt','git','1','2.0','installed'); self.execute('package','apt','jq','0','1.0','installed')
+        self.execute('component-begin','core'); self.execute('component-ready','core'); self.execute('ready')
         preview=self.execute('uninstall','--dry-run').stdout
         self.assertIn(f'delete-owned\t{private}',preview); self.assertIn('remove-package\tapt\tjq',preview); self.assertNotIn('remove-package\tapt\tgit',preview)
         self.assertTrue(private.exists()); self.assertTrue(shared.is_symlink()); self.assertEqual(unrelated.read_text(),'keep')

@@ -11,6 +11,13 @@ case "$command_name" in
     install|pi|fetch|preflight|doctor|link|codex-link|herdr) [[ $# -le 1 ]] || { printf 'Unexpected arguments\n' >&2; exit 2; } ;;
     uninstall) case "${2:-}" in --dry-run|--yes) [[ $# -eq 2 ]] ;; '') [[ $# -eq 1 ]] ;; *) false ;; esac || { printf 'Usage: bootstrap.sh uninstall [--dry-run|--yes]\n' >&2; exit 2; } ;;
     migrate-legacy) [[ $# -eq 2 && "$2" == --yes ]] || { printf 'Usage: bootstrap.sh migrate-legacy --yes\n' >&2; exit 2; } ;;
+    migration)
+        case "${2:-}" in
+            inspect|prepare|verify) [[ $# -eq 2 ]] ;;
+            transfer|activate|rollback|retire) [[ $# -eq 3 && "$3" == --yes ]] ;;
+            *) false ;;
+        esac || { printf 'Usage: bootstrap.sh migration <inspect|prepare|transfer|activate|verify|rollback|retire> [--yes]\n' >&2; exit 2; }
+        ;;
     enroll-project) [[ $# -eq 3 && "$2" == /* && "$3" == --yes ]] || { printf 'Usage: bootstrap.sh enroll-project ABS_DIR --yes\n' >&2; exit 2; } ;;
     --languages|-l)
         [[ $# -gt 1 ]] || { printf 'Select languages: c cpp rust go python typescript elixir zig\n' >&2; exit 2; }
@@ -34,7 +41,8 @@ case "$command_name" in
             '       bash bootstrap.sh (--lsp|-s) SERVER...' \
             '       bash bootstrap.sh (--tools|-t) TOOL...' \
             '       bash bootstrap.sh uninstall [--dry-run|--yes]' \
-            '       bash bootstrap.sh migrate-legacy --yes' \
+            '       bash bootstrap.sh migration <inspect|prepare|transfer|activate|verify|rollback|retire> [--yes]' \
+            '       bash bootstrap.sh migrate-legacy --yes  # compatibility notice only' \
             '       bash bootstrap.sh enroll-project ABS_DIR --yes' \
             'Tools: zsh starship codex just wget unzip shellcheck ruff headroom.' \
             'Languages: c cpp rust go python typescript elixir zig.' \
@@ -50,7 +58,7 @@ snapshot_ready() {
         [[ "$(cat "$snapshot/.bootstrap-archive-sha256")" == "$ARCHIVE_SHA256" ]]
 }
 
-if [[ "$command_name" == doctor || "$command_name" == link || "$command_name" == codex-link || "$command_name" == uninstall || "$command_name" == migrate-legacy || "$command_name" == enroll-project ]]; then
+if [[ "$command_name" == doctor || "$command_name" == link || "$command_name" == codex-link || "$command_name" == uninstall || "$command_name" == migration || "$command_name" == migrate-legacy || "$command_name" == enroll-project ]]; then
     snapshot_ready || { printf 'Snapshot is missing or incomplete; run bootstrap.sh fetch first\n' >&2; exit 1; }
 else
     for prerequisite in curl tar awk; do
