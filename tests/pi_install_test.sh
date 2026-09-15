@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-fixture="$(mktemp -d)"; trap 'rm -rf "$fixture"' EXIT
+fixture="$(mktemp -d)"; fixture="$(cd "$fixture" && pwd -P)"; trap 'rm -rf "$fixture"' EXIT
 export HOME="$fixture/home" USER="${USER:-$(id -un)}"
 export XDG_CONFIG_HOME="$HOME/.config" XDG_STATE_HOME="$HOME/.local/state" XDG_DATA_HOME="$HOME/.local/share" XDG_CACHE_HOME="$HOME/.cache"
 unset DOTFILES_BARE_ROOT BOOTSTRAP_PRIVATE_ROOT BOOTSTRAP_STATE_ROOT PI_CODING_AGENT_DIR PI_CODING_AGENT_SESSION_DIR NVIM_APPNAME BOOTSTRAP_LSP_SELECTIONS BUN_INSTALL npm_config_prefix CARGO_HOME RUSTUP_HOME GOPATH GOBIN GH_CONFIG_DIR TMUX_TMPDIR

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; fixture="$(mktemp -d)"; trap 'rm -rf "$fixture"' EXIT
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; fixture="$(mktemp -d)"; fixture="$(cd "$fixture" && pwd -P)"; trap 'rm -rf "$fixture"' EXIT
 export HOME="$fixture/home"; export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" XDG_STATE_HOME="$HOME/.local/state" XDG_CACHE_HOME="$HOME/.cache"; mkdir -p "$HOME"
 source "$ROOT/install.sh"; source "$ROOT/scripts/bare-env.sh"
 node "$ROOT/scripts/state-helper.mjs" init

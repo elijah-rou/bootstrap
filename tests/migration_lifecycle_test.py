@@ -16,7 +16,7 @@ class MigrationLifecycleTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix='bootstrap-migration-')
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.home = self.root / 'home'
         self.legacy = self.home / '.pi/agent'
         self.agent = self.home / 'private/pi/agent'
@@ -173,6 +173,18 @@ class MigrationLifecycleTest(unittest.TestCase):
         self.assertTrue((self.legacy / 'auth.json').exists())
         self.assertFalse((self.state / 'migration.json').exists())
 
+    def test_quiescent_reverification_accepts_newer_destination_writes_for_retirement(self):
+        self.seed_legacy()
+        for phase, confirm in [('prepare', False), ('transfer', True), ('activate', True), ('verify', False)]:
+            self.run_migration(phase, confirm)
+        refreshed = '{"token":"refreshed-after-cutover"}\n'
+        (self.agent / 'auth.json').write_text(refreshed)
+        (self.sessions / 'nested/session.jsonl').write_text('{"message":"appended-after-cutover"}\n')
+        self.run_migration('verify')
+        self.run_migration('retire', confirm=True)
+        self.assertEqual((self.agent / 'auth.json').read_text(), refreshed)
+        self.assertIn('appended-after-cutover', (self.sessions / 'nested/session.jsonl').read_text())
+
     def test_source_mutation_after_preparation_blocks_transfer(self):
         self.seed_legacy()
         self.run_migration('prepare')
@@ -180,6 +192,97 @@ class MigrationLifecycleTest(unittest.TestCase):
         blocked = self.run_migration('transfer', confirm=True, status=1)
         self.assertIn('Legacy source changed', blocked.stderr)
         self.assertFalse((self.agent / 'auth.json').exists())
+
+    def test_destination_directory_mode_conflict_blocks_before_copy(self):
+        self.legacy.mkdir(parents=True)
+        source_directory = self.legacy / 'custom'
+        source_directory.mkdir(mode=0o700)
+        (source_directory / 'secret').write_text('secret\n')
+        destination_directory = self.agent / 'custom'
+        destination_directory.mkdir(parents=True, mode=0o755)
+        blocked = self.run_migration('prepare', status=1)
+        self.assertIn('directory mode', blocked.stderr.lower())
+        self.assertFalse((destination_directory / 'secret').exists())
+
+    def test_destination_parent_alias_cannot_collapse_source_and_destination(self):
+        self.legacy.mkdir(parents=True)
+        (self.legacy / 'auth.json').write_text('{"token":"synthetic"}\n')
+        private = self.home / 'private'
+        private.mkdir()
+        (private / 'pi').symlink_to(self.home / '.pi')
+        blocked = self.run_migration('prepare', status=1)
+        self.assertIn('symlink', blocked.stderr.lower())
+        self.assertTrue((self.legacy / 'auth.json').exists())
+
+    def test_tampered_embedded_traversal_cannot_delete_unrelated_file(self):
+        self.seed_legacy()
+        for phase, confirm in [('prepare', False), ('transfer', True), ('activate', True), ('verify', False)]:
+            self.run_migration(phase, confirm)
+        victim = self.home / 'victim'
+        victim.write_text('unrelated\n')
+        journal_path = self.state / 'migration.json'
+        journal = json.loads(journal_path.read_text())
+        file_index = next(index for index, item in enumerate(journal['sourceInventory']) if item['type'] == 'file')
+        journal['sourceInventory'][file_index]['path'] = 'x/../../../../../victim'
+        journal_path.write_text(json.dumps(journal))
+        blocked = self.run_migration('rollback', confirm=True, status=1)
+        self.assertIn('malformed', blocked.stderr.lower())
+        self.assertEqual(victim.read_text(), 'unrelated\n')
+
+    def test_rollback_refuses_when_legacy_source_lost_its_last_copy(self):
+        self.seed_legacy()
+        for phase, confirm in [('prepare', False), ('transfer', True), ('activate', True)]:
+            self.run_migration(phase, confirm)
+        (self.legacy / 'auth.json').unlink()
+        blocked = self.run_migration('rollback', confirm=True, status=1)
+        self.assertIn('legacy source changed', blocked.stderr.lower())
+        self.assertTrue((self.agent / 'auth.json').exists())
+
+    def test_retirement_retry_rechecks_destination_before_source_deletion(self):
+        self.seed_legacy()
+        for phase, confirm in [('prepare', False), ('transfer', True), ('activate', True), ('verify', False)]:
+            self.run_migration(phase, confirm)
+        fault_env = dict(self.env, BOOTSTRAP_MIGRATION_TEST_ONLY='1',
+                         BOOTSTRAP_MIGRATION_TEST_HOME=str(self.home),
+                         BOOTSTRAP_MIGRATION_TEST_FAULT='retire-after-intent')
+        interrupted = subprocess.run(['bash', str(ROOT / 'install.sh'), 'migration', 'retire', '--yes'],
+                                     env=fault_env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(interrupted.returncode, 86, interrupted.stdout + interrupted.stderr)
+        (self.agent / 'auth.json').unlink()
+        blocked = self.run_migration('retire', confirm=True, status=1)
+        self.assertIn('destination', blocked.stderr.lower())
+        self.assertTrue((self.legacy / 'auth.json').exists())
+
+    def test_legacy_node_hosted_pi_blocks_transfer(self):
+        self.seed_legacy()
+        self.run_migration('prepare')
+        runtime = self.home / '.local/share/dotfiles/bare/node/bin'
+        runtime.mkdir(parents=True)
+        (runtime / 'node').symlink_to(shutil.which('node'))
+        cli = self.home / '.local/share/dotfiles/bare/pi-coding-agent/dist/cli.js'
+        cli.parent.mkdir(parents=True)
+        cli.write_text('setInterval(() => {}, 1000);\n')
+        writer = subprocess.Popen([runtime / 'node', cli], env=self.env)
+        self.addCleanup(lambda: writer.poll() is not None or writer.kill())
+        time.sleep(0.1)
+        blocked = self.run_migration('transfer', confirm=True, status=1)
+        self.assertIn('active writers', blocked.stderr)
+        writer.terminate()
+        writer.wait(timeout=5)
+
+    def test_interrupted_rollback_resumes_from_before_or_after_states(self):
+        self.seed_legacy()
+        for phase, confirm in [('prepare', False), ('transfer', True), ('activate', True), ('verify', False)]:
+            self.run_migration(phase, confirm)
+        fault_env = dict(self.env, BOOTSTRAP_MIGRATION_TEST_ONLY='1',
+                         BOOTSTRAP_MIGRATION_TEST_HOME=str(self.home),
+                         BOOTSTRAP_MIGRATION_TEST_FAULT='rollback-after-activation-5')
+        interrupted = subprocess.run(['bash', str(ROOT / 'install.sh'), 'migration', 'rollback', '--yes'],
+                                     env=fault_env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(interrupted.returncode, 86, interrupted.stdout + interrupted.stderr)
+        self.run_migration('rollback', confirm=True)
+        journal = json.loads((self.state / 'migration.json').read_text())
+        self.assertEqual(journal['phase'], 'rolled-back')
 
     def test_transfer_retry_and_clean_rollback_restore_previous_selection(self):
         self.seed_legacy()

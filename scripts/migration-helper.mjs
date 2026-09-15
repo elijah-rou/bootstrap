@@ -5,7 +5,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const [command, ...args] = process.argv.slice(2);
@@ -28,19 +28,57 @@ function within(root, value, allowRoot = true) {
 }
 function lstatSafe(path) { try { return lstatSync(path); } catch (error) { if (error.code === 'ENOENT') return undefined; throw error; } }
 function hashFile(path) { return createHash('sha256').update(readFileSync(path)).digest('hex'); }
+function pathChain(root, value) {
+  const rel = relative(root, value);
+  const result = [root];
+  if (!rel) return result;
+  let cursor = root;
+  for (const component of rel.split(sep)) { cursor = join(cursor, component); result.push(cursor); }
+  return result;
+}
 function validateHomePath(name, value) {
   if (!isAbsolute(value) || value === '/' || !within(home, value)) fail(`${name} must be an absolute path below HOME: ${value}`, 2);
-  let cursor = dirname(resolve(value));
-  while (within(home, cursor, true) && cursor !== home) {
-    const stat = lstatSafe(cursor);
-    if (stat?.isSymbolicLink() && !within(home, realpathSync(cursor), true)) fail(`${name} escapes HOME through symlink parent: ${cursor}`);
-    cursor = dirname(cursor);
+  for (const path of pathChain(home, value)) {
+    const stat = lstatSafe(path);
+    if (!stat) continue;
+    if (stat.isSymbolicLink()) fail(`${name} has a symlink component: ${path}`);
+    if (path !== value && !stat.isDirectory()) fail(`${name} has a non-directory ancestor: ${path}`);
+    if (realpathSync(path) !== path) fail(`${name} is not canonical at: ${path}`);
+  }
+}
+function relevantRootPaths() {
+  const paths = new Set([home]);
+  for (const root of [sourceRoot, privateRoot, agentRoot, sessionRoot, stateRoot]) for (const path of pathChain(home, root)) paths.add(path);
+  return [...paths].sort();
+}
+function captureRootIdentities() {
+  const identities = {};
+  for (const path of relevantRootPaths()) {
+    const stat = lstatSafe(path);
+    if (stat) identities[path] = `${stat.dev}:${stat.ino}`;
+  }
+  return identities;
+}
+function validateRootIdentities(identities) {
+  if (!plainObject(identities)) fail('Malformed migration root identities');
+  const allowed = new Set(relevantRootPaths());
+  for (const [path, identity] of Object.entries(identities)) {
+    if (!allowed.has(path) || !/^[0-9]+:[0-9]+$/.test(identity)) fail('Malformed migration root identity');
+    const stat = lstatSafe(path);
+    if (stat && (stat.isSymbolicLink() || `${stat.dev}:${stat.ino}` !== identity)) fail(`Migration root identity changed: ${path}`);
   }
 }
 function validateRoots() {
-  if (!isAbsolute(home) || home === '/') fail(`HOME must be an absolute path below /: ${home}`, 2);
-  for (const [name, value] of [['legacy Pi root', sourceRoot], ['private root', privateRoot], ['state root', stateRoot]]) validateHomePath(name, value);
+  const homeStat = lstatSafe(home);
+  if (!isAbsolute(home) || home === '/' || !homeStat?.isDirectory() || homeStat.isSymbolicLink() || realpathSync(home) !== home) fail(`HOME must be a canonical non-symlink directory below /: ${home}`, 2);
+  for (const [name, value] of [['legacy Pi root', sourceRoot], ['private root', privateRoot], ['agent root', agentRoot], ['session root', sessionRoot], ['state root', stateRoot]]) validateHomePath(name, value);
   if (within(sourceRoot, privateRoot, true) || within(privateRoot, sourceRoot, true)) fail('Legacy and destination roots must not overlap', 2);
+  const sourceReal = lstatSafe(sourceRoot) ? realpathSync(sourceRoot) : undefined;
+  for (const destination of [privateRoot, agentRoot, sessionRoot]) {
+    if (!sourceReal || !lstatSafe(destination)) continue;
+    const destinationReal = realpathSync(destination);
+    if (within(sourceReal, destinationReal, true) || within(destinationReal, sourceReal, true)) fail('Legacy and destination roots physically overlap');
+  }
 }
 function completedSnapshot(root) {
   if (!/^[0-9a-f]{40}$/.test(root.split(sep).at(-1) || '')) return false;
@@ -119,7 +157,7 @@ function mappedEntries(sourceInventory) {
 function sameDescriptor(actual, expected) {
   if (actual.type !== expected.type) return false;
   if (actual.type === 'absent') return true;
-  if (actual.type === 'directory') return true;
+  if (actual.type === 'directory') return actual.mode === expected.mode;
   if (actual.type === 'file') return actual.mode === expected.mode && actual.size === expected.size && actual.sha256 === expected.sha256;
   if (actual.type === 'symlink') return actual.target === expected.target;
   return false;
@@ -182,34 +220,80 @@ function atomicWrite(path, value) {
   renameSync(temporary, path);
 }
 function validRelativePath(path) {
-  return typeof path === 'string' && path !== '' && !isAbsolute(path) && path !== '..' && !path.startsWith(`..${sep}`) && !path.includes('\0') && !path.includes('\n') && !path.includes('\r');
+  if (typeof path !== 'string' || path === '' || isAbsolute(path) || normalize(path) !== path || path.includes('\0') || path.includes('\n') || path.includes('\r')) return false;
+  return path.split(sep).every(component => component !== '' && component !== '.' && component !== '..');
 }
-function validStoredDescriptor(item) {
+function exactKeys(value, expected) { return Object.keys(value).sort().join(',') === [...expected].sort().join(','); }
+function validStoredDescriptor(item, withPath = true, source = false) {
   if (!plainObject(item) || !['absent', 'directory', 'file', 'symlink'].includes(item.type)) return false;
-  if (item.type === 'directory') return Number.isInteger(item.mode) && item.mode >= 0 && item.mode <= 0o777;
-  if (item.type === 'file') return Number.isInteger(item.mode) && item.mode >= 0 && item.mode <= 0o777 && Number.isSafeInteger(item.size) && item.size >= 0 && /^[0-9a-f]{64}$/.test(item.sha256 || '');
-  if (item.type === 'symlink') return typeof item.target === 'string' && !item.target.includes('\0');
-  return true;
+  const prefix = withPath ? ['path'] : [];
+  if (withPath && !validRelativePath(item.path)) return false;
+  if (item.type === 'absent') return exactKeys(item, [...prefix, 'type']);
+  if (item.type === 'directory') return exactKeys(item, [...prefix, 'type', 'mode']) && Number.isInteger(item.mode) && item.mode >= 0 && item.mode <= 0o777;
+  if (item.type === 'file') return exactKeys(item, [...prefix, 'type', 'mode', 'size', 'sha256']) && Number.isInteger(item.mode) && item.mode >= 0 && item.mode <= 0o777 && Number.isSafeInteger(item.size) && item.size >= 0 && /^[0-9a-f]{64}$/.test(item.sha256 || '');
+  const keys = source ? [...prefix, 'type', 'target', 'classification'] : [...prefix, 'type', 'target'];
+  return exactKeys(item, keys) && typeof item.target === 'string' && !item.target.includes('\0') && (!source || ['internal', 'managed'].includes(item.classification));
 }
+function validateUniqueInventory(items, name, source = false) {
+  if (!Array.isArray(items) || items.length > maxEntries) fail(`Malformed ${name}`);
+  const paths = new Set();
+  for (const item of items) {
+    if (!validStoredDescriptor(item, true, source) || paths.has(item.path)) fail(`Malformed ${name}`);
+    paths.add(item.path);
+  }
+}
+function expectedTransferredEntry(source) {
+  return { path: source.path, type: source.type, ...(source.mode === undefined ? {} : { mode: source.mode }), ...(source.size === undefined ? {} : { size: source.size }), ...(source.sha256 === undefined ? {} : { sha256: source.sha256 }), ...(source.type === 'symlink' ? { target: source.target } : {}) };
+}
+function fullPathForSource(path) { return path === 'sessions' || path.startsWith(`sessions${sep}`) ? path : `agent${sep}${path}`; }
 function validateJournal(value) {
-  if (!plainObject(value) || value.schemaVersion !== 1 || !['prepared', 'transferred', 'activated', 'verified', 'retiring', 'rolled-back', 'retired'].includes(value.phase)) fail('Malformed migration journal');
+  const allowedKeys = ['schemaVersion','phase','sourceRoot','agentRoot','sessionRoot','sourceInventory','destinationBefore','rootIdentities','preparedAt','transferredInventory','transferredFullInventory','transferredAt','activation','verifiedInventory','verifiedFullInventory','verifiedAt','rollbackState','rolledBackAt','retiredAt'];
+  if (!plainObject(value) || Object.keys(value).some(key => !allowedKeys.includes(key)) || value.schemaVersion !== 1 || !['prepared', 'transferred', 'activated', 'verified', 'retiring', 'rolling-back', 'rolled-back', 'retired'].includes(value.phase)) fail('Malformed migration journal');
   if (value.sourceRoot !== sourceRoot || value.agentRoot !== agentRoot || value.sessionRoot !== sessionRoot) fail('Migration roots differ from the recorded operation');
-  if (!Array.isArray(value.sourceInventory) || value.sourceInventory.length > maxEntries || !Array.isArray(value.destinationBefore) || value.destinationBefore.length !== value.sourceInventory.length) fail('Malformed migration inventory');
-  for (const item of value.sourceInventory) {
-    if (!validRelativePath(item.path) || !validStoredDescriptor(item) || (item.type === 'symlink' && !['internal', 'managed'].includes(item.classification))) fail('Malformed source migration entry');
+  validateRootIdentities(value.rootIdentities);
+  validateUniqueInventory(value.sourceInventory, 'source migration inventory', true);
+  validateUniqueInventory(value.destinationBefore, 'destination migration inventory');
+  if (value.destinationBefore.length !== value.sourceInventory.length) fail('Migration inventories do not correspond');
+  value.sourceInventory.forEach((item, index) => {
+    if (value.destinationBefore[index].path !== item.path) fail('Migration inventories do not correspond');
+    const destination = destinationFor(item.path);
+    if (!within(agentRoot, destination, true) && !within(sessionRoot, destination, true)) fail('Mapped migration destination escaped roots');
     if (item.type === 'symlink') {
-      const resolvedTarget = resolve(dirname(destinationFor(item.path)), item.target);
+      const resolvedTarget = resolve(dirname(destination), item.target);
       if (item.classification === 'internal' && !within(agentRoot, resolvedTarget, true) && !within(sessionRoot, resolvedTarget, true)) fail('Internal migration link escaped destination roots');
       if (item.classification === 'managed' && !within(checkoutRoot, resolvedTarget, true)) fail('Managed migration link escaped the selected source');
     }
+  });
+  if (value.transferredInventory !== undefined) {
+    validateUniqueInventory(value.transferredInventory, 'transferred migration inventory');
+    if (value.transferredInventory.length !== value.sourceInventory.length) fail('Transferred inventory does not correspond');
+    value.sourceInventory.forEach((item, index) => { if (!sameDescriptor(value.transferredInventory[index], expectedTransferredEntry(item)) || value.transferredInventory[index].path !== item.path) fail('Transferred inventory does not correspond'); });
+    validateUniqueInventory(value.transferredFullInventory, 'full transferred inventory');
+    const full = new Map(value.transferredFullInventory.map(item => [item.path, item]));
+    for (const item of value.transferredInventory) if (!sameDescriptor(full.get(fullPathForSource(item.path)) || { type: 'absent' }, item)) fail('Full transferred inventory does not correspond');
   }
-  for (const item of value.destinationBefore) if (!validRelativePath(item.path) || !validStoredDescriptor(item)) fail('Malformed destination migration entry');
+  if (value.verifiedInventory !== undefined) {
+    validateUniqueInventory(value.verifiedInventory, 'verified migration inventory');
+    if (value.verifiedInventory.length !== value.sourceInventory.length) fail('Verified inventory does not correspond');
+    value.verifiedInventory.forEach((item, index) => { if (item.path !== value.sourceInventory[index].path) fail('Verified inventory does not correspond'); });
+    validateUniqueInventory(value.verifiedFullInventory, 'full verified inventory');
+    const full = new Map(value.verifiedFullInventory.map(item => [item.path, item]));
+    for (const item of value.verifiedInventory) if (!sameDescriptor(full.get(fullPathForSource(item.path)) || { type: 'absent' }, item)) fail('Full verified inventory does not correspond');
+  }
   if (value.activation !== undefined) {
     const expected = activationTargets();
     if (!Array.isArray(value.activation) || value.activation.length !== expected.length) fail('Malformed activation journal');
     value.activation.forEach((item, index) => {
-      if (!plainObject(item) || item.target !== expected[index].target || item.source !== expected[index].source || !validStoredDescriptor(item.before)) fail('Malformed activation target');
+      if (!plainObject(item) || !exactKeys(item, ['target','source','before']) || item.target !== expected[index].target || item.source !== expected[index].source || !validStoredDescriptor(item.before, false) || !['absent','symlink'].includes(item.before.type)) fail('Malformed activation target');
     });
+  }
+  if (value.phase === 'rolling-back' && value.rollbackState === undefined) fail('Rolling-back journal has no progress state');
+  if (value.rollbackState !== undefined) {
+    if (!plainObject(value.rollbackState) || !exactKeys(value.rollbackState, ['activationRestored','destinationsRemoved']) || !Array.isArray(value.rollbackState.activationRestored) || !Array.isArray(value.rollbackState.destinationsRemoved)) fail('Malformed rollback state');
+    const targets = new Set((value.activation || []).map(item => item.target));
+    if (new Set(value.rollbackState.activationRestored).size !== value.rollbackState.activationRestored.length || value.rollbackState.activationRestored.some(path => !targets.has(path))) fail('Malformed rollback progress');
+    const paths = new Set(value.sourceInventory.map(item => item.path));
+    if (new Set(value.rollbackState.destinationsRemoved).size !== value.rollbackState.destinationsRemoved.length || value.rollbackState.destinationsRemoved.some(path => !paths.has(path))) fail('Malformed rollback progress');
   }
   return value;
 }
@@ -233,11 +317,23 @@ function requireSafeRetirementRemainder(journal) {
 function currentMappedInventory(entries) {
   return entries.map(item => ({ path: item.path, ...descriptor(item.destination) }));
 }
+function destinationPreservesSource(actual, source) {
+  if (actual.type !== source.type) return false;
+  if (source.type === 'symlink') return actual.target === source.target;
+  return ['directory', 'file'].includes(source.type);
+}
+function requireVerifiedDestination(journal) {
+  if (!Array.isArray(journal.verifiedInventory) || !Array.isArray(journal.verifiedFullInventory)) fail('Migration needs a fresh quiescent verification receipt');
+  const current = currentMappedInventory(mappedEntries(journal.sourceInventory));
+  if (!inventoriesEqual(current, journal.verifiedInventory) || !inventoriesEqual(fullDestinationInventory(), journal.verifiedFullInventory)) fail('Destination changed since quiescent verification; verify again before retirement');
+}
 function fullDestinationInventory() {
-  return [
-    ...inventory(agentRoot).map(item => ({ ...item, path: `agent/${item.path}` })),
-    ...inventory(sessionRoot).map(item => ({ ...item, path: `sessions/${item.path}` })),
-  ];
+  const result = [];
+  const agent = descriptor(agentRoot); if (agent.type !== 'absent') result.push({ path: 'agent', ...agent });
+  result.push(...inventory(agentRoot).map(item => ({ ...item, path: `agent/${item.path}` })));
+  const sessions = descriptor(sessionRoot); if (sessions.type !== 'absent') result.push({ path: 'sessions', ...sessions });
+  result.push(...inventory(sessionRoot).map(item => ({ ...item, path: `sessions/${item.path}` })));
+  return result;
 }
 function transferEntries(entries) {
   for (const item of entries.filter(value => value.type === 'directory')) {
@@ -265,7 +361,7 @@ function activationTargets() {
     [join(home, '.local/bin/pi-headroom'), join(checkoutRoot, 'scripts/pi-headroom')],
   ];
   return targets.map(([target, source]) => {
-    validateHomePath('activation target', target);
+    validateHomePath('activation parent', dirname(target));
     return { target, source };
   });
 }
@@ -293,15 +389,11 @@ function writeActivation(journal) {
   journal.phase = 'activated';
   atomicWrite(journalPath, journal);
 }
-function restoreActivation(journal) {
-  for (const item of [...(journal.activation || [])].reverse()) {
-    const current = descriptor(item.target);
-    if (current.type !== 'symlink' || current.target !== item.source) fail(`Activation target changed; refusing rollback: ${item.target}`);
-  }
-  for (const item of [...(journal.activation || [])].reverse()) {
-    rmSync(item.target);
-    if (item.before.type === 'symlink') symlinkSync(item.before.target, item.target);
-  }
+function testFault(boundary) {
+  if (process.env.BOOTSTRAP_MIGRATION_TEST_FAULT !== boundary) return;
+  if (process.env.BOOTSTRAP_MIGRATION_TEST_ONLY !== '1' || resolve(process.env.BOOTSTRAP_MIGRATION_TEST_HOME || '') !== home) fail('Migration fault injection is restricted to an explicit HOME fixture', 2);
+  console.error(`Injected migration test fault: ${boundary}`);
+  process.exit(86);
 }
 function result(value) { process.stdout.write(`${JSON.stringify(value, null, 2)}\n`); }
 
@@ -326,10 +418,12 @@ switch (command) {
     if (!report.ready) fail(`Migration conflicts must be resolved before preparation:\n${JSON.stringify(report, null, 2)}`);
     const sourceInventory = inventory(sourceRoot, true);
     const entries = mappedEntries(sourceInventory);
+    mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
     const journal = {
       schemaVersion: 1, phase: 'prepared', sourceRoot, agentRoot, sessionRoot,
       sourceInventory,
       destinationBefore: currentMappedInventory(entries),
+      rootIdentities: captureRootIdentities(),
       preparedAt: new Date().toISOString(),
     };
     atomicWrite(journalPath, journal);
@@ -356,6 +450,7 @@ switch (command) {
     if (!inventoriesEqual(after, expected)) fail('Transferred destination verification failed; partial state is retained for retry');
     journal.transferredInventory = after;
     journal.transferredFullInventory = fullDestinationInventory();
+    journal.rootIdentities = { ...journal.rootIdentities, ...captureRootIdentities() };
     journal.phase = 'transferred'; journal.transferredAt = new Date().toISOString();
     atomicWrite(journalPath, journal);
     result({ schemaVersion: 1, phase: journal.phase, transferredEntries: after.length });
@@ -377,11 +472,13 @@ switch (command) {
     if (!['activated', 'verified'].includes(journal.phase)) fail(`Verification requires activated state, found ${journal.phase}`);
     requireSourceIdentity(journal);
     const current = currentMappedInventory(mappedEntries(journal.sourceInventory));
-    if (!inventoriesEqual(current, journal.transferredInventory)) fail('Transferred personal state changed before verification');
+    current.forEach((item, index) => { if (!destinationPreservesSource(item, expectedTransferredEntry(journal.sourceInventory[index]))) fail(`Migrated destination is missing or unsafe: ${item.path}`); });
     for (const item of journal.activation || []) {
       const actual = descriptor(item.target);
       if (actual.type !== 'symlink' || actual.target !== item.source) fail(`Activation verification failed: ${item.target}`);
     }
+    journal.verifiedInventory = current;
+    journal.verifiedFullInventory = fullDestinationInventory();
     journal.phase = 'verified'; journal.verifiedAt = new Date().toISOString();
     atomicWrite(journalPath, journal);
     result({ schemaVersion: 1, phase: journal.phase, verifiedEntries: current.length });
@@ -390,19 +487,49 @@ switch (command) {
   case 'rollback': {
     if (args.length) fail('migration rollback accepts no helper arguments', 2);
     const journal = loadJournal();
-    if (!['activated', 'verified'].includes(journal.phase)) fail(`Rollback requires activated or verified state, found ${journal.phase}`);
+    if (!['activated', 'verified', 'rolling-back'].includes(journal.phase)) fail(`Rollback requires activated, verified, or rolling-back state, found ${journal.phase}`);
+    requireSourceIdentity(journal);
     const entries = mappedEntries(journal.sourceInventory);
-    if (!Array.isArray(journal.transferredFullInventory) || !inventoriesEqual(fullDestinationInventory(), journal.transferredFullInventory)) fail('Destination has post-cutover additions, deletions, mode changes, link changes, or file changes; rollback refused. Preserve both roots and inspect differences before recovery.');
-    restoreActivation(journal);
+    if (journal.phase !== 'rolling-back') {
+      if (!Array.isArray(journal.transferredFullInventory) || !inventoriesEqual(fullDestinationInventory(), journal.transferredFullInventory)) fail('Destination has post-cutover additions, deletions, mode changes, link changes, or file changes; rollback refused. Preserve both roots and inspect differences before recovery.');
+      journal.phase = 'rolling-back';
+      journal.rollbackState = { activationRestored: [], destinationsRemoved: [] };
+      atomicWrite(journalPath, journal);
+      testFault('rollback-after-intent');
+    }
+    for (let index = journal.activation.length - 1; index >= 0; index -= 1) {
+      const item = journal.activation[index];
+      const current = descriptor(item.target);
+      const restored = sameDescriptor(current, item.before);
+      if (!restored && !(current.type === 'symlink' && current.target === item.source)) fail(`Activation target is neither rollback before nor after state: ${item.target}`);
+      if (!restored) {
+        rmSync(item.target);
+        if (item.before.type === 'symlink') symlinkSync(item.before.target, item.target);
+        testFault(`rollback-after-activation-${index}`);
+      }
+      if (!journal.rollbackState.activationRestored.includes(item.target)) {
+        journal.rollbackState.activationRestored.push(item.target);
+        atomicWrite(journalPath, journal);
+      }
+    }
     for (let index = entries.length - 1; index >= 0; index -= 1) {
       const item = entries[index];
       const before = journal.destinationBefore[index];
       if (before.type !== 'absent') continue;
-      const stat = lstatSafe(item.destination);
-      if (!stat) continue;
-      if (stat.isDirectory() && !stat.isSymbolicLink()) {
-        if (readdirSync(item.destination).length === 0) rmdirSync(item.destination);
-      } else rmSync(item.destination);
+      const current = descriptor(item.destination);
+      const removed = current.type === 'absent';
+      if (!removed && !sameDescriptor(current, journal.transferredInventory[index])) fail(`Migration destination is neither rollback before nor after state: ${item.destination}`);
+      if (!removed) {
+        if (current.type === 'directory') {
+          if (readdirSync(item.destination).length !== 0) fail(`Rollback directory still contains migrated entries: ${item.destination}`);
+          rmdirSync(item.destination);
+        } else rmSync(item.destination);
+        testFault(`rollback-after-destination-${index}`);
+      }
+      if (!journal.rollbackState.destinationsRemoved.includes(item.path)) {
+        journal.rollbackState.destinationsRemoved.push(item.path);
+        atomicWrite(journalPath, journal);
+      }
     }
     journal.phase = 'rolled-back'; journal.rolledBackAt = new Date().toISOString();
     atomicWrite(journalPath, journal);
@@ -413,15 +540,16 @@ switch (command) {
     if (args.length) fail('migration retire accepts no helper arguments', 2);
     const journal = loadJournal();
     if (!['verified', 'retiring'].includes(journal.phase)) fail(`Retirement requires verified state, found ${journal.phase}`);
+    requireVerifiedDestination(journal);
     if (journal.phase === 'verified') {
       requireSourceIdentity(journal);
-      const current = currentMappedInventory(mappedEntries(journal.sourceInventory));
-      if (!inventoriesEqual(current, journal.transferredInventory)) fail('Destination changed after verification; re-verify and preserve new writes before retirement');
       journal.phase = 'retiring';
       atomicWrite(journalPath, journal);
+      testFault('retire-after-intent');
     }
     if (lstatSafe(sourceRoot)) {
       requireSafeRetirementRemainder(journal);
+      requireVerifiedDestination(journal);
       rmSync(sourceRoot, { recursive: true });
     }
     journal.phase = 'retired'; journal.retiredAt = new Date().toISOString();
@@ -442,7 +570,8 @@ switch (command) {
     if (journal.phase === 'retired') {
       if (lstatSafe(sourceRoot)) fail('Retired legacy source unexpectedly reappeared');
     } else requireSourceIdentity(journal);
-    if (!inventoriesEqual(currentMappedInventory(mappedEntries(journal.sourceInventory)), journal.transferredInventory)) fail('Migrated destination changed before adoption');
+    const current = currentMappedInventory(mappedEntries(journal.sourceInventory));
+    current.forEach((item, index) => { if (!destinationPreservesSource(item, expectedTransferredEntry(journal.sourceInventory[index]))) fail('Migrated destination is missing or unsafe before adoption'); });
     break;
   }
   case 'protected-list': {

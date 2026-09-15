@@ -506,8 +506,12 @@ bootstrap_migration() (
             node "$DOTFILES_DIR/scripts/migration-helper.mjs" inspect
             return
             ;;
-        prepare|verify)
+        prepare)
             [[ $# -eq 1 ]] || return 2
+            ;;
+        verify)
+            [[ $# -eq 1 ]] || return 2
+            bootstrap_migration_quiescent || return 1
             ;;
         transfer|activate|rollback|retire)
             [[ $# -eq 2 && "$confirmation" == --yes ]] || { warn "migration $phase requires --yes"; return 2; }
@@ -521,20 +525,33 @@ bootstrap_migration() (
 )
 
 bootstrap_live_writers() {
-    local output uid pid executable arguments environment found=1 own_uid
+    local output uid pid executable arguments environment found=1 own_uid process_name
+    local legacy_pi="${BOOTSTRAP_LEGACY_PI_ROOT:-$HOME/.pi/agent}"
+    local legacy_runtime="${BOOTSTRAP_LEGACY_RUNTIME_ROOT:-$HOME/.local/share/dotfiles/bare}"
     own_uid="$(id -u)" || return 2
     output="$(ps -axo uid=,pid=,comm=,args=)" || { warn 'Unable to inspect active writers'; return 2; }
     while read -r uid pid executable arguments; do
         [[ "$uid" == "$own_uid" ]] || continue
         if [[ "$arguments" == *"$DOTFILES_BARE_ROOT/"* || "$arguments" == *"$BOOTSTRAP_PRIVATE_ROOT/"* ||
-              "$arguments" == *"${BOOTSTRAP_LEGACY_PI_ROOT:-$HOME/.pi/agent}/"* ]]; then
+              "$arguments" == *"$legacy_pi/"* || "$arguments" == *"$legacy_runtime/"* ]]; then
             printf '%s %s\n' "$pid" "$executable"; found=0; continue
         fi
-        case "${executable##*/}" in
-            nvim|pi)
-                # Native executables need profile identity, not a broad name match.
+        process_name="${executable##*/}"
+        case "$process_name" in
+            pi|node|nodejs|bun|nvim)
                 environment="$(ps eww -p "$pid" -o command=)" || { warn 'Writer disappeared during identity check; retry cleanup'; return 2; }
-                if [[ " $environment " == *" BOOTSTRAP_PRIVATE_ROOT=$BOOTSTRAP_PRIVATE_ROOT "* ]]; then printf '%s %s\n' "$pid" "$executable"; found=0; fi
+                if [[ " $environment " == *" HOME=$HOME "* ]]; then
+                    case "$process_name:$arguments" in
+                        pi:*|node:*pi-coding-agent*|nodejs:*pi-coding-agent*|bun:*pi-coding-agent*)
+                            printf '%s %s\n' "$pid" "$executable"; found=0; continue ;;
+                    esac
+                fi
+                if [[ " $environment " == *" BOOTSTRAP_PRIVATE_ROOT=$BOOTSTRAP_PRIVATE_ROOT "* ||
+                      " $environment " == *" BOOTSTRAP_PRIVATE_ROOT=$legacy_runtime "* ||
+                      " $environment " == *" PI_CODING_AGENT_DIR=$legacy_pi "* ||
+                      " $environment " == *" PI_CODING_AGENT_SESSION_DIR=$legacy_pi/sessions "* ]]; then
+                    printf '%s %s\n' "$pid" "$executable"; found=0
+                fi
                 ;;
         esac
     done <<<"$output"
