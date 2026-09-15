@@ -28,13 +28,14 @@ def fixture(root: Path, stage: str = 'success', custom_directory: bool = False) 
     temporary.mkdir()
     install_directory = home / ('custom bin' if custom_directory else '.local/bin')
     env = dict(os.environ, HOME=str(home), TMPDIR=str(temporary),
-               PATH=f'{install_directory}{os.pathsep}{guard}{os.pathsep}{os.environ["PATH"]}',
+               PATH=f'{install_directory}{os.pathsep}{guard}{os.pathsep}/opt/homebrew/bin:/usr/bin:/bin',
                TEST_ROOT=str(root), TEST_STAGE=stage, TEST_INSTALLER_SHA256=INSTALLER_SHA256)
     _ = env.pop('HERDR_INSTALL_DIR', None)
     if custom_directory:
         env['HERDR_INSTALL_DIR'] = str(install_directory)
     for name in ['pi', 'ssh', 'sshd', 'tailscale', 'systemctl', 'launchctl', 'sudo', 'pkexec', 'npm', 'bun']:
         executable(guard / name, '#!/bin/sh\necho unexpected >> "$TEST_ROOT/forbidden"\nexit 99\n')
+    executable(guard / 'brew', '#!/bin/sh\nexit 1\n')
     executable(guard / 'curl', '''#!/bin/bash
 set -eu
 printf 'download\\n' >> "$TEST_ROOT/calls"
@@ -68,7 +69,7 @@ case "$*" in
         [ -d "$HOME/.pi/agent/extensions" ] || exit 93
         printf integration > "$HOME/.pi/agent/extensions/herdr-test"
         ;;
-    'completion zsh')
+    'completion bash')
         [ "$TEST_STAGE" != completion ] || exit 39
         printf '# fixture completion\\n'
         ;;
@@ -93,11 +94,12 @@ def test_install_retry_and_user_only_effects() -> None:
                 assert result.returncode == 0, result.stdout + result.stderr
                 assert (installed / 'herdr').is_file()
                 assert (home / '.pi/agent/extensions/herdr-test').read_text() == 'integration'
-                assert (home / '.zfunc/_herdr').read_text() == '# fixture completion\n'
+                assert (home / '.local/share/bash-completion/completions/herdr').read_text() == '# fixture completion\n'
                 assert not (root / 'forbidden').exists()
                 assert list(temporary.iterdir()) == []
             assert (root / 'calls').read_text().splitlines() == [
-                'download', 'verify', 'install', 'integration install pi', 'completion zsh'] * 2
+                'download', 'verify', 'install', 'integration install pi', 'completion bash',
+                'integration install pi', 'completion bash']
             assert not (home / '.config').exists()
             assert not (home / '.ssh').exists()
     return
@@ -105,7 +107,7 @@ def test_install_retry_and_user_only_effects() -> None:
 
 def test_failures_stop_and_clean_temporary_files() -> None:
     stages = ['download', 'checksum', 'installer', 'integration', 'completion']
-    expected = ['download', 'verify', 'install', 'integration install pi', 'completion zsh']
+    expected = ['download', 'verify', 'install', 'integration install pi', 'completion bash']
     for index, stage in enumerate(stages):
         with tempfile.TemporaryDirectory(prefix='herdr-failure-') as directory:
             root = Path(directory)

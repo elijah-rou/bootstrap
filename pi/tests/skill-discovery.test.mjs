@@ -30,20 +30,26 @@ test("Pi and Codex configuration repair snapshot collisions through the Pi consu
       writeFileSync(join(snapshot, "install.sh"), "#!/bin/sh\n");
       chmodSync(join(snapshot, "install.sh"), 0o755);
       writeFileSync(join(snapshot, ".bootstrap-archive-sha256"), "b".repeat(64) + "\n");
-      const paths = [join(home, ".pi/agent/skills"), join(home, ".agents/skills")];
+      const privateRoot = join(cache, "private");
+      const paths = [join(privateRoot, "pi/agent/skills"), join(home, ".agents/skills")];
       for (const path of paths) mkdirSync(path, { recursive: true });
+      const bootstrapEnv = { ...process.env, HOME: home, CODEX_HOME: join(home, ".codex"),
+        XDG_CONFIG_HOME: join(home, ".config"), XDG_STATE_HOME: join(home, ".local/state"),
+        DOTFILES_BOOTSTRAP_ROOT: cache, BOOTSTRAP_PRIVATE_ROOT: privateRoot };
+      for (const args of [["init"], ["enroll", privateRoot]]) {
+        const result = spawnSync("node", [join(repository, "scripts/state-helper.mjs"), ...args], { env: bootstrapEnv, encoding: "utf8" });
+        assert.equal(result.status, 0, `${result.error ?? ""}\n${result.stdout}\n${result.stderr}`);
+      }
       const name = "blast-radius";
       for (const path of paths) symlinkSync(join(repository, "pi/skills", name), join(path, name), "dir");
       const staleAlias = join(paths[command === "pi" ? 1 : 0], name);
       unlinkSync(staleAlias);
       symlinkSync(join(snapshot, "pi/skills", name), staleAlias, "dir");
-      const options = { cwd: home, agentDir: join(home, ".pi/agent"), includeDefaults: false, skillPaths: paths };
+      const options = { cwd: home, agentDir: join(privateRoot, "pi/agent"), includeDefaults: false, skillPaths: paths };
       assert.ok(loadSkills(options).diagnostics.some(diagnostic => diagnostic.type === "collision"));
       for (let attempt = 0; attempt < 2; attempt++) {
         const result = spawnSync("bash", [join(repository, "configure.sh"), command], {
-          env: { ...process.env, HOME: home, CODEX_HOME: join(home, ".codex"),
-            XDG_CONFIG_HOME: join(home, ".config"), XDG_STATE_HOME: join(home, ".local/state"),
-            DOTFILES_BOOTSTRAP_ROOT: cache },
+          env: bootstrapEnv,
           encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024,
         });
         assert.equal(result.status, 0, `${result.error ?? ""}\n${result.stdout}\n${result.stderr}`);

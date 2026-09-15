@@ -20,8 +20,10 @@ class ConfigurationContract(unittest.TestCase):
         self.env = dict(os.environ, HOME=str(self.home), CODEX_HOME=str(self.home / '.codex'),
                         XDG_CONFIG_HOME=str(self.home / '.config'), XDG_STATE_HOME=str(self.home / '.local/state'),
                         XDG_DATA_HOME=str(self.home / '.local/share'))
-        self.env.pop('NVIM_CONFIG_CHECKOUT_DIR', None)
-        self.env.pop('NVIM_CONFIG_REPO_URL', None)
+        for name in ['NVIM_CONFIG_CHECKOUT_DIR', 'NVIM_CONFIG_REPO_URL', 'DOTFILES_BARE_ROOT',
+                     'BOOTSTRAP_PRIVATE_ROOT', 'BOOTSTRAP_STATE_ROOT', 'PI_CODING_AGENT_DIR',
+                     'PI_CODING_AGENT_SESSION_DIR', 'NVIM_APPNAME', 'BOOTSTRAP_LSP_SELECTIONS']:
+            self.env.pop(name, None)
         guard = self.root / 'guard'
         guard.mkdir()
         for command in ['sudo', 'systemctl', 'chsh', 'curl', 'wget', 'npm', 'bun', 'pi', 'micromamba']:
@@ -59,9 +61,10 @@ class ConfigurationContract(unittest.TestCase):
             (directory / 'env.sh').write_text(f'export CONTRACT_ENV={value}\n')
             (directory / 'zshenv').write_text(f'export CONTRACT_ZSH={value}\n')
             (directory / 'repos.conf').write_text(value + '\n')
-        agent = self.home / '.pi/agent'
-        agent.mkdir(parents=True)
-        auth = agent / 'auth.json'
+        agent = self.home / '.local/share/bootstrap/private/pi/agent'
+        unrelated_agent = self.home / '.pi/agent'
+        unrelated_agent.mkdir(parents=True)
+        auth = unrelated_agent / 'auth.json'
         secret = self.root / 'secret'
         secret.write_text('private-auth')
         auth.symlink_to(secret)
@@ -83,11 +86,47 @@ class ConfigurationContract(unittest.TestCase):
         value = subprocess.check_output(['bash', '-c', '. "$HOME/.config/dotfiles/env.sh"; printf %s "$CONTRACT_ENV"'], env=self.env, text=True)
         self.assertEqual(value, 'high')
         self.assertEqual((self.home / '.config/dotfiles/repos.conf').read_text(), 'high\n')
-        self.assertEqual((self.home / '.zshenv').resolve(), ROOT / 'zshenv')
-        self.assertFalse((self.home / '.config/dotfiles/bare-env.sh').exists())
-        self.assertFalse((self.home / '.local/bin/dev-shell').exists())
+        self.assertFalse((self.home / '.zshenv').exists())
+        self.assertFalse((self.home / '.config/starship.toml').exists())
+        self.assertEqual((self.home / '.config/dotfiles/bare-env.sh').resolve(), ROOT / 'scripts/bare-env.sh')
+        self.assertEqual((self.home / '.local/bin/dev-shell').resolve(), ROOT / 'scripts/dev-shell')
         self.run_config(*args)
         self.assertEqual(list(self.home.rglob('*.bak.*')), [])
+
+    def test_shell_extras_require_recorded_selection_and_runtime_env_is_shared(self):
+        self.run_config('terminal')
+        self.assertFalse((self.home / '.zshenv').exists())
+        self.assertFalse((self.home / '.config/starship.toml').exists())
+        command = ['node', str(ROOT / 'scripts/state-helper.mjs'), 'select', 'tools']
+        for tool in ['zsh', 'starship']:
+            subprocess.run([*command, tool], env=self.env, check=True, capture_output=True, text=True)
+        self.run_config('terminal')
+        self.assertEqual((self.home / '.zshenv').resolve(), ROOT / 'zshenv')
+        self.assertEqual((self.home / '.config/starship.toml').resolve(), ROOT / 'starship.toml')
+        output = subprocess.check_output(
+            ['bash', '-c', '. "$HOME/.bashrc"; printf "%s\n%s\n" "$PI_CODING_AGENT_DIR" "$NVIM_APPNAME"'],
+            env=self.env, text=True).splitlines()
+        self.assertEqual(output, [str(self.home / '.local/share/bootstrap/private/pi/agent'), 'bootstrap-nvim'])
+        output = subprocess.check_output(
+            ['zsh', '-c', 'source "$HOME/.zshenv"; printf "%s\\n%s\\n" "$PI_CODING_AGENT_DIR" "$NVIM_APPNAME"'],
+            env=self.env, text=True).splitlines()
+        self.assertEqual(output, [str(self.home / '.local/share/bootstrap/private/pi/agent'), 'bootstrap-nvim'])
+
+    def test_shell_extras_require_recorded_selections(self):
+        self.run_config('terminal')
+        self.assertFalse((self.home / '.zshrc').exists())
+        self.assertFalse((self.home / '.config/starship.toml').exists())
+        for selection in ['zsh', 'starship']:
+            subprocess.run(['node', str(ROOT / 'scripts/state-helper.mjs'), 'select', 'tools', selection],
+                           env=self.env, check=True, capture_output=True, text=True)
+        self.run_config('terminal')
+        self.assertEqual((self.home / '.zshrc').resolve(), ROOT / 'zshrc')
+        self.assertEqual((self.home / '.config/starship.toml').resolve(), ROOT / 'starship.toml')
+        expected = f'{self.home}/.local/share/bootstrap/private/pi/agent|bootstrap-nvim'
+        bash = subprocess.check_output(['bash', '-c', '. "$HOME/.bashrc"; printf "%s|%s" "$PI_CODING_AGENT_DIR" "$NVIM_APPNAME"'], env=self.env, text=True)
+        zsh = subprocess.check_output(['zsh', '-c', 'printf "%s|%s" "$PI_CODING_AGENT_DIR" "$NVIM_APPNAME"'], env=self.env, text=True)
+        self.assertEqual(bash, expected)
+        self.assertEqual(zsh, expected)
 
     def test_legacy_cleanup_backups_and_retry(self):
         legacy = self.root / 'legacy'
@@ -104,12 +143,13 @@ class ConfigurationContract(unittest.TestCase):
         bare.parent.mkdir(parents=True)
         bare.symlink_to(ROOT / 'scripts/bare-env.sh')
         self.run_config('all', '--legacy-root', legacy)
-        self.assertFalse((extensions / 'retired.ts').is_symlink())
+        self.assertTrue((extensions / 'retired.ts').is_symlink())
         self.assertTrue((extensions / 'unmanaged.ts').is_symlink())
         self.assertTrue(interactive.is_symlink())
-        self.assertFalse(bare.is_symlink())
+        self.assertTrue(bare.is_symlink())
+        self.assertEqual(zshrc.read_text(), 'keep my old shell')
         backups = list(self.home.rglob('*.bak.*'))
-        self.assertTrue(any(p.read_text() == 'keep my old shell' for p in backups if p.is_file()))
+        self.assertFalse(any(p.is_file() and p.read_text() == 'keep my old shell' for p in backups))
         self.run_config('all', '--legacy-root', legacy)
         self.assertEqual(list(self.home.rglob('*.bak.*')), backups)
         lock = self.home / '.local/state/bootstrap/configure.lock'
@@ -123,7 +163,7 @@ class ConfigurationContract(unittest.TestCase):
         overlay = self.root / 'overlay'
         overlay.mkdir()
         self.run_config('pi')
-        settings = self.home / '.pi/agent/settings.json'
+        settings = self.home / '.local/share/bootstrap/private/pi/agent/settings.json'
         original = settings.read_bytes()
         for value in ['null', '[]', '"string"', 'true', '1', '{"value": NaN}', '{']:
             with self.subTest(value=value):
@@ -162,6 +202,7 @@ class ConfigurationContract(unittest.TestCase):
         self.assertEqual(list((self.home / '.codex/backups').rglob('*.bak.*')), backups)
 
     def test_skill_aliases_converge_from_cached_snapshot_to_checkout(self):
+        self.run_config('codex')
         name = (ROOT / 'codex/skills.txt').read_text().splitlines()[0]
         for cache_setting in ['default', 'DOTFILES_BOOTSTRAP_ROOT', 'BOOTSTRAP_ROOT', 'precedence']:
             with self.subTest(cache_setting=cache_setting):
@@ -184,7 +225,7 @@ class ConfigurationContract(unittest.TestCase):
                 retired.parent.mkdir(parents=True, exist_ok=True)
                 retired.unlink(missing_ok=True)
                 retired.symlink_to(snapshot / 'pi/extensions/retired.ts')
-                pi = self.home / '.pi/agent/skills' / name
+                pi = self.home / '.local/share/bootstrap/private/pi/agent/skills' / name
                 shared = self.home / '.agents/skills' / name
                 for command in ['pi', 'codex']:
                     with self.subTest(command=command):
@@ -267,7 +308,7 @@ class ConfigurationContract(unittest.TestCase):
         self.assertEqual((source / 'SKILL.md').read_text(), 'user skill')
         shared.unlink()
         shared.symlink_to(ROOT / 'pi/skills' / name)
-        pi = self.home / '.pi/agent/skills' / name
+        pi = self.home / '.local/share/bootstrap/private/pi/agent/skills' / name
         pi.unlink()
         pi.symlink_to(source)
         self.run_config('codex')
@@ -298,11 +339,13 @@ class ConfigurationContract(unittest.TestCase):
         self.assertEqual((self.home / 'git-args').read_text().splitlines(),
                          ['clone', '--', 'https://github.com/elijah-rou/lazyvim-config.git', str(checkout)])
         self.assertFalse(checkout.with_name('explicit-checkout.install.lock').exists())
-        self.assertFalse((self.home / '.config/nvim').exists())
+        self.assertFalse((self.home / '.config/bootstrap-nvim').exists())
 
     def test_workstation_neovim_install_command(self):
         upstream = self.root / 'upstream'
         (upstream / 'lua/config').mkdir(parents=True)
+        (upstream / 'lua/plugins').mkdir(parents=True)
+        (upstream / 'lua/plugins/.keep').write_text('')
         (upstream / 'init.lua').write_text('return {}')
         (upstream / 'lua/config/lazy.lua').write_text('return {}')
         for args in [('init', '-q'), ('add', '.'), ('-c', 'user.name=Test', '-c',
@@ -317,8 +360,8 @@ class ConfigurationContract(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue((checkout / '.git').is_dir())
-        self.assertEqual((self.home / '.config/nvim').resolve(), checkout)
-        self.assertFalse((checkout / 'lua/plugins/zz-bootstrap-managed.lua').exists())
+        self.assertEqual((self.home / '.config/bootstrap-nvim').resolve(), checkout)
+        self.assertEqual((checkout / 'lua/plugins/zz-bootstrap-managed.lua').resolve(), ROOT / 'neovim/bootstrap.lua')
 
     def test_package_install_command_uses_rendered_configuration(self):
         overlay = self.root / 'packages'
@@ -335,22 +378,85 @@ class ConfigurationContract(unittest.TestCase):
     def test_neovim_relinks_without_mason_or_network(self):
         checkout = self.root / 'nvim'
         (checkout / 'lua/config').mkdir(parents=True)
+        (checkout / 'lua/plugins').mkdir(parents=True)
         (checkout / 'init.lua').write_text('return {}')
         (checkout / 'lua/config/lazy.lua').write_text('return {}')
         self.env['NVIM_CONFIG_CHECKOUT_DIR'] = str(checkout)
         self.env['NVIM_CONFIG_REPO_URL'] = 'https://invalid.invalid/never-clone'
         self.run_config('neovim')
-        self.assertEqual((self.home / '.config/nvim').resolve(), checkout)
-        self.assertFalse((checkout / 'lua/plugins/zz-bootstrap-managed.lua').exists())
+        self.assertEqual((self.home / '.config/bootstrap-nvim').resolve(), checkout)
         self.assertFalse((checkout / '.git').exists())
         plugin = checkout / 'lua/plugins/zz-bootstrap-managed.lua'
-        plugin.parent.mkdir()
-        plugin.symlink_to(ROOT / 'neovim/bootstrap.lua')
+        self.assertEqual(plugin.resolve(), ROOT / 'neovim/bootstrap.lua')
         self.run_config('neovim')
-        self.assertFalse(plugin.is_symlink())
+        self.assertTrue(plugin.is_symlink())
+        plugin.unlink()
         plugin.write_text('user managed plugin')
-        self.run_config('neovim')
+        self.run_config('neovim', ok=False)
         self.assertEqual(plugin.read_text(), 'user managed plugin')
+
+    def test_external_policy_link_uninstalls_without_owning_checkout(self):
+        checkout = self.root / 'external-policy'
+        (checkout / 'lua/config').mkdir(parents=True)
+        (checkout / 'lua/plugins').mkdir(parents=True)
+        (checkout / 'init.lua').write_text('return {}')
+        (checkout / 'lua/config/lazy.lua').write_text('return {}')
+        sentinel = checkout / 'keep'; sentinel.write_text('external')
+        self.env['NVIM_CONFIG_CHECKOUT_DIR'] = str(checkout)
+        self.env['NVIM_CONFIG_REPO_URL'] = 'https://invalid.invalid/never-clone'
+        self.run_config('neovim')
+        plugin = checkout / 'lua/plugins/zz-bootstrap-managed.lua'
+        helper = ['node']
+        preview = subprocess.run([*helper, str(ROOT / 'scripts/state-helper.mjs'), 'uninstall', '--dry-run'],
+                                 env=self.env, capture_output=True, text=True)
+        self.assertEqual(preview.returncode, 0, preview.stdout + preview.stderr)
+        self.assertIn(f'remove\t{plugin}', preview.stdout)
+        result = subprocess.run([*helper, str(ROOT / 'scripts/state-helper.mjs'), 'uninstall'],
+                                env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(plugin.exists())
+        self.assertEqual(sentinel.read_text(), 'external')
+        self.assertTrue(checkout.is_dir())
+        subprocess.run([*helper, str(ROOT / 'scripts/state-helper.mjs'), 'finish-uninstall'], env=self.env, check=True)
+
+    def test_external_policy_link_rejects_parent_and_checkout_identity_changes(self):
+        checkout = self.root / 'external-identity'
+        (checkout / 'lua/config').mkdir(parents=True)
+        plugins = checkout / 'lua/plugins'; plugins.mkdir(parents=True)
+        (checkout / 'init.lua').write_text('return {}')
+        (checkout / 'lua/config/lazy.lua').write_text('return {}')
+        self.env['NVIM_CONFIG_CHECKOUT_DIR'] = str(checkout)
+        self.env['NVIM_CONFIG_REPO_URL'] = 'https://invalid.invalid/never-clone'
+        self.run_config('neovim')
+        moved_plugins = checkout / 'lua/plugins-real'
+        plugins.rename(moved_plugins); plugins.symlink_to(moved_plugins)
+        result = subprocess.run(['node', str(ROOT / 'scripts/state-helper.mjs'), 'uninstall', '--dry-run'],
+                                env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('parent changed', result.stderr)
+        plugins.unlink(); moved_plugins.rename(plugins)
+        moved_checkout = checkout.with_name('external-identity-original')
+        checkout.rename(moved_checkout)
+        (checkout / 'lua/plugins').mkdir(parents=True)
+        result = subprocess.run(['node', str(ROOT / 'scripts/state-helper.mjs'), 'uninstall', '--dry-run'],
+                                env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('checkout was replaced', result.stderr)
+        self.assertTrue((moved_checkout / 'lua/plugins/zz-bootstrap-managed.lua').is_symlink())
+
+    def test_tracked_external_policy_collision_is_preserved(self):
+        checkout = self.root / 'tracked-policy'
+        (checkout / 'lua/config').mkdir(parents=True)
+        (checkout / 'lua/plugins').mkdir(parents=True)
+        (checkout / 'init.lua').write_text('return {}')
+        (checkout / 'lua/config/lazy.lua').write_text('return {}')
+        plugin = checkout / 'lua/plugins/zz-bootstrap-managed.lua'; plugin.write_text('tracked custom policy')
+        subprocess.run(['git', '-C', str(checkout), 'init', '-q'], env=self.env, check=True)
+        subprocess.run(['git', '-C', str(checkout), 'add', '.'], env=self.env, check=True)
+        self.env['NVIM_CONFIG_CHECKOUT_DIR'] = str(checkout)
+        self.env['NVIM_CONFIG_REPO_URL'] = 'https://invalid.invalid/never-clone'
+        self.run_config('neovim', ok=False)
+        self.assertEqual(plugin.read_text(), 'tracked custom policy')
 
 
 if __name__ == '__main__':

@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root="$HOME/.local/share/dotfiles/bare"
-if [[ ! -x "$root/bin/micromamba" || ! -d "$root/env/conda-meta" ]]; then
-    printf 'Bare environment missing; run ./install.sh bare from the dotfiles checkout.\n' >&2
-    exit 1
-fi
-source "$HOME/.config/dotfiles/bare-env.sh"
-[[ $# -gt 0 ]] || set -- zsh -l
-exec "$root/bin/micromamba" --no-rc run --prefix "$root/env" "$@"
+profile="$HOME/.config/dotfiles/bare-env.sh"
+[[ -f "$profile" ]] || { printf 'Native bootstrap profile missing; rerun ./install.sh.\n' >&2; exit 1; }
+# shellcheck source=scripts/bare-env.sh
+source "$profile"
+[[ -x "$DOTFILES_BARE_ROOT/bin/pi" || -x "$BUN_INSTALL/bin/pi" ]] || { printf 'Native bootstrap runtime is incomplete; rerun ./install.sh.\n' >&2; exit 1; }
+[[ $# -gt 0 ]] || set -- bash -l
+exec "$@"

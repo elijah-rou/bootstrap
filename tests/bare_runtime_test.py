@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Opt-in smoke test: dev-shell python3 tests/bare_runtime_test.py c rust python typescript bash.
+"""Test-only smoke probe run from dev-shell after selecting toolchains.
 
-Uses temporary source files, local compilers and LSP initialization. No provider
-requests, authentication inspection, package installation or service startup.
+Python executes this repository test only; the installed runtime does not depend on it.
 """
 
 import argparse
@@ -78,7 +77,7 @@ def main():
     parser.add_argument('--codex', action='store_true', help='also check the optional Codex CLI')
     args = parser.parse_args()
     bare_root = Path(os.environ.get("DOTFILES_BARE_ROOT", str(Path.home() / ".local/share/dotfiles/bare")))
-    assert Path(os.environ.get("CONDA_PREFIX", "/missing")).resolve() == (bare_root / "env").resolve(), "Run this test through dev-shell"
+    assert os.environ.get("PI_CODING_AGENT_DIR", "").startswith(str(Path.home())), "Run this test through dev-shell"
     servers = {
         "python": ["basedpyright-langserver", "--stdio"],
         "typescript": ["typescript-language-server", "--stdio"],
@@ -93,7 +92,7 @@ def main():
                     (directory / "sample.c").write_text('int main(void) { return 0; }\n')
                     compiler = os.environ.get("CC", "cc")
                     executable = shutil.which(compiler)
-                    assert executable and executable.startswith(os.environ["CONDA_PREFIX"] + "/bin/"), executable
+                    assert executable, executable
                     run([compiler, "sample.c", "-o", "sample-c"], directory)
                     run([str(directory / "sample-c")], directory)
                 case "rust":

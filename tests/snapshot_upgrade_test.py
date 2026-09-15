@@ -45,7 +45,7 @@ class SnapshotUpgrade(unittest.TestCase):
                 for command in commands:
                     self.run_command(self.old, env, *command)
                 skill = home / '.agents/skills' / self.skill
-                retired = home / '.pi/agent/extensions/retired.ts'
+                retired = home / '.local/share/bootstrap/private/pi/agent/extensions/retired.ts'
                 self.assertEqual(skill.readlink(), self.old / 'pi/skills' / self.skill)
                 self.assertEqual(retired.readlink(), self.old / 'pi/extensions/retired.ts')
                 for command in commands:
@@ -103,7 +103,7 @@ class SnapshotUpgrade(unittest.TestCase):
                 self.assertEqual(skill.readlink(), skill_source)
                 self.assertEqual(retired.readlink(), extension_source)
 
-    def test_workstation_removes_prior_snapshot_bare_activation_links(self):
+    def test_workstation_retargets_shared_runtime_activation_links(self):
         env = self.environment('transition')
         home = Path(env['HOME'])
         self.run_command(self.old, env, 'install.sh', 'link')
@@ -112,8 +112,8 @@ class SnapshotUpgrade(unittest.TestCase):
         self.assertTrue(bare.is_symlink())
         self.assertTrue(launcher.is_symlink())
         self.run_command(self.new, env, 'configure.sh', 'terminal')
-        self.assertFalse(bare.is_symlink())
-        self.assertFalse(launcher.is_symlink())
+        self.assertEqual(bare.readlink(), self.new / 'scripts/bare-env.sh')
+        self.assertEqual(launcher.readlink(), self.new / 'scripts/dev-shell')
 
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -26,15 +26,66 @@ jobs:
           neovim: true
       - name: Install test tools on Linux
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes ripgrep shellcheck zsh
+        run: sudo apt-get update && sudo apt-get install --yes build-essential fd-find ripgrep shellcheck zsh && npm install --global basedpyright@1.38.3
       - name: Install test tools on macOS
         if: runner.os == 'macOS'
         run: |
+          brew list fd || brew install fd
           brew list ripgrep || brew install ripgrep
           brew list shellcheck || brew install shellcheck
           brew list coreutils || brew install coreutils
+          npm install --global basedpyright@1.38.3
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+      - name: Prepare cold locked Neovim and standalone LSP fixtures
+        run: |
+          fixture="$RUNNER_TEMP/bootstrap-neovim-runtime"
+          bash tests/prepare_neovim_runtime.sh "$fixture"
+          {
+            echo "NVIM_PLUGIN_ROOT=$fixture/home/.local/share/bootstrap-nvim/lazy"
+            echo "NVIM_SITE_ROOT=$fixture/home/.local/share/bootstrap-nvim/site"
+            echo "RUST_ANALYZER_TEST_BIN=$fixture/bin/rust-analyzer"
+            echo "NVIM_BUNDLED_RUNTIME=1"
+          } >> "$GITHUB_ENV"
+          echo "$fixture/home/.local/share/bootstrap/tools/bin" >> "$GITHUB_PATH"
       - run: ./scripts/validate
+      - name: Verified official binary and Pi entrypoint smoke
+        run: bash tests/native_artifact_smoke.sh --pi
+      - name: Installed TypeScript server through bundled Neovim
+        run: bash tests/native_selected_lsp_smoke.sh
+      - name: Disposable toolchain cache and interpreter smoke
+        run: bash tests/native_toolchain_smoke.sh
+
+  native-runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {container: 'ubuntu:24.04', runner: ubuntu-latest}
+          - {container: 'debian:bookworm', runner: ubuntu-latest}
+          - {container: 'fedora:latest', runner: ubuntu-latest}
+          - {container: 'archlinux:latest', runner: ubuntu-latest}
+          - {container: 'ubuntu:24.04', runner: ubuntu-24.04-arm}
+          - {container: 'fedora:latest', runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 25
+    steps:
+      - name: Install gate prerequisites
+        run: |
+          if command -v apt-get; then apt-get update && apt-get install -y --no-install-recommends ca-certificates git curl tar xz-utils procps bash; fi
+          if command -v dnf; then dnf install -y --setopt=install_weak_deps=False ca-certificates git curl tar xz procps-ng bash; fi
+          if command -v pacman; then pacman -Syu --noconfirm ca-certificates git curl tar xz procps-ng bash; fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Clean native runtime and cleanup journey
+        env:
+          BOOTSTRAP_NATIVE_DISPOSABLE: "1"
+        run: |
+          export HOME=/root USER=root
+          bash tests/native_runtime_journey.sh
+      - name: Verified official binary fallback smoke
+        run: bash tests/native_artifact_smoke.sh --node
 
   runtime:
     runs-on: ubuntu-latest
@@ -53,7 +104,7 @@ jobs:
         with:
           bun-version: "1.4.0"
       - name: Install test tools
-        run: sudo apt-get update && sudo apt-get install --yes ripgrep shellcheck zsh
+        run: sudo apt-get update && sudo apt-get install --yes fd-find ripgrep shellcheck zsh
       - name: Install isolated pinned runtime dependencies
         run: |
           source ./install.sh

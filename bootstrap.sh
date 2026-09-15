@@ -8,25 +8,36 @@ snapshot="$BOOTSTRAP_ROOT/snapshots/$REVISION"
 command_name="${1:-install}"
 
 case "$command_name" in
-    install|fetch|preflight|doctor|link|codex-link|herdr) [[ $# -le 1 ]] || { printf 'Unexpected arguments\n' >&2; exit 2; } ;;
+    install|pi|fetch|preflight|doctor|link|codex-link|herdr) [[ $# -le 1 ]] || { printf 'Unexpected arguments\n' >&2; exit 2; } ;;
+    uninstall) case "${2:-}" in --dry-run|--yes) [[ $# -eq 2 ]] ;; '') [[ $# -eq 1 ]] ;; *) false ;; esac || { printf 'Usage: bootstrap.sh uninstall [--dry-run|--yes]\n' >&2; exit 2; } ;;
+    migrate-legacy) [[ $# -eq 2 && "$2" == --yes ]] || { printf 'Usage: bootstrap.sh migrate-legacy --yes\n' >&2; exit 2; } ;;
+    enroll-project) [[ $# -eq 3 && "$2" == /* && "$3" == --yes ]] || { printf 'Usage: bootstrap.sh enroll-project ABS_DIR --yes\n' >&2; exit 2; } ;;
     --languages|-l)
-        [[ $# -gt 1 ]] || { printf 'Select languages: c cpp rust go python typescript bash elixir zig\n' >&2; exit 2; }
+        [[ $# -gt 1 ]] || { printf 'Select languages: c cpp rust go python typescript elixir zig\n' >&2; exit 2; }
         for selection in "${@:2}"; do
-            case "$selection" in c|cpp|rust|go|python|typescript|bash|elixir|zig) ;; *) printf 'Unknown toolchain: %s\n' "$selection" >&2; exit 2 ;; esac
+            case "$selection" in c|cpp|rust|go|python|typescript|elixir|zig) ;; *) printf 'Unknown toolchain: %s\n' "$selection" >&2; exit 2 ;; esac
         done
         ;;
+    --lsp|-s)
+        [[ $# -gt 1 ]] || { printf 'Select an LSP server\n' >&2; exit 2; }
+        for selection in "${@:2}"; do case "$selection" in clangd|rust-analyzer|gopls|basedpyright|ruff|typescript-language-server|bash-language-server|elixirls|zls) ;; *) printf 'Unknown LSP: %s\n' "$selection" >&2; exit 2 ;; esac; done
+        ;;
     --tools|-t)
-        [[ $# -gt 1 ]] || { printf 'Select tools: codex just wget unzip\n' >&2; exit 2; }
+        [[ $# -gt 1 ]] || { printf 'Select tools: zsh starship codex just wget unzip shellcheck ruff headroom\n' >&2; exit 2; }
         for selection in "${@:2}"; do
-            case "$selection" in codex|just|wget|unzip) ;; *) printf 'Unknown tool: %s\n' "$selection" >&2; exit 2 ;; esac
+            case "$selection" in zsh|starship|codex|just|wget|unzip|shellcheck|ruff|headroom) ;; *) printf 'Unknown tool: %s\n' "$selection" >&2; exit 2 ;; esac
         done
         ;;
     --help|-h)
-        printf '%s\n' 'Usage: bash bootstrap.sh [install|fetch|preflight|doctor|link|codex-link|herdr]' \
+        printf '%s\n' 'Usage: bash bootstrap.sh [install|pi|fetch|preflight|doctor|link|codex-link|herdr]' \
             '       bash bootstrap.sh (--languages|-l) LANGUAGE...' \
+            '       bash bootstrap.sh (--lsp|-s) SERVER...' \
             '       bash bootstrap.sh (--tools|-t) TOOL...' \
-            'Tools: codex just wget unzip (requires base install).' \
-            'Languages: c cpp rust go python typescript bash elixir zig (requires base install).' \
+            '       bash bootstrap.sh uninstall [--dry-run|--yes]' \
+            '       bash bootstrap.sh migrate-legacy --yes' \
+            '       bash bootstrap.sh enroll-project ABS_DIR --yes' \
+            'Tools: zsh starship codex just wget unzip shellcheck ruff headroom.' \
+            'Languages: c cpp rust go python typescript elixir zig.' \
             'Downloads a verified public snapshot; install is the default.'
         exit 0
         ;;
@@ -39,7 +50,7 @@ snapshot_ready() {
         [[ "$(cat "$snapshot/.bootstrap-archive-sha256")" == "$ARCHIVE_SHA256" ]]
 }
 
-if [[ "$command_name" == doctor || "$command_name" == link || "$command_name" == codex-link ]]; then
+if [[ "$command_name" == doctor || "$command_name" == link || "$command_name" == codex-link || "$command_name" == uninstall || "$command_name" == migrate-legacy || "$command_name" == enroll-project ]]; then
     snapshot_ready || { printf 'Snapshot is missing or incomplete; run bootstrap.sh fetch first\n' >&2; exit 1; }
 else
     for prerequisite in curl tar awk; do

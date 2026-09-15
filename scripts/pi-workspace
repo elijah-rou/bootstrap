@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Installed launchers load their owned runtime even in an unconfigured shell.
+if [[ -f "$HOME/.config/dotfiles/bare-env.sh" ]]; then
+    # shellcheck source=scripts/bare-env.sh
+    source "$HOME/.config/dotfiles/bare-env.sh"
+    [[ -x "$DOTFILES_BARE_ROOT/bin/pi" ]] || { printf 'Owned Pi entrypoint is missing\n' >&2; exit 1; }
+fi
+
 WORKTREE_HOME="${PIW_WORKTREE_HOME:-${PI_WORKTREE_HOME:-$HOME/piw-worktrees}}"
 REGISTRY_FILE="$WORKTREE_HOME/registry.json"
 LOCK_DIR="$WORKTREE_HOME/.registry.lock"
@@ -95,30 +102,11 @@ with_registry_lock() {
 list_records() {
     local repo_root="$1"
     local repo_common_dir="$2"
-    python3 - "$REGISTRY_FILE" "$repo_root" "$repo_common_dir" <<'PY'
-import json, os, sys
-registry_path, repo_root, repo_common_dir = sys.argv[1:4]
-try:
-    with open(registry_path, "r", encoding="utf-8") as f:
-        registry = json.load(f)
-except FileNotFoundError:
-    registry = {"entries": []}
-for entry in registry.get("entries", []):
-    if entry.get("status") != "active":
-        continue
-    path = entry.get("worktreePath") or ""
-    if not path or not os.path.isdir(path):
-        continue
-    if entry.get("repoCommonDir") != repo_common_dir and entry.get("repoRoot") != repo_root:
-        continue
-    print("\t".join([
-        entry.get("id", ""),
-        entry.get("label", ""),
-        entry.get("branch", ""),
-        path,
-        entry.get("updatedAt", ""),
-    ]))
-PY
+    node - "$REGISTRY_FILE" "$repo_root" "$repo_common_dir" <<'NODE'
+const fs=require('node:fs'); const [file,root,common]=process.argv.slice(2); let registry={entries:[]};
+try{registry=JSON.parse(fs.readFileSync(file,'utf8'))}catch(error){if(error.code!=='ENOENT')throw error}
+for(const entry of registry.entries||[]){const path=entry.worktreePath||'';if(entry.status==='active'&&path&&fs.existsSync(path)&&(entry.repoCommonDir===common||entry.repoRoot===root))console.log([entry.id||'',entry.label||'',entry.branch||'',path,entry.updatedAt||''].join('\t'))}
+NODE
 }
 
 print_records() {
@@ -231,24 +219,9 @@ choose_workspace() {
 
 append_registry_record() {
     local record_json="$1"
-    python3 - "$REGISTRY_FILE" "$record_json" <<'PY'
-import json, os, sys
-registry_path, record_json = sys.argv[1:3]
-record = json.loads(record_json)
-try:
-    with open(registry_path, "r", encoding="utf-8") as f:
-        registry = json.load(f)
-except FileNotFoundError:
-    registry = {"version": 1, "entries": []}
-entries = registry.setdefault("entries", [])
-entries.insert(0, record)
-registry["version"] = 1
-tmp_path = f"{registry_path}.{os.getpid()}.tmp"
-with open(tmp_path, "w", encoding="utf-8") as f:
-    json.dump(registry, f, indent=2)
-    f.write("\n")
-os.replace(tmp_path, registry_path)
-PY
+    node - "$REGISTRY_FILE" "$record_json" <<'NODE'
+const fs=require('node:fs');const [file,text]=process.argv.slice(2);let registry={version:1,entries:[]};try{registry=JSON.parse(fs.readFileSync(file,'utf8'))}catch(error){if(error.code!=='ENOENT')throw error}registry.version=1;registry.entries=registry.entries||[];registry.entries.unshift(JSON.parse(text));const temporary=`${file}.${process.pid}.tmp`;fs.writeFileSync(temporary,JSON.stringify(registry,null,2)+'\n',{mode:0o600});fs.renameSync(temporary,file);
+NODE
 }
 
 create_worktree() {
@@ -258,11 +231,7 @@ create_worktree() {
     mkdir -p "$WORKTREE_HOME"
 
     local id repo_slug label_slug branch path repo_common_dir head_sha created_at record_json
-    id=$(python3 - <<'PY'
-import uuid
-print(str(uuid.uuid4())[:8])
-PY
-)
+    id=$(node -e 'console.log(require("node:crypto").randomUUID().slice(0,8))')
     repo_slug=$(slugify "$(basename "$repo_root")" repo)
     label_slug=$(slugify "$label" worktree)
     branch="pi/$repo_slug/$label_slug-$id"
@@ -277,28 +246,7 @@ PY
     git -C "$repo_root" worktree add -b "$branch" "$path" HEAD >&2
     head_sha=$(git -C "$path" rev-parse HEAD)
     created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    record_json=$(python3 - "$id" "$repo_root" "$repo_common_dir" "$path" "$branch" "$head_sha" "$label_slug" "$PWD" "$created_at" <<'PY'
-import json, sys
-id_, repo_root, repo_common_dir, path, branch, head_sha, label, cwd, created_at = sys.argv[1:10]
-print(json.dumps({
-    "id": id_,
-    "status": "active",
-    "repoRoot": repo_root,
-    "repoCommonDir": repo_common_dir,
-    "worktreePath": path,
-    "branch": branch,
-    "baseRef": "HEAD",
-    "headSha": head_sha,
-    "label": label,
-    "sessionId": None,
-    "sessionFile": None,
-    "createdFromCwd": cwd,
-    "createdAt": created_at,
-    "updatedAt": created_at,
-    "ownerKind": "launcher",
-}))
-PY
-)
+    record_json=$(node -e 'const [id,repoRoot,repoCommonDir,worktreePath,branch,headSha,label,createdFromCwd,createdAt]=process.argv.slice(1);console.log(JSON.stringify({id,status:"active",repoRoot,repoCommonDir,worktreePath,branch,baseRef:"HEAD",headSha,label,sessionId:null,sessionFile:null,createdFromCwd,createdAt,updatedAt:createdAt,ownerKind:"launcher"}))' "$id" "$repo_root" "$repo_common_dir" "$path" "$branch" "$head_sha" "$label_slug" "$PWD" "$created_at")
     with_registry_lock append_registry_record "$record_json"
     export PI_WORKTREE_RECORD_ID="$id"
     export PI_WORKSPACE_LABEL="$label_slug"

@@ -23,29 +23,37 @@ report_install_failures() {
 }
 
 install_herdr() (
-    local installer
+    local installer completion
 
     installer="$(mktemp)"
-    trap 'rm -f "$installer"' EXIT
+    completion=''
+    trap 'rm -f "$installer" "$completion"' EXIT
 
-    info "Installing Herdr agent multiplexer from a verified installer snapshot..."
-    download_verified \
-        "https://herdr.dev/install.sh" \
-        "$HERDR_INSTALLER_SHA256" \
-        "$installer" || return 1
-    sh "$installer" || return 1
+    if ! command -v herdr >/dev/null; then
+        local backend package
+        backend="$(native_backend)" || return 1
+        IFS=$'\t' read -r _ package <<<"$(catalog_query package herdr "$backend")"
+        if [[ -n "$package" ]] && native_package_available "$backend" "$package"; then
+            install_native_keys herdr || return 1
+        else
+            info "Installing Herdr agent multiplexer from a verified installer snapshot..."
+            download_verified "https://herdr.dev/install.sh" "$HERDR_INSTALLER_SHA256" "$installer" || return 1
+            sh "$installer" || return 1
+        fi
+    fi
     command -v herdr &>/dev/null || error "Herdr installation failed"
 
     if command -v pi &>/dev/null; then
-        mkdir -p "$HOME/.pi/agent/extensions" || return 1
+        mkdir -p "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions" || return 1
         herdr integration install pi || return 1
     else
         warn "Pi CLI not found; run 'herdr integration install pi' after installing Pi"
     fi
 
-    mkdir -p "$HOME/.zfunc" || return 1
-    herdr completion zsh > "$HOME/.zfunc/_herdr" || return 1
-    info "Herdr installed with Pi integration"
+    completion="$(mktemp)" || return 1
+    herdr completion bash > "$completion" || return 1
+    install_managed_file "$completion" "$HOME/.local/share/bash-completion/completions/herdr" 0644 || return 1
+    info "Herdr installed with Pi integration and Bash completion"
 )
 
 link_pi_headroom() {
@@ -63,10 +71,10 @@ link_pi_headroom() {
         return 1
     }
 
-    mkdir -p "$HOME/.local/bin" "$HOME/.pi/agent/extensions"
+    mkdir -p "$HOME/.local/bin" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions"
     link_managed_file "$launcher" "$HOME/.local/bin/pi-headroom"
     link_managed_file "$launcher" "$HOME/.local/bin/pih"
-    link_managed_file "$extension" "$HOME/.pi/agent/extensions/headroom.ts"
+    link_managed_file "$extension" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions/headroom.ts"
     info "Linked Pi Headroom launcher and extension"
 }
 
@@ -96,14 +104,14 @@ sync_pi_skill_links() (
     for skill_dir in "$source_dir"/*; do
         [[ -d "$skill_dir" && -f "$skill_dir/SKILL.md" ]] || continue
         link_managed_file "$skill_dir" "$target_dir/$(basename "$skill_dir")" "$target_dir/.backups" || return 1
-        if [[ "$target_dir" == "$HOME/.pi/agent/skills" ]]; then
+        if [[ "$target_dir" == "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills" ]]; then
             reconcile_managed_skill_alias "$skill_dir" "$HOME/.agents/skills/$(basename "$skill_dir")" || return 1
         fi
     done
 
     # Pi discovers both roots; migrate the known system alias to the same adapter.
     local omarchy_alias="$HOME/.agents/skills/omarchy"
-    if [[ "$target_dir" == "$HOME/.pi/agent/skills" && -f "$source_dir/omarchy/SKILL.md" && -L "$omarchy_alias" ]]; then
+    if [[ "$target_dir" == "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills" && -f "$source_dir/omarchy/SKILL.md" && -L "$omarchy_alias" ]]; then
         current_target="$(readlink "$omarchy_alias")"
         if [[ "$current_target" == /usr/share/omarchy/default/agents/skills/omarchy ]]; then
             link_managed_file "$source_dir/omarchy" "$omarchy_alias" "$(dirname "$omarchy_alias")/.backups" || return 1
@@ -175,7 +183,7 @@ link_codex_skill() {
     done
 
     link_managed_file "$source" "$shared" "$codex_home/backups/shared-skills" || return 1
-    reconcile_managed_skill_alias "$source" "$HOME/.pi/agent/skills/$name" || return 1
+    reconcile_managed_skill_alias "$source" "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/skills/$name" || return 1
     if [[ -L "$legacy" && "$(resolve_path "$(dirname "$legacy")")" != "$(resolve_path "$(dirname "$shared")")" ]]; then
         mkdir -p "$codex_home/backups/legacy-skills" || return 1
         backup="$(managed_backup_path "$codex_home/backups/legacy-skills/$name")" || return 1
@@ -233,31 +241,17 @@ print_status_line() {
 read_pi_subagents_package() {
     local settings_path="$1"
 
-    command_exists python3 || return 1
+    command_exists node || return 1
     [[ -f "$settings_path" ]] || return 1
-    python3 - "$settings_path" <<'PY'
-import json
-import re
-import sys
-
-pattern = re.compile(r"git:(github\.com/elijah-rou/pi-subagents)@([0-9a-f]{40})")
-with open(sys.argv[1], encoding="utf-8") as source:
-    packages = json.load(source).get("packages", [])
-for package in packages:
-    value = package if isinstance(package, str) else package.get("source") if isinstance(package, dict) else None
-    if not isinstance(value, str):
-        continue
-    match = pattern.fullmatch(value)
-    if match:
-        print(value, match.group(1), match.group(2))
-        raise SystemExit(0)
-raise SystemExit(1)
-PY
+    node - "$settings_path" <<'NODE'
+const fs=require('node:fs'); const value=JSON.parse(fs.readFileSync(process.argv[2]));
+for(const item of value.packages||[]){ const source=typeof item==='string'?item:item?.source; const match=/^git:(github\.com\/elijah-rou\/pi-subagents)@([0-9a-f]{40})$/.exec(source||''); if(match){ console.log(source,match[1],match[2]); process.exit(0); }} process.exit(1);
+NODE
 }
 
 check_pi_subagents_revision() {
     local settings_path="$DOTFILES_DIR/pi/settings.json"
-    local rendered_settings_path="$HOME/.pi/agent/settings.json"
+    local rendered_settings_path="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/settings.json"
     local repo_metadata="" repo_source="" repo_path="" repo_subagents_pin=""
     local rendered_metadata="" rendered_source="" _rendered_path="" rendered_subagents_pin=""
     local installed_subagents_pin="" installed_subagents_dir=""
@@ -278,7 +272,7 @@ check_pi_subagents_revision() {
     fi
 
     if [[ -n "$repo_path" ]]; then
-        installed_subagents_dir="$HOME/.pi/agent/git/$repo_path"
+        installed_subagents_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/git/$repo_path"
     fi
     if [[ -n "$installed_subagents_dir" ]] && { [[ -d "$installed_subagents_dir/.git" ]] || git -C "$installed_subagents_dir" rev-parse --git-dir >/dev/null 2>&1; }; then
         installed_subagents_pin="$(git -C "$installed_subagents_dir" rev-parse HEAD 2>/dev/null || true)"

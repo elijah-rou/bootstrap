@@ -38,7 +38,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 [[ "$HOME" == /* && "$HOME" != / ]] || { warn 'HOME must be an absolute user directory'; exit 2; }
-command -v python3 >/dev/null || { warn 'python3 is required for offline configuration'; exit 1; }
+source "$DOTFILES_DIR/scripts/bare-env.sh"
+command -v node >/dev/null || { warn 'Node.js is required for offline configuration'; exit 1; }
 
 # One owner prevents overlapping backup/move operations in the same user profile.
 configure_lock="${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap/configure.lock"
@@ -48,8 +49,14 @@ if ! mkdir "$configure_lock" 2>/dev/null; then
     exit 1
 fi
 trap 'rmdir "$configure_lock"' EXIT
+bootstrap_lock_acquire
+trap 'bootstrap_lock_release; rmdir "$configure_lock"' EXIT
 DOTFILES_RELINK_ONLY=1
-BOOTSTRAP_WORKSTATION=1
+BOOTSTRAP_CONFIG_OVERLAYS=1
+BOOTSTRAP_NEOVIM_PROFILE=workstation
+initialize_bootstrap_component configuration
+link_runtime_environment
+if [[ "$configure_target" == neovim || "$configure_target" == all ]]; then enroll_bootstrap_neovim_state; fi
 case "$configure_target" in
     terminal) link_terminal_config ;;
     pi) link_pi_config; link_pi_launchers ;;
@@ -57,3 +64,4 @@ case "$configure_target" in
     neovim) setup_neovim_config ;;
     all) link_terminal_config; link_pi_config; link_pi_launchers; link_codex_assets; setup_neovim_config ;;
 esac
+node "$DOTFILES_DIR/scripts/state-helper.mjs" component-ready configuration
