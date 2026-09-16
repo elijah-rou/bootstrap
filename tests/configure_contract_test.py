@@ -62,7 +62,7 @@ class ConfigurationContract(unittest.TestCase):
             (directory / 'zshenv').write_text(f'export CONTRACT_ZSH={value}\n')
             (directory / 'repos.conf').write_text(value + '\n')
         agent = self.home / '.local/share/bootstrap/private/pi/agent'
-        unrelated_agent = self.home / '.pi/agent'
+        unrelated_agent = self.home / '.pi/other-profile'
         unrelated_agent.mkdir(parents=True)
         auth = unrelated_agent / 'auth.json'
         secret = self.root / 'secret'
@@ -92,6 +92,20 @@ class ConfigurationContract(unittest.TestCase):
         self.assertEqual((self.home / '.local/bin/dev-shell').resolve(), ROOT / 'scripts/dev-shell')
         self.run_config(*args)
         self.assertEqual(list(self.home.rglob('*.bak.*')), [])
+
+    def test_legacy_linked_auth_blocks_configuration_before_cutover(self):
+        legacy = self.home / '.pi/agent'
+        legacy.mkdir(parents=True)
+        secret = self.root / 'legacy-secret'
+        secret.write_text('synthetic-credential')
+        auth = legacy / 'auth.json'
+        auth.symlink_to(secret)
+        result = self.run_config('all', ok=False)
+        self.assertIn('explicit migration', result.stderr)
+        self.assertEqual(auth.readlink(), secret)
+        self.assertEqual(secret.read_text(), 'synthetic-credential')
+        self.assertFalse((self.home / '.config/dotfiles/bare-env.sh').exists())
+        self.assertFalse((self.home / '.local/bin/pi').exists())
 
     def test_shell_extras_require_recorded_selection_and_runtime_env_is_shared(self):
         self.run_config('terminal')

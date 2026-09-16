@@ -36,6 +36,17 @@ class OwnershipTest(unittest.TestCase):
         self.execute('uninstall',ok=False); self.assertEqual(target.read_text(),'user edit')
         record=json.loads((self.state/'install.json').read_text()); record['schemaVersion']=999; (self.state/'install.json').write_text(json.dumps(record)); self.execute('validate',ok=False)
 
+    def test_state_root_cannot_be_home_or_a_symlink(self):
+        external = pathlib.Path(self.temp.name) / 'external-state'
+        external.mkdir()
+        alias = self.home / 'state-alias'
+        alias.symlink_to(external, target_is_directory=True)
+        for root in [self.home, alias]:
+            with self.subTest(root=root):
+                self.env['BOOTSTRAP_STATE_ROOT'] = str(root)
+                self.execute('init', ok=False)
+                self.assertFalse((root / 'install.json').exists())
+
     def test_package_identity_rejects_options_duplicates_and_malformed_flags(self):
         self.execute('init'); self.execute('package','apt','fixture','0','absent','installed')
         path=self.state/'install.json'; original=json.loads(path.read_text())

@@ -7,6 +7,8 @@ import {
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { prepareMigrationTargets, activateMigrationTargets, restoreMigrationTargets, enrollMigrationRoots } from './state-helper.mjs';
 
 const [command, ...args] = process.argv.slice(2);
 const sourceRoot = resolve(process.env.BOOTSTRAP_LEGACY_PI_ROOT || join(process.env.HOME || '', '.pi/agent'));
@@ -16,9 +18,19 @@ const agentRoot = join(privateRoot, 'pi/agent');
 const sessionRoot = join(privateRoot, 'pi/sessions');
 const stateRoot = resolve(process.env.BOOTSTRAP_STATE_ROOT || join(process.env.XDG_STATE_HOME || join(home, '.local/state'), 'bootstrap'));
 const journalPath = join(stateRoot, 'migration.json');
-const installRecordPath = join(stateRoot, 'install.json');
 const checkoutRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const maxEntries = 20000;
+const configHome = resolve(process.env.XDG_CONFIG_HOME || join(home, '.config'));
+function recordedGhSource() {
+  if (!existsSync(journalPath)) return undefined;
+  try { return JSON.parse(readFileSync(journalPath, 'utf8')).ghSource; } catch { fail('Malformed migration journal JSON'); }
+}
+const ghSource = resolve(process.env.BOOTSTRAP_LEGACY_GH_ROOT || recordedGhSource() || join(configHome, 'gh'));
+const ghDestination = join(privateRoot, 'gh');
+const herdrRoot = join(configHome, 'herdr');
+const nvimSource = join(configHome, 'bootstrap-nvim');
+const nvimRuntime = join(privateRoot, 'neovim/config');
+
 
 function fail(message, status = 1) { console.error(message); process.exit(status); }
 function plainObject(value) { return value && Object.getPrototypeOf(value) === Object.prototype; }
@@ -36,8 +48,8 @@ function pathChain(root, value) {
   for (const component of rel.split(sep)) { cursor = join(cursor, component); result.push(cursor); }
   return result;
 }
-function validateHomePath(name, value) {
-  if (!isAbsolute(value) || value === '/' || !within(home, value)) fail(`${name} must be an absolute path below HOME: ${value}`, 2);
+function validateHomePath(name, value, allowHome = false) {
+  if (!isAbsolute(value) || value === '/' || !within(home, value, allowHome)) fail(`${name} must be an absolute path below HOME: ${value}`, 2);
   for (const path of pathChain(home, value)) {
     const stat = lstatSafe(path);
     if (!stat) continue;
@@ -48,7 +60,7 @@ function validateHomePath(name, value) {
 }
 function relevantRootPaths() {
   const paths = new Set([home]);
-  for (const root of [sourceRoot, privateRoot, agentRoot, sessionRoot, stateRoot]) for (const path of pathChain(home, root)) paths.add(path);
+  for (const root of [sourceRoot, privateRoot, agentRoot, sessionRoot, stateRoot, ghSource, ghDestination, herdrRoot]) for (const path of pathChain(home, root)) paths.add(path);
   return [...paths].sort();
 }
 function captureRootIdentities() {
@@ -71,8 +83,9 @@ function validateRootIdentities(identities) {
 function validateRoots() {
   const homeStat = lstatSafe(home);
   if (!isAbsolute(home) || home === '/' || !homeStat?.isDirectory() || homeStat.isSymbolicLink() || realpathSync(home) !== home) fail(`HOME must be a canonical non-symlink directory below /: ${home}`, 2);
-  for (const [name, value] of [['legacy Pi root', sourceRoot], ['private root', privateRoot], ['agent root', agentRoot], ['session root', sessionRoot], ['state root', stateRoot]]) validateHomePath(name, value);
+  for (const [name, value] of [['legacy Pi root', sourceRoot], ['private root', privateRoot], ['agent root', agentRoot], ['session root', sessionRoot], ['state root', stateRoot], ['GH source', ghSource], ['GH destination', ghDestination], ['Herdr root', herdrRoot]]) validateHomePath(name, value);
   if (within(sourceRoot, privateRoot, true) || within(privateRoot, sourceRoot, true)) fail('Legacy and destination roots must not overlap', 2);
+  if (within(ghSource, privateRoot, true) || within(privateRoot, ghSource, true) || within(sourceRoot, ghSource, true) || within(ghSource, sourceRoot, true)) fail('GH and Pi migration roots must not overlap');
   const sourceReal = lstatSafe(sourceRoot) ? realpathSync(sourceRoot) : undefined;
   for (const destination of [privateRoot, agentRoot, sessionRoot]) {
     if (!sourceReal || !lstatSafe(destination)) continue;
@@ -179,16 +192,26 @@ function herdrConflict() {
   const stat = lstatSafe(root);
   if (!stat) return undefined;
   if (!stat.isDirectory() || stat.isSymbolicLink()) return { path: root, reason: 'Herdr state root is not a regular directory' };
-  if (readdirSync(root).length === 0) return undefined;
-  let record;
-  try { record = JSON.parse(readFileSync(installRecordPath, 'utf8')); } catch { return { path: root, reason: 'existing Herdr personal state is not enrolled' }; }
-  if (!Array.isArray(record.enrolledRoots) || !record.enrolledRoots.includes(root)) return { path: root, reason: 'existing Herdr personal state is not enrolled' };
-  const identity = record.enrolledRootIdentities?.[root];
-  if (identity) {
-    const current = `${stat.dev}:${stat.ino}`;
-    if (identity !== current) return { path: root, reason: 'enrolled Herdr root identity changed' };
-  }
+
   return undefined;
+}
+const neovimSeedFiles = ['lazy-lock.json', 'lazyvim.json', '.neoconf.json', 'bootstrap-profile.json'];
+function neovimSeed() {
+  const selected = [nvimSource, join(configHome, 'nvim')].find(path => lstatSafe(path));
+  if (!selected) return { root: null, files: [] };
+  const root = realpathSync(selected);
+  validateHomePath('Neovim seed root', root);
+  return { root, files: neovimSeedFiles.filter(name => lstatSafe(join(root, name))).map(name => ({ path: name, ...descriptor(join(root, name)) })) };
+}
+function requireNeovimSeed(journal) {
+  const seed = journal.neovimSeed;
+  if (!seed.root) {
+    if (lstatSafe(join(configHome, 'nvim')) || (lstatSafe(nvimSource) && realpathSync(nvimSource) !== nvimRuntime)) fail('A Neovim configuration appeared after preparation; inspect before continuing');
+    return;
+  }
+  if (seed.root === nvimRuntime) return;
+  const current = neovimSeedFiles.filter(name => lstatSafe(join(seed.root, name))).map(name => ({ path: name, ...descriptor(join(seed.root, name)) }));
+  if (!inventoriesEqual(seed.files, current)) fail('Legacy Neovim settings changed since preparation; preserve both configs and prepare again');
 }
 function inspect() {
   const source = inventory(sourceRoot, true);
@@ -197,6 +220,30 @@ function inspect() {
   const mapped = mappedEntries(source);
   const conflicts = destinationConflicts(mapped);
   for (const conflict of activationTargets().map(activationConflict).filter(Boolean)) conflicts.push(conflict);
+  for (const item of inventory(ghSource)) {
+    if (!['file', 'directory'].includes(item.type)) conflicts.push({ path: join(ghSource, item.path), reason: 'GH links or special files require explicit resolution' });
+  }
+  conflicts.push(...destinationConflicts(ghEntries(inventory(ghSource))));
+  if (process.env.NVIM_CONFIG_CHECKOUT_DIR || process.env.NVIM_CONFIG_REPO_URL) conflicts.push({ path: nvimSource, reason: 'External Neovim configuration cannot be staged by this migration' });
+  const legacyNvim = join(configHome, 'nvim');
+  for (const root of [legacyNvim, nvimSource]) {
+    const stat = lstatSafe(root);
+    if (!stat) continue;
+    const init = join(root, 'init.lua');
+    if (!lstatSafe(init)) { conflicts.push({ path: root, reason: 'Neovim configuration is missing init.lua' }); continue; }
+    if (!lstatSafe(init)?.isSymbolicLink() || snapshotLinkTarget(resolve(dirname(init), readlinkSync(init))) !== join(checkoutRoot, 'neovim/config/init.lua')) {
+      if (realpathSync(init) !== join(checkoutRoot, 'neovim/config/init.lua')) conflicts.push({ path: root, reason: 'Neovim config is not the supported bundled config; preserve and resolve before migration' });
+    }
+  }
+  const seed = neovimSeed();
+  if (seed.files.some(item => item.type !== 'file')) conflicts.push({ path: seed.root, reason: 'Neovim writable settings must be regular files before preparation' });
+  if (seed.root) {
+    for (const name of readdirSync(seed.root)) {
+      if (![...neovimSeedFiles, 'init.lua', 'lsp-selections.json'].includes(name)) conflicts.push({ path: join(seed.root, name), reason: 'Additional Neovim customization requires explicit migration before cutover' });
+    }
+    const lsp = join(seed.root, 'lsp-selections.json');
+    if (existsSync(lsp) && Object.keys(JSON.parse(readFileSync(lsp, 'utf8')).servers || {}).length) conflicts.push({ path: lsp, reason: 'Existing LSP selections require explicit preparation of their runtimes' });
+  }
   const herdr = herdrConflict();
   if (herdr) conflicts.push(herdr);
   return {
@@ -206,6 +253,8 @@ function inspect() {
     agentRoot,
     sessionRoot,
     sourceEntries: source.length,
+    gh: { source: ghSource, destination: ghDestination, entries: inventory(ghSource).length, keychain: 'external, untouched' },
+    enrollmentOnTransfer: [privateRoot, herdrRoot],
     sourcePresent: Boolean(lstatSafe(sourceRoot)),
     unknownExternalLinks,
     unsupported,
@@ -247,10 +296,21 @@ function expectedTransferredEntry(source) {
 }
 function fullPathForSource(path) { return path === 'sessions' || path.startsWith(`sessions${sep}`) ? path : `agent${sep}${path}`; }
 function validateJournal(value) {
-  const allowedKeys = ['schemaVersion','phase','sourceRoot','agentRoot','sessionRoot','sourceInventory','destinationBefore','rootIdentities','preparedAt','transferredInventory','transferredFullInventory','transferredAt','activation','verifiedInventory','verifiedFullInventory','verifiedAt','rollbackState','rolledBackAt','retiredAt'];
+  const allowedKeys = ['schemaVersion','phase','sourceRoot','agentRoot','sessionRoot','sourceInventory','destinationBefore','rootIdentities','preparedAt','transferredInventory','transferredFullInventory','transferredAt','activation','verifiedInventory','verifiedFullInventory','verifiedAt','rollbackState','rolledBackAt','retiredAt','ghSource','ghInventory','ghBefore','ghTransferred','ghVerified','enrollmentOnTransfer','neovimSeed','transferStarted'];
   if (!plainObject(value) || Object.keys(value).some(key => !allowedKeys.includes(key)) || value.schemaVersion !== 1 || !['prepared', 'transferred', 'activated', 'verified', 'retiring', 'rolling-back', 'rolled-back', 'retired'].includes(value.phase)) fail('Malformed migration journal');
   if (value.sourceRoot !== sourceRoot || value.agentRoot !== agentRoot || value.sessionRoot !== sessionRoot) fail('Migration roots differ from the recorded operation');
   validateRootIdentities(value.rootIdentities);
+  if (!plainObject(value.neovimSeed) || !exactKeys(value.neovimSeed, ['root', 'files'])) fail('Malformed Neovim seed');
+  if (value.neovimSeed.root !== null) validateHomePath('Neovim seed root', value.neovimSeed.root);
+  validateUniqueInventory(value.neovimSeed.files, 'Neovim seed inventory');
+  if (value.neovimSeed.files.some(item => !neovimSeedFiles.includes(item.path) || item.type !== 'file')) fail('Malformed Neovim seed files');
+  if (!inventoriesEqual(value.enrollmentOnTransfer, [privateRoot, herdrRoot])) fail('Malformed migration enrollment scope');
+  if (value.ghSource !== ghSource) fail('GH source differs from the recorded operation');
+  validateUniqueInventory(value.ghInventory, 'GH source inventory');
+  validateUniqueInventory(value.ghBefore, 'GH original destination inventory');
+  if (value.ghInventory.some(item => !['file', 'directory'].includes(item.type))) fail('Unsupported GH source entry');
+  if (value.ghTransferred !== undefined) validateUniqueInventory(value.ghTransferred, 'GH transferred inventory');
+  if (value.ghVerified !== undefined) validateUniqueInventory(value.ghVerified, 'GH verified inventory');
   validateUniqueInventory(value.sourceInventory, 'source migration inventory', true);
   validateUniqueInventory(value.destinationBefore, 'destination migration inventory');
   if (value.destinationBefore.length !== value.sourceInventory.length) fail('Migration inventories do not correspond');
@@ -284,14 +344,13 @@ function validateJournal(value) {
     const expected = activationTargets();
     if (!Array.isArray(value.activation) || value.activation.length !== expected.length) fail('Malformed activation journal');
     value.activation.forEach((item, index) => {
-      if (!plainObject(item) || !exactKeys(item, ['target','source','before']) || item.target !== expected[index].target || item.source !== expected[index].source || !validStoredDescriptor(item.before, false) || !['absent','symlink'].includes(item.before.type)) fail('Malformed activation target');
+      if (!plainObject(item) || !exactKeys(item, ['target','source','kind']) || item.target !== expected[index].target || item.source !== expected[index].source || item.kind !== expected[index].kind) fail('Malformed activation target');
     });
   }
+  if (value.transferStarted !== undefined && value.transferStarted !== true) fail('Malformed transfer intent');
   if (value.phase === 'rolling-back' && value.rollbackState === undefined) fail('Rolling-back journal has no progress state');
   if (value.rollbackState !== undefined) {
-    if (!plainObject(value.rollbackState) || !exactKeys(value.rollbackState, ['activationRestored','destinationsRemoved']) || !Array.isArray(value.rollbackState.activationRestored) || !Array.isArray(value.rollbackState.destinationsRemoved)) fail('Malformed rollback state');
-    const targets = new Set((value.activation || []).map(item => item.target));
-    if (new Set(value.rollbackState.activationRestored).size !== value.rollbackState.activationRestored.length || value.rollbackState.activationRestored.some(path => !targets.has(path))) fail('Malformed rollback progress');
+    if (!plainObject(value.rollbackState) || !exactKeys(value.rollbackState, ['destinationsRemoved']) || !Array.isArray(value.rollbackState.destinationsRemoved)) fail('Malformed rollback state');
     const paths = new Set(value.sourceInventory.map(item => item.path));
     if (new Set(value.rollbackState.destinationsRemoved).size !== value.rollbackState.destinationsRemoved.length || value.rollbackState.destinationsRemoved.some(path => !paths.has(path))) fail('Malformed rollback progress');
   }
@@ -303,7 +362,10 @@ function loadJournal() {
   return validateJournal(value);
 }
 function inventoriesEqual(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
+function ghEntries(items) { return items.map(item => ({ ...item, destination: join(ghDestination, item.path) })); }
 function requireSourceIdentity(journal) {
+  requireNeovimSeed(journal);
+  if (!inventoriesEqual(inventory(ghSource), journal.ghInventory)) fail('Legacy GH source changed since preparation');
   const current = inventory(sourceRoot, true);
   if (!inventoriesEqual(current, journal.sourceInventory)) fail('Legacy source changed since preparation; inspect and prepare again before continuing');
 }
@@ -323,6 +385,7 @@ function destinationPreservesSource(actual, source) {
   return ['directory', 'file'].includes(source.type);
 }
 function requireVerifiedDestination(journal) {
+  if (!inventoriesEqual(inventory(ghDestination), journal.ghVerified)) fail('GH destination changed since verification; verify again');
   if (!Array.isArray(journal.verifiedInventory) || !Array.isArray(journal.verifiedFullInventory)) fail('Migration needs a fresh quiescent verification receipt');
   const current = currentMappedInventory(mappedEntries(journal.sourceInventory));
   if (!inventoriesEqual(current, journal.verifiedInventory) || !inventoriesEqual(fullDestinationInventory(), journal.verifiedFullInventory)) fail('Destination changed since quiescent verification; verify again before retirement');
@@ -335,7 +398,18 @@ function fullDestinationInventory() {
   result.push(...inventory(sessionRoot).map(item => ({ ...item, path: `sessions/${item.path}` })));
   return result;
 }
-function transferEntries(entries) {
+function validateRollbackRemainder(current, baseline, removable) {
+  const expected = new Map(baseline.map(item => [item.path, item]));
+  for (const item of current) {
+    const original = expected.get(item.path);
+    if (!original || !sameDescriptor(item, original)) fail(`Rollback destination changed: ${item.path}`);
+    expected.delete(item.path);
+  }
+  for (const path of expected.keys()) {
+    if (!removable.has(path)) fail(`Pre-existing rollback destination disappeared: ${path}`);
+  }
+}
+function transferEntries(entries, source = sourceRoot) {
   for (const item of entries.filter(value => value.type === 'directory')) {
     const existing = descriptor(item.destination);
     if (existing.type === 'absent') {
@@ -346,46 +420,58 @@ function transferEntries(entries) {
   for (const item of entries.filter(value => value.type !== 'directory')) {
     if (descriptor(item.destination).type !== 'absent') continue;
     mkdirSync(dirname(item.destination), { recursive: true, mode: 0o700 });
-    if (item.type === 'file') { copyFileSync(join(sourceRoot, item.path), item.destination); chmodSync(item.destination, item.mode); }
+    if (item.type === 'file') { copyFileSync(join(source, item.path), item.destination); chmodSync(item.destination, item.mode); }
     else if (item.type === 'symlink') symlinkSync(item.target, item.destination);
     else fail(`Unsupported transfer entry: ${item.path}`);
   }
 }
 function activationTargets() {
   const targets = [
-    [join(home, '.config/dotfiles/bare-env.sh'), join(checkoutRoot, 'scripts/bare-env.sh')],
     [join(home, '.local/bin/dev-shell'), join(checkoutRoot, 'scripts/dev-shell')],
     [join(home, '.local/bin/pi'), join(checkoutRoot, 'scripts/pi-owned')],
+    [join(process.env.DOTFILES_BARE_ROOT || join(home, '.local/share/bootstrap/tools'), 'bin/pi'), join(checkoutRoot, 'scripts/pi-owned')],
     [join(home, '.local/bin/pi-workspace'), join(checkoutRoot, 'scripts/pi-workspace')],
     [join(home, '.local/bin/piw'), join(checkoutRoot, 'scripts/pi-workspace')],
     [join(home, '.local/bin/pi-headroom'), join(checkoutRoot, 'scripts/pi-headroom')],
+    [join(home, '.local/bin/pih'), join(checkoutRoot, 'scripts/pi-headroom')],
+    [nvimSource, nvimRuntime],
+    ...['bashrc', 'zshenv', 'zshrc', 'zprofile'].map(name => [join(home, `.${name}`), join(checkoutRoot, name)]),
+    [bashLoginTarget(), join(privateRoot, 'bash/login-profile')],
+    [join(home, '.config/dotfiles/bare-env.sh'), join(checkoutRoot, 'scripts/bare-env.sh')],
   ];
   return targets.map(([target, source]) => {
-    validateHomePath('activation parent', dirname(target));
-    return { target, source };
+    validateHomePath('activation parent', dirname(target), true);
+    return { target, source, kind: target === bashLoginTarget() ? 'file' : 'symlink' };
   });
+}
+function bashLoginTarget() {
+  return ['.bash_profile', '.bash_login', '.profile'].map(name => join(home, name)).find(path => lstatSafe(path)) || join(home, '.bash_profile');
 }
 function activationConflict(item) {
   const actual = descriptor(item.target);
+  if (item.target === bashLoginTarget() && actual.type === 'file' && !/mamba|conda/i.test(readFileSync(item.target, 'utf8'))) return undefined;
+  if (item.target === nvimSource && actual.type === 'symlink' && lstatSafe(join(item.target, 'init.lua')) && realpathSync(join(item.target, 'init.lua')) === join(checkoutRoot, 'neovim/config/init.lua')) return undefined;
   if (actual.type === 'absent' || (actual.type === 'symlink' && actual.target === item.source)) return undefined;
   if (actual.type === 'symlink' && snapshotLinkTarget(resolve(dirname(item.target), actual.target)) === item.source) return undefined;
   return { path: item.target, reason: 'activation target is not absent or a proven managed link' };
 }
 function writeActivation(journal) {
+  const loginSource = join(privateRoot, 'bash/login-profile');
+  if (!lstatSafe(loginSource)) {
+    const target = bashLoginTarget();
+    const content = lstatSafe(target) ? readFileSync(target, 'utf8') : '';
+    mkdirSync(dirname(loginSource), { recursive: true, mode: 0o700 });
+    writeFileSync(loginSource, `${content}\n# bootstrap native login environment\n[ ! -f "$HOME/.config/dotfiles/bare-env.sh" ] || . "$HOME/.config/dotfiles/bare-env.sh"\n`, { mode: 0o600 });
+  }
   const targets = activationTargets();
   const conflicts = targets.map(activationConflict).filter(Boolean);
   if (conflicts.length) fail(`Activation conflicts:\n${conflicts.map(item => `${item.path}: ${item.reason}`).join('\n')}`);
   if (!journal.activation) {
-    journal.activation = targets.map(item => ({ ...item, before: descriptor(item.target) }));
+    journal.activation = targets;
+    prepareMigrationTargets(targets);
     atomicWrite(journalPath, journal);
   }
-  for (const item of journal.activation) {
-    const current = descriptor(item.target);
-    if (current.type === 'symlink' && current.target === item.source) continue;
-    mkdirSync(dirname(item.target), { recursive: true, mode: 0o700 });
-    if (current.type !== 'absent') rmSync(item.target);
-    symlinkSync(item.source, item.target);
-  }
+  activateMigrationTargets(journal.activation);
   journal.phase = 'activated';
   atomicWrite(journalPath, journal);
 }
@@ -395,10 +481,23 @@ function testFault(boundary) {
   console.error(`Injected migration test fault: ${boundary}`);
   process.exit(86);
 }
+function requireRuntimeReadiness() {
+  const result = spawnSync('bash', [join(checkoutRoot, 'scripts/migration-runtime'), 'verify'], { env: process.env, encoding: 'utf8', timeout: 120000 });
+  if (result.error || result.status !== 0) fail(`Migration runtime is not ready:\n${result.stdout || ''}${result.stderr || result.error || ''}`);
+}
 function result(value) { process.stdout.write(`${JSON.stringify(value, null, 2)}\n`); }
 
+// Ordinary configuration has no migration paths to inspect when no journal exists.
+if (command === 'protected-list' && args.length === 0 && !existsSync(journalPath)) process.exit(0);
 validateRoots();
 switch (command) {
+  case 'readiness': {
+    if (args.length) fail('migration readiness accepts no arguments', 2);
+    const journal = loadJournal();
+    requireRuntimeReadiness();
+    result({ schemaVersion: 1, ready: true, phase: journal.phase, profiles: { pi: agentRoot, sessions: sessionRoot, gh: ghDestination, neovim: nvimRuntime } });
+    break;
+  }
   case 'inspect': {
     if (args.length) fail('migration inspect accepts no arguments', 2);
     result(inspect());
@@ -409,9 +508,10 @@ switch (command) {
     if (existsSync(journalPath)) {
       const existing = loadJournal();
       if (existing.phase !== 'prepared') fail(`Preparation cannot replace migration state in phase ${existing.phase}`);
-      requireSourceIdentity(existing);
-      result({ schemaVersion: 1, phase: existing.phase, journalPath, sourceEntries: existing.sourceInventory.length });
-      break;
+      if (existing.transferStarted) {
+        requireSourceIdentity(existing);
+        fail('Transfer has already started; retry transfer rather than replacing its recovery inventory');
+      }
     }
     const report = inspect();
     if (!report.sourcePresent) fail(`Legacy Pi state is absent: ${sourceRoot}`);
@@ -422,12 +522,14 @@ switch (command) {
     const journal = {
       schemaVersion: 1, phase: 'prepared', sourceRoot, agentRoot, sessionRoot,
       sourceInventory,
+      enrollmentOnTransfer: [privateRoot, herdrRoot], neovimSeed: neovimSeed(),
+      ghSource, ghInventory: inventory(ghSource), ghBefore: currentMappedInventory(ghEntries(inventory(ghSource))),
       destinationBefore: currentMappedInventory(entries),
       rootIdentities: captureRootIdentities(),
       preparedAt: new Date().toISOString(),
     };
     atomicWrite(journalPath, journal);
-    result({ schemaVersion: 1, phase: journal.phase, journalPath, sourceEntries: sourceInventory.length });
+    result({ schemaVersion: 1, phase: journal.phase, journalPath, sourceEntries: sourceInventory.length, gh: report.gh, enrollmentOnTransfer: journal.enrollmentOnTransfer });
     break;
   }
   case 'transfer': {
@@ -436,14 +538,23 @@ switch (command) {
     if (!['prepared', 'transferred'].includes(journal.phase)) fail(`Transfer requires prepared state, found ${journal.phase}`);
     requireSourceIdentity(journal);
     if (journal.phase === 'transferred') {
+      if (!inventoriesEqual(inventory(ghDestination), journal.ghTransferred)) fail('GH destination changed since transfer');
       if (!Array.isArray(journal.transferredFullInventory) || !inventoriesEqual(fullDestinationInventory(), journal.transferredFullInventory)) fail('Transferred destination changed before retry');
       result({ schemaVersion: 1, phase: journal.phase, transferredEntries: journal.transferredInventory.length });
       break;
     }
     const entries = mappedEntries(journal.sourceInventory);
-    const conflicts = destinationConflicts(entries);
+    const conflicts = [...destinationConflicts(entries), ...destinationConflicts(ghEntries(journal.ghInventory))];
     if (conflicts.length) fail(`Destination conflicts block transfer:\n${conflicts.map(item => `${item.path}: ${item.reason}`).join('\n')}`);
+    journal.transferStarted = true;
+    atomicWrite(journalPath, journal);
+    // --yes confirms the enrollment disclosed by inspect, before copying personal data.
+    enrollMigrationRoots(journal.enrollmentOnTransfer);
+    mkdirSync(ghDestination, { recursive: true, mode: 0o700 });
+    transferEntries(ghEntries(journal.ghInventory), ghSource);
     transferEntries(entries);
+    journal.ghTransferred = inventory(ghDestination);
+    if (!inventoriesEqual(currentMappedInventory(ghEntries(journal.ghInventory)), journal.ghInventory)) fail('GH transfer verification failed');
     requireSourceIdentity(journal);
     const after = currentMappedInventory(entries);
     const expected = entries.map(item => ({ path: item.path, type: item.type, ...(item.mode === undefined ? {} : { mode: item.mode }), ...(item.size === undefined ? {} : { size: item.size }), ...(item.sha256 === undefined ? {} : { sha256: item.sha256 }), ...(item.type === 'symlink' ? { target: item.target } : {}) }));
@@ -453,7 +564,7 @@ switch (command) {
     journal.rootIdentities = { ...journal.rootIdentities, ...captureRootIdentities() };
     journal.phase = 'transferred'; journal.transferredAt = new Date().toISOString();
     atomicWrite(journalPath, journal);
-    result({ schemaVersion: 1, phase: journal.phase, transferredEntries: after.length });
+    result({ schemaVersion: 1, phase: journal.phase, transferredEntries: after.length, ghEntries: journal.ghTransferred.length, enrolledRoots: journal.enrollmentOnTransfer });
     break;
   }
   case 'activate': {
@@ -462,6 +573,8 @@ switch (command) {
     if (!['transferred', 'activated'].includes(journal.phase)) fail(`Activation requires transferred state, found ${journal.phase}`);
     requireSourceIdentity(journal);
     if (!inventoriesEqual(currentMappedInventory(mappedEntries(journal.sourceInventory)), journal.transferredInventory)) fail('Transferred state changed before activation');
+    requireRuntimeReadiness();
+    if (!inventoriesEqual(inventory(ghDestination), journal.ghTransferred)) fail('GH destination changed before activation');
     writeActivation(journal);
     result({ schemaVersion: 1, phase: 'activated', activationTargets: journal.activation.length });
     break;
@@ -475,8 +588,12 @@ switch (command) {
     current.forEach((item, index) => { if (!destinationPreservesSource(item, expectedTransferredEntry(journal.sourceInventory[index]))) fail(`Migrated destination is missing or unsafe: ${item.path}`); });
     for (const item of journal.activation || []) {
       const actual = descriptor(item.target);
-      if (actual.type !== 'symlink' || actual.target !== item.source) fail(`Activation verification failed: ${item.target}`);
+      const matches = item.kind === 'file' ? sameDescriptor(actual, descriptor(item.source)) : actual.type === 'symlink' && actual.target === item.source;
+      if (!matches) fail(`Activation verification failed: ${item.target}`);
     }
+    requireRuntimeReadiness();
+    for (const item of ghEntries(journal.ghInventory)) if (!destinationPreservesSource(descriptor(item.destination), item)) fail('Migrated GH destination is missing or unsafe');
+    journal.ghVerified = inventory(ghDestination);
     journal.verifiedInventory = current;
     journal.verifiedFullInventory = fullDestinationInventory();
     journal.phase = 'verified'; journal.verifiedAt = new Date().toISOString();
@@ -491,27 +608,18 @@ switch (command) {
     requireSourceIdentity(journal);
     const entries = mappedEntries(journal.sourceInventory);
     if (journal.phase !== 'rolling-back') {
+      if (!inventoriesEqual(inventory(ghDestination), journal.ghTransferred)) fail('GH destination has post-cutover writes; rollback refused');
       if (!Array.isArray(journal.transferredFullInventory) || !inventoriesEqual(fullDestinationInventory(), journal.transferredFullInventory)) fail('Destination has post-cutover additions, deletions, mode changes, link changes, or file changes; rollback refused. Preserve both roots and inspect differences before recovery.');
       journal.phase = 'rolling-back';
-      journal.rollbackState = { activationRestored: [], destinationsRemoved: [] };
+      journal.rollbackState = { destinationsRemoved: [] };
       atomicWrite(journalPath, journal);
       testFault('rollback-after-intent');
     }
-    for (let index = journal.activation.length - 1; index >= 0; index -= 1) {
-      const item = journal.activation[index];
-      const current = descriptor(item.target);
-      const restored = sameDescriptor(current, item.before);
-      if (!restored && !(current.type === 'symlink' && current.target === item.source)) fail(`Activation target is neither rollback before nor after state: ${item.target}`);
-      if (!restored) {
-        rmSync(item.target);
-        if (item.before.type === 'symlink') symlinkSync(item.before.target, item.target);
-        testFault(`rollback-after-activation-${index}`);
-      }
-      if (!journal.rollbackState.activationRestored.includes(item.target)) {
-        journal.rollbackState.activationRestored.push(item.target);
-        atomicWrite(journalPath, journal);
-      }
-    }
+    validateRollbackRemainder(fullDestinationInventory(), journal.transferredFullInventory,
+      new Set(journal.destinationBefore.filter(item => item.type === 'absent').map(item => fullPathForSource(item.path))));
+    validateRollbackRemainder(inventory(ghDestination), journal.ghTransferred,
+      new Set(journal.ghBefore.filter(item => item.type === 'absent').map(item => item.path)));
+    restoreMigrationTargets(journal.activation, index => testFault(`rollback-after-activation-${index}`));
     for (let index = entries.length - 1; index >= 0; index -= 1) {
       const item = entries[index];
       const before = journal.destinationBefore[index];
@@ -530,6 +638,13 @@ switch (command) {
         journal.rollbackState.destinationsRemoved.push(item.path);
         atomicWrite(journalPath, journal);
       }
+    }
+    for (const item of [...ghEntries(journal.ghInventory)].reverse()) {
+      if (journal.ghBefore.find(before => before.path === item.path)?.type !== 'absent') continue;
+      const current = descriptor(item.destination);
+      if (current.type === 'absent') continue;
+      if (!sameDescriptor(current, item)) fail('GH rollback destination changed');
+      if (item.type === 'directory') rmdirSync(item.destination); else rmSync(item.destination);
     }
     journal.phase = 'rolled-back'; journal.rolledBackAt = new Date().toISOString();
     atomicWrite(journalPath, journal);

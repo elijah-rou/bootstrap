@@ -23,18 +23,3 @@ uninstall_bare
 uninstall_bare
 [[ "$(wc -l <"$HOME/removed" | tr -d ' ')" == 1 ]]
 echo 'PASS uninstall preview, cleanup, restoration, package removal, and retry'
-
-export HOME="$fixture/legacy-home"; export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" XDG_STATE_HOME="$HOME/.local/state" XDG_CACHE_HOME="$HOME/.cache"
-unset DOTFILES_BARE_ROOT BOOTSTRAP_PRIVATE_ROOT BOOTSTRAP_STATE_ROOT CARGO_HOME RUSTUP_HOME BUN_INSTALL npm_config_prefix GOPATH GOBIN PI_CODING_AGENT_DIR PI_CODING_AGENT_SESSION_DIR GH_CONFIG_DIR NVIM_APPNAME BOOTSTRAP_LSP_SELECTIONS
-mkdir -p "$HOME/.config/dotfiles" "$HOME/.pi/agent/sessions" "$HOME/.local/share/dotfiles/bare"
-ln -s "$ROOT/scripts/bare-env.sh" "$HOME/.config/dotfiles/bare-env.sh"
-printf secret >"$HOME/.pi/agent/auth.json"; printf session >"$HOME/.pi/agent/sessions/one"; printf unrelated >"$HOME/.local/share/dotfiles/bare/user-addition"
-bootstrap_migration prepare >/dev/null
-bootstrap_migration transfer --yes >/dev/null
-bootstrap_migration activate --yes >/dev/null
-bootstrap_migration verify >/dev/null
-[[ "$(cat "$HOME/.local/share/bootstrap/private/pi/agent/auth.json")" == secret ]]
-bootstrap_migration retire --yes >/dev/null
-[[ ! -e "$HOME/.pi/agent" && -e "$HOME/.local/share/bootstrap/private/pi/agent/auth.json" && -L "$HOME/.config/dotfiles/bare-env.sh" ]]
-[[ "$(cat "$HOME/.local/share/dotfiles/bare/user-addition")" == unrelated ]]
-echo 'PASS explicit legacy migration preserves sensitive state and unrelated old tool additions'

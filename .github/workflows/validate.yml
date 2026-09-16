@@ -47,6 +47,14 @@ jobs:
             echo "NVIM_BUNDLED_RUNTIME=1"
           } >> "$GITHUB_ENV"
           echo "$fixture/home/.local/share/bootstrap/tools/bin" >> "$GITHUB_PATH"
+      - name: Prepare isolated migration runtime
+        env:
+          BOOTSTRAP_NATIVE_DISPOSABLE: '1'
+        run: |
+          fixture="$RUNNER_TEMP/bootstrap-migration-runtime"
+          bash tests/prepare_migration_runtime.sh "$fixture"
+          echo "BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE=$fixture" >> "$GITHUB_ENV"
+          echo "$fixture/home/tools/bin" >> "$GITHUB_PATH"
       - run: ./scripts/validate
       - name: Verified official binary and Pi entrypoint smoke
         run: bash tests/native_artifact_smoke.sh --pi
@@ -89,7 +97,7 @@ jobs:
 
   runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -127,5 +135,13 @@ jobs:
             echo "PI_WEB_ACCESS_SSRF_MODULE=$runtime/pi-web-access/ssrf-protection.ts"
             echo "PI_SUBAGENTS_TEST_RUNTIME_SOURCE=$subagents"
           } >> "$GITHUB_ENV"
+      - name: Prepare isolated migration runtime
+        env:
+          BOOTSTRAP_NATIVE_DISPOSABLE: '1'
+        run: |
+          fixture="$RUNNER_TEMP/bootstrap-migration-runtime"
+          bash tests/prepare_migration_runtime.sh "$fixture"
+          echo "BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE=$fixture" >> "$GITHUB_ENV"
+          echo "$fixture/home/tools/bin" >> "$GITHUB_PATH"
       - name: Validate installed Pi and Codex consumers without authentication
         run: ./scripts/validate --runtime

@@ -28,7 +28,7 @@ usage() {
         '       ./install.sh (--lsp|-s) SERVER...' \
         '       ./install.sh (--tools|-t) TOOL...' \
         '       ./install.sh uninstall [--dry-run|--yes]' \
-        '       ./install.sh migration <inspect|prepare|transfer|activate|verify|rollback|retire> [--yes]' \
+        '       ./install.sh migration <inspect|prepare|readiness|transfer|activate|verify|rollback|retire> [--yes]' \
         '       ./install.sh enroll-project ABS_DIR --yes' \
         '       ./install.sh migrate-legacy --yes  # compatibility notice only' \
         'Languages: c cpp rust go python typescript elixir zig.' \

@@ -15,6 +15,10 @@ setup_bundled_neovim_config() (
     [[ "$profile" == bare || "$profile" == workstation ]] || { warn "Unknown Neovim profile: $profile"; return 1; }
     local runtime="${BOOTSTRAP_PRIVATE_ROOT:-$data_home/bootstrap/private}/neovim/config"
     local target="$config_home/$app_name"
+    local seed_target="${BOOTSTRAP_NEOVIM_SEED:-$target}"
+    if [[ "${BOOTSTRAP_PREPARE_ONLY:-0}" == 1 ]]; then
+        target="$BOOTSTRAP_PRIVATE_ROOT/neovim/staged-config/$app_name"
+    fi
     [[ "$data_home" == /* && "$data_home" != / && "$config_home" == /* && "$config_home" != / ]] || { warn 'Neovim requires absolute data/config homes below /'; return 1; }
     command -v node >/dev/null || { warn 'Node.js is required for Neovim configuration'; return 1; }
     [[ -f "$source/init.lua" ]] || return 1
@@ -26,9 +30,9 @@ setup_bundled_neovim_config() (
         [[ -d "$runtime" && ! -L "$runtime" ]] && validate_neovim_profile "$runtime/bootstrap-profile.json" || { warn "Preserving unrecognized Neovim runtime at $runtime"; return 1; }
         destination="$runtime"
     else stage="$(mktemp -d "$(dirname "$runtime")/.neovim-stage.XXXXXX")" || return 1; destination="$stage"; fi
-    [[ -d "$target" && "$(resolve_path "$target")" == "$(resolve_path "$runtime")" ]] && active_runtime=1
+    [[ "${BOOTSTRAP_PREPARE_ONLY:-0}" != 1 && -d "$target" && "$(resolve_path "$target")" == "$(resolve_path "$runtime")" ]] && active_runtime=1
     for name in lazy-lock.json lazyvim.json .neoconf.json; do
-        if [[ "$active_runtime" -eq 0 && -f "$target/$name" ]]; then seed="$target/$name"
+        if [[ "$active_runtime" -eq 0 && -f "$seed_target/$name" ]]; then seed="$seed_target/$name"
         elif [[ -e "$destination/$name" || -L "$destination/$name" ]]; then continue
         else seed="$defaults/$name"; fi
         node -e 'const fs=require("node:fs"); const v=JSON.parse(fs.readFileSync(process.argv[1])); if(!v||Array.isArray(v)||typeof v!=="object")process.exit(1)' "$seed" || { warn "Invalid Neovim seed: $seed"; return 1; }

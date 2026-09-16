@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Runs only in the migration controller's locked preparation/cutover operation.
+set -eo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/install.sh"
+legacy_runtime="${BOOTSTRAP_LEGACY_RUNTIME_ROOT:-$HOME/.local/share/dotfiles/bare}"
+base_path=''
+IFS=: read -r -a inherited_paths <<<"$PATH"
+for directory in "${inherited_paths[@]}"; do
+    case "$directory" in
+        ''|"$legacy_runtime"|"$legacy_runtime"/*) continue ;;
+        *) base_path="${base_path:+$base_path:}$directory" ;;
+    esac
+done
+export PATH="$base_path"
+if [[ "${DOTFILES_BARE_ROOT:-}" == "$legacy_runtime" ]]; then unset DOTFILES_BARE_ROOT; fi
+source "$ROOT/scripts/bare-env.sh"
+
+verify_migration_runtime() (
+    node "$ROOT/scripts/state-helper.mjs" validate >/dev/null || return 1
+    local command output version resolved
+    while IFS= read -r command; do
+        command -v "$command" >/dev/null || { warn "Migration runtime missing: $command"; return 1; }
+        resolved="$(node -e 'console.log(require("node:fs").realpathSync(process.argv[1]))' "$(command -v "$command")")" || return 1
+        case "$resolved" in "$legacy_runtime"|"$legacy_runtime"/*) warn "Migration still depends on legacy executable: $command"; return 1 ;; esac
+    done < <(node -e 'const c=require(process.argv[1]);for(const key of c.core)console.log(c.packages[key].executable)' "$ROOT/packages/catalog.json")
+    version="$(node --version)"; version_at_least "$version" 22.19.0 || return 1
+    output="$(nvim --version)"; read -r _ version _ <<<"$output"; version_at_least "$version" 0.12.0 || return 1
+    output="$(tree-sitter --version)"; read -r _ version _ <<<"$output"; version_at_least "$version" 0.26.1 || return 1
+    local cli="$BUN_INSTALL/install/global/node_modules/$PI_CLI_PACKAGE/dist/cli.js"
+    [[ -f "$cli" ]] || { warn 'Migration runtime owned Pi CLI is missing'; return 1; }
+    [[ "$(node "$cli" --version)" == "$PI_CLI_VERSION" ]] || { warn "Migration runtime requires Pi $PI_CLI_VERSION"; return 1; }
+    command -v herdr >/dev/null || { warn 'Migration runtime missing Herdr'; return 1; }
+    herdr --version >/dev/null || return 1
+    export XDG_CONFIG_HOME="$BOOTSTRAP_PRIVATE_ROOT/neovim/staged-config" NVIM_LEETCODE_MODE=0
+    unset NVIM_CONFIG_CHECKOUT_DIR NVIM_CONFIG_REPO_URL
+    unset BOOTSTRAP_NEOVIM_PROFILE
+    verify_neovim_runtime || return 1
+)
+
+case "${1:-}" in
+    prepare)
+        [[ $# == 1 ]] || exit 2
+        export BOOTSTRAP_PREPARE_ONLY=1
+        bare_stage="$(mktemp -d "$BOOTSTRAP_STATE_ROOT/runtime.XXXXXX")"
+        trap 'rm -rf "$bare_stage"' EXIT
+        ensure_bootstrap_node
+        initialize_bootstrap_component migration-runtime
+        adopt_bootstrap_node_journal
+        enroll_bootstrap_neovim_state
+        core=()
+        while IFS= read -r key; do core+=("$key"); done < <(catalog_query core)
+        install_native_keys "${core[@]}"
+        ensure_runtime_versions
+        bun install --global --exact "$PI_CLI_PACKAGE@$PI_CLI_VERSION"
+        HERDR_INSTALL_DIR="$DOTFILES_BARE_ROOT/bin" install_herdr
+        export BOOTSTRAP_NEOVIM_SEED="${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap-nvim"
+        if [[ ! -e "$BOOTSTRAP_NEOVIM_SEED" ]]; then export BOOTSTRAP_NEOVIM_SEED="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"; fi
+        if [[ -f "$BOOTSTRAP_NEOVIM_SEED/bootstrap-profile.json" ]]; then
+            validate_neovim_profile "$BOOTSTRAP_NEOVIM_SEED/bootstrap-profile.json"
+            BOOTSTRAP_NEOVIM_PROFILE="$(node -e 'console.log(require(process.argv[1]).profile)' "$BOOTSTRAP_NEOVIM_SEED/bootstrap-profile.json")"
+            export BOOTSTRAP_NEOVIM_PROFILE
+        fi
+        setup_bundled_neovim_config
+        write_neovim_lsp_selections
+        (
+            export XDG_CONFIG_HOME="$BOOTSTRAP_PRIVATE_ROOT/neovim/staged-config" NVIM_LEETCODE_MODE=0
+            install_neovim_parsers
+        )
+        verify_migration_runtime
+        node "$ROOT/scripts/state-helper.mjs" component-ready migration-runtime
+        ;;
+    verify)
+        [[ $# == 1 ]] || exit 2
+        verify_migration_runtime
+        ;;
+    *) printf 'Usage: migration-runtime <prepare|verify>\n' >&2; exit 2 ;;
+esac

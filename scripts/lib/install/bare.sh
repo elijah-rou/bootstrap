@@ -196,7 +196,9 @@ bootstrap_migration_allows_activation() {
     local legacy_pi="${BOOTSTRAP_LEGACY_PI_ROOT:-$HOME/.pi/agent}" journal="${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/migration.json" phase
     if [[ ! -f "$journal" ]]; then
         [[ -d "$legacy_pi" && ! -L "$legacy_pi" ]] || return 0
-        find "$legacy_pi" -mindepth 1 ! -type d ! -type l -print -quit | grep -q . || return 0
+        if [[ ! -e "$legacy_pi/auth.json" && ! -L "$legacy_pi/auth.json" ]]; then
+            find "$legacy_pi" -mindepth 1 ! -type d ! -type l -print -quit | grep -q . || return 0
+        fi
     fi
     phase="$(node "$DOTFILES_DIR/scripts/migration-helper.mjs" status 2>/dev/null | sed -n 's/.*"phase": "\([^"]*\)".*/\1/p')" || return 1
     case "$phase" in activated|verified|retiring|retired) return 0 ;; esac
@@ -487,6 +489,10 @@ migrate_legacy_bootstrap() {
 
 bootstrap_migration_quiescent() {
     local writers status
+    if [[ -S "${XDG_CONFIG_HOME:-$HOME/.config}/herdr/herdr.sock" ]]; then
+        warn 'Herdr socket is active; stop Herdr explicitly before migration'
+        return 1
+    fi
     if writers="$(bootstrap_live_writers)"; then
         warn "Migration requires operator-owned quiescence; active writers: $writers"
         return 1
@@ -498,9 +504,17 @@ bootstrap_migration_quiescent() {
 
 bootstrap_migration() (
     local phase="${1:-}" confirmation="${2:-}"
+    if [[ ! -f "${BOOTSTRAP_STATE_ROOT:-${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap}/migration.json" ]]; then
+        export BOOTSTRAP_LEGACY_GH_ROOT="${BOOTSTRAP_LEGACY_GH_ROOT:-${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}}"
+    fi
     source "$DOTFILES_DIR/scripts/bare-env.sh"
     command -v node >/dev/null || { warn 'Node.js is required for migration'; return 1; }
     case "$phase" in
+        readiness)
+            [[ $# -eq 1 ]] || return 2
+            node "$DOTFILES_DIR/scripts/migration-helper.mjs" readiness
+            return
+            ;;
         inspect)
             [[ $# -eq 1 ]] || return 2
             node "$DOTFILES_DIR/scripts/migration-helper.mjs" inspect
@@ -517,11 +531,14 @@ bootstrap_migration() (
             [[ $# -eq 2 && "$confirmation" == --yes ]] || { warn "migration $phase requires --yes"; return 2; }
             bootstrap_migration_quiescent || return 1
             ;;
-        *) warn 'Usage: install.sh migration <inspect|prepare|transfer|activate|verify|rollback|retire> [--yes]'; return 2 ;;
+        *) warn 'Usage: install.sh migration <inspect|prepare|readiness|transfer|activate|verify|rollback|retire> [--yes]'; return 2 ;;
     esac
     bootstrap_lock_acquire || return 1
     trap 'bootstrap_lock_release' EXIT
-    node "$DOTFILES_DIR/scripts/migration-helper.mjs" "$phase"
+    node "$DOTFILES_DIR/scripts/migration-helper.mjs" "$phase" || return $?
+    if [[ "$phase" == prepare ]]; then
+        bash "$DOTFILES_DIR/scripts/migration-runtime" prepare || return 1
+    fi
 )
 
 bootstrap_live_writers() {

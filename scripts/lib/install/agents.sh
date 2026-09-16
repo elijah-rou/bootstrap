@@ -42,6 +42,7 @@ install_herdr() (
         fi
     fi
     command -v herdr &>/dev/null || error "Herdr installation failed"
+    [[ "${BOOTSTRAP_PREPARE_ONLY:-0}" != 1 ]] || return 0
 
     if command -v pi &>/dev/null; then
         mkdir -p "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions" || return 1

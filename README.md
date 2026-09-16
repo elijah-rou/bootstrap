@@ -58,7 +58,8 @@ Neovim synchronizes pinned plugins, resolves the effective nvim-treesitter parse
 ./configure.sh all --overlay /absolute/workstation --legacy-root /absolute/old-checkout
 ./install.sh migration inspect
 ./install.sh migration prepare
-# After the operator stops Pi/Neovim and other writers:
+./install.sh migration readiness
+# After the operator stops Pi/Neovim, Herdr, and other writers:
 ./install.sh migration transfer --yes
 ./install.sh migration activate --yes
 ./install.sh migration verify
@@ -70,18 +71,32 @@ Neovim synchronizes pinned plugins, resolves the effective nvim-treesitter parse
 
 `configure.sh` is offline and unprivileged and selects no packages. It accepts `terminal`, `pi`, `codex`, `neovim`, or `all`, ordered `--overlay ABS_DIR` values, and one `--legacy-root ABS_DIR`. It needs Node, not Python. Overlay precedence remains unchanged, while workstation and bare Neovim profiles share the enrolled runtime/app roots and writable local state.
 
-Legacy migration is an explicit `inspect -> prepare -> transfer -> activate -> verify -> retire` lifecycle. `inspect` is read-only and emits a versioned JSON report. `prepare` records an immutable source inventory but does not switch shell/profile links, launchers, shared skill discovery, or legacy state. Transfer requires `--yes`, rejects active writers, maps `~/.pi/agent/sessions` to the launcher-selected private session root, and copies credentials, settings, modes, nested sessions, and custom files only into absent or byte-identical destinations. Internal links are remapped into the new ownership roots, completed-snapshot managed links are retargeted, and unknown external links or unrelated Herdr state block before personal-data writes.
+Legacy migration is an explicit `inspect -> prepare -> transfer -> activate -> verify -> retire` lifecycle. Read the JSON inspection report before confirming transfer. `prepare` records the source inventory, installs core tools and the owned Pi CLI, and prepares and tests bundled Neovim privately. It does not switch shell hooks, launchers, shared configuration, or legacy state. Existing bundled Neovim profile, lockfile, extras, and writable JSON settings are preserved; external configurations, additional customizations, and unprepared LSP selections block preparation rather than being overwritten. A preparation inventory can be refreshed before transfer starts. Interrupted transfers retain their original recovery inventory.
 
-Activation, rollback, and retirement also require `--yes`; Bootstrap never stops writers automatically. Verification checks the source identity, transferred files, modes, links, and activation links. Rollback restores the prior launchers only when the complete destination inventory is unchanged, so post-cutover tokens, sessions, additions, deletions, or mode changes cause an explicit refusal instead of data loss. Retirement separately requires verified activation, quiescence, and an unchanged legacy inventory, then deletes only the legacy Pi root, never external link targets. `migrate-legacy --yes` remains as a compatibility notice and does not run the phases. The old tool prefix remains outside this lifecycle because separate Bun/Rust installations or user additions may live there.
+`migration readiness` executes the real catalog core commands' availability checks, Node >=22.19.0, Neovim >=0.12.0, Tree-sitter >=0.26.1, the owned Pi CLI's exact 0.85.1 version, Herdr's version command, and headless bundled Neovim startup with a verification receipt. It returns `{schemaVersion:1, ready:true, phase, profiles:{pi,sessions,gh,neovim}}` only on success. Activation repeats these probes before switching any links. Preparation uses native packages when needed and verified private fallbacks; it does not require an already activated profile.
+
+Transfer requires `--yes` and operator-owned quiescence. It maps `~/.pi/agent/sessions` to the private session root and preserves the entire previous Pi settings and personal-file inventory. GH file configuration moves into `private/gh`; its original configured source remains recorded across activated shells. OS keychain entries are neither extracted nor deleted. Files copy only into absent or identical destinations, including modes. Internal Pi links are remapped, completed-snapshot managed links are retargeted, and unknown external links or nonidentical destinations block before copying. Inspection discloses enrollment of the supported `~/.config/herdr` root for deletion on uninstall; transfer confirmation enrolls it without moving it, stopping Herdr, or overwriting its configuration.
+
+Activation, rollback, and retirement require `--yes`; migration never stops writers automatically. Activation replaces only absent or proven managed Bash/Zsh hooks and Pi launchers (including `pih`), preserves a non-Conda Bash login profile with a reversible hook, selects the verified Neovim configuration, and switches the environment marker last. Custom shell files require explicit operator resolution. The installation journal owns all shared-target originals and restoration, including migration rollback and later uninstall.
+
+Verification accepts legitimate post-cutover token, settings, and session writes and records a fresh quiescent receipt. Retirement requires that receipt to remain current. Rollback instead requires the immutable transfer baseline, refusing post-cutover additions, deletions, or changes rather than losing them. Retirement deletes only the legacy Pi root. Old GH configuration, Neovim configuration, tool prefixes, and external targets remain outside retirement. `migrate-legacy --yes` remains a compatibility notice, not an all-at-once migration.
 
 Uninstall validates the journal, rejects path/symlink escapes and live processes identified by the owned runtime/profile, previews destructive roots and eligible native packages, removes enrolled credentials/sessions/projects/caches/backups, restores exact pre-install shared files, and removes bootstrap-added packages only after dependency previews. Pre-existing and shared packages are preserved; no autoremove or downgrade is used. Apt/dnf cleanup uses exact-name dpkg/RPM removal with dependency checks, not an expanding frontend transaction. Dpkg conffiles can remain and are reported; they are not blanket-purged. See [ownership tradeoffs](docs/ADR-002-native-ownership.md). Dry-run does not stop servers or create cleanup locks/journals. Real cleanup targets only enrolled multiplexer sockets. Changed shared files stop cleanup and retain recovery state for a retry. One already-running Node controller completes all package effects and restoration checks even when its own runtime is removed; recovery state is deleted last. Repeated uninstall is successful. Uninstall is not secure erasure and cannot remove remote provider data, host snapshots, administrator copies, or audit logs. Revoke short-lived host credentials provider-side when appropriate.
 
 ## Development
 
 ```sh
-PATH="/path/to/node/bin:/path/to/test-python/bin:$PATH" PYTHONUNBUFFERED=1 ./scripts/validate
+# Requires the native core tools already available on PATH.
+bash tests/prepare_migration_runtime.sh "$HOME/bootstrap-test-fixture"
+BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE="$HOME/bootstrap-test-fixture" \
+  PATH="/path/to/node/bin:/path/to/test-python/bin:$PATH" PYTHONUNBUFFERED=1 ./scripts/validate
 bash tests/real_nvim_lsp_test.sh
+# Requires preinstalled core commands, supported runtime versions, and Herdr:
+bash tests/prepare_migration_runtime.sh /absolute/absent-fixture
+BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE=/absolute/absent-fixture python3 tests/migration_lifecycle_test.py
 ```
+
+Migration activation tests require this cold-built real runtime fixture; without it, runtime-dependent cases are explicitly skipped. No CLI or Neovim validator is substituted.
 
 Selected Python installs uv and a usable native Python 3 interpreter, or a uv-managed interpreter when native Python is unavailable. System Python is preserved. Selected Codex uses the private runtime root for auth, sessions, and configuration; unselected `~/.codex` and offline instruction-only links are not adopted.
 

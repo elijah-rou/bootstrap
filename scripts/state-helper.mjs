@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { constants, chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const [command, ...args] = process.argv.slice(2);
 const home = resolve(process.env.HOME || '');
@@ -69,6 +70,15 @@ function validate(record) {
     if (item.externalPolicyPlugin === true) validatePolicyPlugin(item); else validateTarget(item.target);
     if (item.backup && !inside(stateRoot, item.backup)) fail('Resource backup escaped state root');
     if (item.installerBackup) validateTarget(item.installerBackup);
+    if (item.migrationBefore) {
+      const before = item.migrationBefore;
+      if (!before || Object.getPrototypeOf(before) !== Object.prototype || item.class !== 'shared') fail('Malformed migration original');
+      const keys = before.priorType === 'absent' ? ['backup', 'priorType'] : before.priorType === 'symlink' ? ['backup', 'priorLink', 'priorType'] : before.priorType === 'file' ? ['backup', 'priorMode', 'priorType'] : [];
+      if (keys.length === 0 || Object.keys(before).sort().join(',') !== keys.join(',')) fail('Malformed migration original fields');
+      if (before.priorType !== 'file' && before.backup !== '') fail('Malformed migration original backup');
+      if (before.priorType === 'symlink' && (typeof before.priorLink !== 'string' || before.priorLink.includes('\0'))) fail('Malformed migration original link');
+      if (before.priorType === 'file' && (!inside(stateRoot, before.backup) || !Number.isInteger(before.priorMode) || before.priorMode < 0 || before.priorMode > 0o777)) fail('Malformed migration original backup');
+    }
   }
   const packageIdentities = new Set();
   for (const item of record.packages) {
@@ -88,7 +98,12 @@ function validate(record) {
   for (const root of record.enrolledRoots) validateTarget(root);
   return record;
 }
+function validateStateRoot() {
+  validateTarget(stateRoot);
+  if (lstatSafe(stateRoot)?.isSymbolicLink()) fail('State root must not be a symlink');
+}
 function load(required = true) {
+  validateStateRoot();
   if (!existsSync(recordPath)) { if (required) fail(`Installation record is missing: ${recordPath}`); return blank(); }
   let value;
   try { value = JSON.parse(readFileSync(recordPath, 'utf8')); } catch { fail('Malformed installation record JSON'); }
@@ -100,6 +115,7 @@ function derivedInstallationStatus(record) {
   return components.some(status => status === 'ready') ? 'partial' : 'installing';
 }
 function save(record) {
+  validateStateRoot();
   validate(record); mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
   record.updatedAt = new Date().toISOString();
   const temporary = `${recordPath}.new.${process.pid}`;
@@ -111,17 +127,19 @@ function prepare(target, resourceClass, source = '') {
   if (!['shared', 'owned'].includes(resourceClass)) fail('Unknown resource class');
   const record = load(false);
   if (record.resources.some(item => item.target === target)) return;
-  const item = { target, class: resourceClass, source, priorType: 'absent', backup: '' };
-  if (existsSync(target) || lstatSafe(target)?.isSymbolicLink()) {
-    const stat = lstatSync(target);
-    if (stat.isSymbolicLink()) { item.priorType = 'symlink'; item.priorLink = readlinkSync(target); }
-    else if (stat.isFile()) {
-      item.priorType = 'file';
-      const backup = join(stateRoot, 'recovery', `${record.resources.length}.original`);
-      mkdirSync(dirname(backup), { recursive: true, mode: 0o700 }); copyFileSync(target, backup); item.backup = backup; item.priorMode = stat.mode & 0o777;
-    } else fail(`Refusing to replace unmanaged directory or special file: ${target}`);
-  }
-  record.resources.push(item); save(record);
+  const original = snapshotTarget(target, join(stateRoot, 'recovery', `${record.resources.length}.original`));
+  record.resources.push({ target, class: resourceClass, source, ...original });
+  save(record);
+}
+function snapshotTarget(target, backup) {
+  const original = { priorType: 'absent', backup: '' };
+  const stat = lstatSafe(target);
+  if (!stat) return original;
+  if (stat.isSymbolicLink()) return { ...original, priorType: 'symlink', priorLink: readlinkSync(target) };
+  if (!stat.isFile()) fail(`Refusing to replace unmanaged directory or special file: ${target}`);
+  mkdirSync(dirname(backup), { recursive: true, mode: 0o700 });
+  copyFileSync(target, backup);
+  return { priorType: 'file', backup, priorMode: stat.mode & 0o777 };
 }
 function lstatSafe(path) { try { return lstatSync(path); } catch { return undefined; } }
 function removePath(path) { const stat = lstatSafe(path); if (!stat) return; if (stat.isDirectory() && !stat.isSymbolicLink()) rmSync(path, { recursive: true }); else rmSync(path); }
@@ -137,9 +155,21 @@ function restore(item, dryRun) {
   }
   console.log(`${item.priorType === 'absent' ? 'remove' : 'restore'}\t${target}`);
   if (dryRun) return;
-  removePath(target); mkdirSync(dirname(target), { recursive: true });
-  if (item.priorType === 'symlink') symlinkSync(item.priorLink, target);
-  if (item.priorType === 'file') { if (!item.backup || !existsSync(item.backup)) fail(`Missing recovery backup for ${target}`); copyFileSync(item.backup, target); if (item.priorMode) chmodSync(target, item.priorMode); }
+  if (item.priorType === 'absent') { removePath(target); return; }
+  mkdirSync(dirname(target), { recursive: true });
+  const identity = load().installationId;
+  const key = createHash('sha256').update(target).digest('hex');
+  const temporary = join(dirname(target), `.bootstrap-restore-${identity}-${key}`);
+  if (lstatSafe(temporary)) {
+    if (!originalMatches({ ...item, target: temporary })) fail(`Recovery staging file changed: ${temporary}`);
+  } else if (item.priorType === 'symlink') symlinkSync(item.priorLink, temporary);
+  else {
+    if (!item.backup || !existsSync(item.backup)) fail(`Missing recovery backup for ${target}`);
+    copyFileSync(item.backup, temporary, constants.COPYFILE_EXCL);
+    chmodSync(temporary, item.priorMode);
+  }
+  if (process.env.BOOTSTRAP_MIGRATION_TEST_ONLY === '1' && process.env.BOOTSTRAP_MIGRATION_TEST_HOME === home && process.env.BOOTSTRAP_MIGRATION_TEST_FAULT === 'restore-before-rename') process.exit(86);
+  renameSync(temporary, target);
 }
 function merge(base, overlay) { if (base && overlay && Object.getPrototypeOf(base) === Object.prototype && Object.getPrototypeOf(overlay) === Object.prototype) { const result = { ...base }; for (const [key,value] of Object.entries(overlay)) result[key] = key in result ? merge(result[key], value) : value; return result; } return overlay; }
 function readObject(path) { const value = JSON.parse(readFileSync(path, 'utf8')); if (!value || Object.getPrototypeOf(value) !== Object.prototype) fail(`Configuration must be a JSON object: ${path}`); return value; }
@@ -255,4 +285,90 @@ switch (command) {
   default: fail('Unknown state-helper command');
 }
 }
-run(command, args);
+// Migration uses the same original snapshots, mutation and restoration owner as installation.
+export function prepareMigrationTargets(targets) {
+  for (const { target, source } of targets) {
+    prepare(target, 'shared', source);
+    const record = load();
+    const index = record.resources.findIndex(value => value.target === target);
+    const item = record.resources[index];
+    if (!item.migrationBefore) {
+      item.migrationBefore = snapshotTarget(target, join(stateRoot, 'recovery', `${index}.migration-original`));
+      save(record);
+    }
+  }
+}
+
+export function activateMigrationTargets(targets, afterActivate = () => {}) {
+  prepareMigrationTargets(targets);
+  for (const { target, source, kind = 'symlink' } of targets) {
+    if (!['symlink', 'file'].includes(kind)) fail('Unknown migration activation kind');
+    const record = load();
+    const item = record.resources.find(value => value.target === target);
+    const current = lstatSafe(target);
+    const matches = kind === 'file'
+      ? current?.isFile() && !current.isSymbolicLink() && fileHash(target) === fileHash(source) && (current.mode & 0o777) === (lstatSync(source).mode & 0o777)
+      : current?.isSymbolicLink() && readlinkSync(target) === source;
+    if (!matches) {
+      if (item.activeType && !item.migrationRestored) restore(item, true);
+      mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+      const temporary = `${target}.bootstrap-activate-${record.installationId}`;
+      if (lstatSafe(temporary)) {
+        const correct = kind === 'file' ? lstatSync(temporary).isFile() && !lstatSync(temporary).isSymbolicLink() && fileHash(temporary) === fileHash(source) : lstatSync(temporary).isSymbolicLink() && readlinkSync(temporary) === source;
+        if (!correct) fail(`Activation staging target changed: ${temporary}`);
+      } else if (kind === 'file') {
+        copyFileSync(source, temporary, constants.COPYFILE_EXCL);
+        chmodSync(temporary, lstatSync(source).mode & 0o777);
+      } else symlinkSync(source, temporary);
+      renameSync(temporary, target);
+    }
+    item.source = source;
+    item.activeType = kind;
+    if (kind === 'file') { item.activeHash = fileHash(target); delete item.activeLink; }
+    else { item.activeLink = source; delete item.activeHash; }
+    delete item.migrationRestored;
+    save(record);
+    afterActivate(target);
+  }
+}
+
+function originalMatches(item) {
+  const stat = lstatSafe(item.target);
+  switch (item.priorType) {
+    case 'absent': return !stat;
+    case 'symlink': return stat?.isSymbolicLink() && readlinkSync(item.target) === item.priorLink;
+    case 'file': return stat?.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o777) === item.priorMode && fileHash(item.target) === fileHash(item.backup);
+    default: fail('Unknown original resource type');
+  }
+}
+
+export function restoreMigrationTargets(targets, afterRestore = () => {}) {
+  for (const [index, { target }] of [...targets.entries()].reverse()) {
+    const record = load();
+    const item = record.resources.find(value => value.target === target);
+    if (!item) fail(`Migration target was not adopted: ${target}`);
+    if (!item.migrationBefore) fail(`Migration original was not captured: ${target}`);
+    const before = { ...item, priorType: item.migrationBefore.priorType, priorLink: item.migrationBefore.priorLink, priorMode: item.migrationBefore.priorMode, backup: item.migrationBefore.backup };
+    if (item.migrationRestored && !originalMatches(before)) fail(`Restored migration target changed: ${target}`);
+    if (!originalMatches(before)) restore(before, false);
+    afterRestore(index);
+    delete item.activeType;
+    delete item.activeLink;
+    delete item.activeHash;
+    switch (before.priorType) {
+      case 'symlink': item.activeType = 'symlink'; item.activeLink = before.priorLink; break;
+      case 'file': item.activeType = 'file'; item.activeHash = fileHash(target); break;
+      case 'absent': break;
+      default: fail('Unknown migration original type');
+    }
+    item.migrationRestored = true;
+    save(record);
+  }
+}
+
+export function enrollMigrationRoots(roots) {
+  load();
+  for (const root of roots) run('enroll', [root]);
+}
+
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) run(command, args);
