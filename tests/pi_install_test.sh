@@ -17,6 +17,11 @@ bun() {
     printf 'pi-cli\n' >>"$HOME/bun-installs";
     mkdir -p "$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist"
     printf 'console.log("%s");\n' "$PI_CLI_VERSION" >"$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+    cat >"$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/config.js" <<'JS'
+export const PACKAGE_NAME = '@earendil-works/pi-coding-agent';
+export const detectInstallMethod = () => 'bun';
+export const getSelfUpdateCommand = () => ({ command: 'bun', args: ['install', '-g', PACKAGE_NAME] });
+JS
 }
 
 pi() {

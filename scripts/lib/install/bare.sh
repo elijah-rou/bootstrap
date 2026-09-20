@@ -237,6 +237,7 @@ pi_doctor() {
     command -v node >/dev/null || { warn 'Pi Node.js runtime is missing'; failed=1; }
     command -v bun >/dev/null || { warn 'Pi Bun package runtime is missing'; failed=1; }
     [[ "$("$HOME/.local/bin/pi" --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; failed=1; }
+    node "$DOTFILES_DIR/scripts/verify-pi-package-manager.mjs" || failed=1
     check_pi_subagents_revision || failed=1
     return "$failed"
 }
@@ -309,6 +310,7 @@ bare_doctor() (
         if command -v "$command" >/dev/null 2>&1; then info "$command: $(command -v "$command")"; else warn "Missing required command: $command"; failed=1; fi
     done
     [[ "$("$HOME/.local/bin/pi" --version 2>/dev/null)" == "$PI_CLI_VERSION" ]] || { warn "Pi must be $PI_CLI_VERSION"; failed=1; }
+    node "$DOTFILES_DIR/scripts/verify-pi-package-manager.mjs" || failed=1
     check_pi_subagents_revision || failed=1
     verify_neovim_runtime || failed=1
     info 'Optional integrations remain unselected unless recorded explicitly'

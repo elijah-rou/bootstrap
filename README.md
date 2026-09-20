@@ -10,6 +10,8 @@ From a checkout:
 ./install.sh
 ```
 
+Bun installs Node-based packages on every platform, including Pi, Codex, TypeScript, and Node-based language servers. Node remains the execution runtime where required. Pi readiness checks verify that its settings and self-update command use Bun and resolve the owned installation; they do not perform an update. Existing npm installations outside the owned roots are preserved.
+
 Install or repair only pinned Pi and its Node/Bun runtime, configuration, extensions, skills, and launchers:
 
 ```sh

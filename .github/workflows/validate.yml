@@ -24,9 +24,12 @@ jobs:
         with:
           version: v0.12.5
           neovim: true
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: '1.4.0'
       - name: Install test tools on Linux
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes build-essential fd-find ripgrep shellcheck zsh && npm install --global basedpyright@1.38.3
+        run: sudo apt-get update && sudo apt-get install --yes build-essential fd-find ripgrep shellcheck zsh && bun install --global --exact basedpyright@1.38.3
       - name: Install test tools on macOS
         if: runner.os == 'macOS'
         run: |
@@ -34,7 +37,7 @@ jobs:
           brew list ripgrep || brew install ripgrep
           brew list shellcheck || brew install shellcheck
           brew list coreutils || brew install coreutils
-          npm install --global basedpyright@1.38.3
+          bun install --global --exact basedpyright@1.38.3
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
       - name: Prepare cold locked Neovim and standalone LSP fixtures
         run: |
