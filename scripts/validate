@@ -88,6 +88,7 @@ bash tests/languages_test.sh
 bash tests/tools_test.sh
 bash tests/language_release_test.sh
 bash tests/native_package_test.sh
+node --test tests/writer_probe_test.mjs
 bash tests/native_candidate_probe.sh
 python3 tests/native_bootstrap_test.py
 python3 tests/native_corrections_test.py

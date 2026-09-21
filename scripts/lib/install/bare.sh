@@ -543,7 +543,14 @@ bootstrap_migration() (
     fi
 )
 
+# shellcheck disable=SC2120 # The Node cleanup controller supplies the optional flag.
 bootstrap_live_writers() {
+    local excluded_pid=''
+    case "$#:${1:-}" in
+        0:) ;;
+        1:--exclude-parent) excluded_pid="$PPID" ;;
+        *) warn 'Invalid writer probe arguments'; return 2 ;;
+    esac
     local output uid pid executable arguments environment found=1 own_uid process_name
     local legacy_pi="${BOOTSTRAP_LEGACY_PI_ROOT:-$HOME/.pi/agent}"
     local legacy_runtime="${BOOTSTRAP_LEGACY_RUNTIME_ROOT:-$HOME/.local/share/dotfiles/bare}"
@@ -551,6 +558,7 @@ bootstrap_live_writers() {
     output="$(ps -axo uid=,pid=,comm=,args=)" || { warn 'Unable to inspect active writers'; return 2; }
     while read -r uid pid executable arguments; do
         [[ "$uid" == "$own_uid" ]] || continue
+        [[ "$pid" != "$excluded_pid" ]] || continue
         if [[ "$arguments" == *"$DOTFILES_BARE_ROOT/"* || "$arguments" == *"$BOOTSTRAP_PRIVATE_ROOT/"* ||
               "$arguments" == *"$legacy_pi/"* || "$arguments" == *"$legacy_runtime/"* ]]; then
             printf '%s %s\n' "$pid" "$executable"; found=0; continue

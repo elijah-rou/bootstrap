@@ -261,7 +261,8 @@ switch (command) {
       if (result.error || result.status !== 0) fail(`Native cleanup failed: ${backend}`);
       for (const item of packages) run('package-removed', [backend, item.name]);
     }
-    const writers = spawnSync('bash', ['-c', 'bootstrap_live_writers'], { stdio: 'inherit' });
+    // This controller stays alive to finish the journal after its runtime is unlinked.
+    const writers = spawnSync('bash', ['-c', 'bootstrap_live_writers --exclude-parent'], { stdio: 'inherit' });
     if (writers.error || writers.status !== 1) fail('Owned writer check failed; recovery state retained');
     run('finish-uninstall', []);
     break;
