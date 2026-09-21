@@ -20,13 +20,11 @@ if [[ "${1:-}" == --pi ]]; then
     bun install --global --exact "$PI_CLI_PACKAGE@$PI_CLI_VERSION"
     link_pi_launchers
     mkdir -p "$PI_CODING_AGENT_DIR"
-    printf '{"npmCommand":["npm"]}\n' >"$PI_CODING_AGENT_DIR/settings.json"
-    if node "$ROOT/scripts/verify-pi-package-manager.mjs" >"$fixture/update-check" 2>&1; then
-        echo 'Incorrect package manager was accepted' >&2; exit 1
-    fi
-    grep -Fq 'Pi settings must use npmCommand' "$fixture/update-check"
-    printf '{"npmCommand":["bun"]}\n' >"$PI_CODING_AGENT_DIR/settings.json"
-    node "$ROOT/scripts/verify-pi-package-manager.mjs"
+    for settings in '{}' '{"npmCommand":["npm"]}' '{"npmCommand":["bun"]}'; do
+        printf '%s\n' "$settings" >"$PI_CODING_AGENT_DIR/settings.json"
+        node "$ROOT/scripts/verify-pi-package-manager.mjs" || exit 1
+        [[ "$(cat "$PI_CODING_AGENT_DIR/settings.json")" == "$settings" ]] || exit 1
+    done
     [[ "$(env -i HOME="$HOME" PATH=/usr/bin:/bin "$HOME/.local/bin/pi" --version)" == "$PI_CLI_VERSION" ]]
     (
         cd "$fixture"

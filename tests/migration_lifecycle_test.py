@@ -445,6 +445,9 @@ class MigrationLifecycleTest(unittest.TestCase):
         result = subprocess.run(['bash', str(ROOT / 'configure.sh'), 'pi'], env=self.env,
                                 capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        updater = subprocess.run(['bash', '-c', 'source "$1/scripts/bare-env.sh"; exec node "$1/scripts/verify-pi-package-manager.mjs"', 'test', str(ROOT)],
+                                 env=self.env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(updater.returncode, 0, updater.stdout + updater.stderr)
         self.assertEqual((self.agent / 'settings.json').read_text(), '{"theme":"custom","packages":[]}\n')
         self.assertEqual((self.agent / 'models.json').read_text(), '{"providers":{"synthetic":{}}}\n')
         self.assertEqual((self.agent / 'WORKTREE_STREAMS.md').read_text(), 'personal worktree modes\n')
