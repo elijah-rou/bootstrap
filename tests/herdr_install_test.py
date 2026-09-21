@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -27,10 +28,15 @@ def fixture(root: Path, stage: str = 'success', custom_directory: bool = False) 
     temporary = root / 'tmp'
     temporary.mkdir()
     install_directory = home / ('custom bin' if custom_directory else '.local/bin')
+    node = shutil.which('node')
+    assert node is not None, 'Node is required for the installer fixture'
+    (guard / 'node').symlink_to(node)
+    # Native fixture preparation may install Herdr into Homebrew; this test owns its fake CLI.
     env = dict(os.environ, HOME=str(home), TMPDIR=str(temporary),
-               PATH=f'{install_directory}{os.pathsep}{guard}{os.pathsep}/opt/homebrew/bin:/usr/bin:/bin',
+               PATH=f'{install_directory}{os.pathsep}{guard}{os.pathsep}/usr/bin:/bin',
                TEST_ROOT=str(root), TEST_STAGE=stage, TEST_INSTALLER_SHA256=INSTALLER_SHA256)
-    _ = env.pop('HERDR_INSTALL_DIR', None)
+    for name in ['HERDR_INSTALL_DIR', 'PI_CODING_AGENT_DIR', 'BOOTSTRAP_PREPARE_ONLY']:
+        _ = env.pop(name, None)
     if custom_directory:
         env['HERDR_INSTALL_DIR'] = str(install_directory)
     for name in ['pi', 'ssh', 'sshd', 'tailscale', 'systemctl', 'launchctl', 'sudo', 'pkexec', 'npm', 'bun']:
