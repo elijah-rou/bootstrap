@@ -10,6 +10,16 @@ if selection_path and vim.fn.filereadable(selection_path) == 1 then
   selected = value.servers
 end
 
+local treesitter = { "nvim-treesitter/nvim-treesitter", optional = true }
+if vim.g.bootstrap_neovim_repair then
+  -- Parser installation has one explicit writer, separate from plugin repair and editor startup.
+  treesitter.build = false
+  treesitter.opts = function(_, opts)
+    opts._bootstrap_ensure_installed = opts.ensure_installed
+    opts.ensure_installed = {}
+  end
+end
+
 return {
   { "mason-org/mason.nvim", enabled = false },
   { "mason-org/mason-lspconfig.nvim", enabled = false },
@@ -71,4 +81,5 @@ return {
       end
     end,
   },
+  treesitter,
 }

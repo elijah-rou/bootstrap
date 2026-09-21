@@ -39,25 +39,34 @@ node -e 'const fs=require("node:fs"),p=process.argv[1];for(const n of fs.readdir
 cmp "$temporary/parsers-before" "$temporary/parsers-after"
 cmp "$temporary/stat-before" "$temporary/stat-after"
 printf 'PASS R7 effective lock bytes and selected revisions restored, unchanged reinstall preserved parser bytes/inodes\n'
+cat >"$temporary/load-libraries.lua" <<'LUA'
+for language, text in pairs({ bash = 'echo ready\n', json = '{"ready":true}' }) do
+  assert(vim.treesitter.language.add(language, { path = arg[1] .. '/' .. language .. '.so' }))
+  local parser = vim.treesitter.get_string_parser(text, language)
+  assert(not parser:parse()[1]:root():has_error(), language .. ' parser did not parse its fixture')
+end
+LUA
 cp "$data/site/parser-info/bash.revision" "$temporary/bash.revision"
 printf 'stale-revision' >"$data/site/parser-info/bash.revision"
 rm "$data/site/parser/json.so"
 install_neovim_parsers >"$temporary/stale.log" 2>&1 || { cat "$temporary/stale.log"; exit 1; }
 cmp "$temporary/bash.revision" "$data/site/parser-info/bash.revision"
 [[ -s "$data/site/parser/json.so" ]]
-grep -q 'install/bash.*Compiling parser' "$temporary/stale.log"
-grep -q 'install/json.*Compiling parser' "$temporary/stale.log"
+nvim --headless -u NONE -i NONE -l "$temporary/load-libraries.lua" "$data/site/parser"
 printf 'PASS R9 stale Bash revision reconciled and missing JSON library rebuilt despite existing queries\n'
 printf 'invalid shared library' >"$data/site/parser/bash.so"
 install_neovim_parsers >"$temporary/incompatible.log" 2>&1 || { cat "$temporary/incompatible.log"; exit 1; }
 cmp "$temporary/bash.revision" "$data/site/parser-info/bash.revision"
-grep -q 'install/bash.*Compiling parser' "$temporary/incompatible.log"
+nvim --headless -u NONE -i NONE -l "$temporary/load-libraries.lua" "$data/site/parser"
 printf 'PASS R9 unloadable Bash library repaired despite a matching revision receipt\n'
 printf 'stale-revision' >"$data/site/parser-info/bash.revision"
 mkdir "$temporary/bin"
-printf '#!/bin/sh\nexit 81\n' >"$temporary/bin/tree-sitter"; chmod +x "$temporary/bin/tree-sitter"
+BOOTSTRAP_TEST_TREE_SITTER="$(command -v tree-sitter)"
+export BOOTSTRAP_TEST_TREE_SITTER
+printf '#!/bin/sh\n[ "${1:-}" != build ] || exit 81\nexec "$BOOTSTRAP_TEST_TREE_SITTER" "$@"\n' >"$temporary/bin/tree-sitter"
+chmod +x "$temporary/bin/tree-sitter"
 if PATH="$temporary/bin:$PATH" install_neovim_parsers >"$temporary/failure.log" 2>&1; then cat "$temporary/failure.log"; exit 1; fi
-grep -q 'parser revision reconciliation failed' "$temporary/failure.log"
+grep -q 'parser revision reconciliation failed' "$temporary/failure.log" || { cat "$temporary/failure.log"; exit 1; }
 [[ "$(cat "$data/site/parser-info/bash.revision")" == stale-revision ]]
 [[ -z "$(find "$BOOTSTRAP_STATE_ROOT" -maxdepth 1 -name 'parsers.*' -print)" ]]
 printf 'PASS R9 failed compiler propagates failure and removes temporary receipts\n'

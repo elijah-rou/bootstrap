@@ -62,7 +62,7 @@ install_neovim_parsers() (
     printf 'local value = {\n  nested = {\n    enabled = true,\n  },\n}\nreturn value\n' >"$fixture"
     BOOTSTRAP_NVIM_INIT="$config_init" BOOTSTRAP_PLUGIN_RECEIPT="$temporary/plugins" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 300 nvim --headless -i NONE -u NONE -l "$DOTFILES_DIR/neovim/install-plugins.lua" || { warn 'Neovim locked plugin repair failed or timed out'; return 1; }
     [[ -s "$temporary/plugins" ]] || { warn 'Neovim plugin repair receipt missing'; return 1; }
-    BOOTSTRAP_PARSER_SET_RECEIPT="$parser_set" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 620 nvim --headless -i NONE -u "$config_init" -l "$DOTFILES_DIR/neovim/install-parsers.lua" || { warn 'Effective Neovim parser installation failed or timed out'; return 1; }
+    BOOTSTRAP_NVIM_INIT="$config_init" BOOTSTRAP_PARSER_SET_RECEIPT="$parser_set" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 620 nvim --headless -i NONE -u NONE -l "$DOTFILES_DIR/neovim/install-parsers.lua" || { warn 'Effective Neovim parser installation failed or timed out'; return 1; }
     BOOTSTRAP_PARSER_SET_RECEIPT="$parser_set" BOOTSTRAP_PARSER_FIXTURE="$fixture" BOOTSTRAP_PARSER_RECEIPT="$receipt" node "$DOTFILES_DIR/scripts/run-bounded.mjs" 30 nvim --headless -i NONE -u "$config_init" -l "$DOTFILES_DIR/neovim/verify-parser.lua" || return 1
     [[ -s "$receipt" && -s "$parser_set" ]] || return 1
 )

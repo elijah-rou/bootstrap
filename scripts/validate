@@ -104,6 +104,7 @@ bash tests/neovim_config_test.sh
 if command -v nvim >/dev/null; then
     (
         cd neovim/config
+        nvim --headless -u NONE -i NONE -l tests/parser-ownership.lua
         nvim --headless -u NONE -i NONE -l tests/file-picker-keymap.lua
         nvim --headless -u NONE -i NONE -l tests/remote-clipboard.lua
         nvim --headless -u NONE -i NONE -l tests/profile.lua
