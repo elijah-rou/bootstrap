@@ -225,7 +225,7 @@ class MigrationLifecycleTest(unittest.TestCase):
         self.assertEqual((self.home / '.config/dotfiles/bare-env.sh').readlink(), ROOT / 'scripts/bare-env.sh')
         launched = subprocess.run([self.home / '.local/bin/pi', '--version'], env=self.env,
                                   capture_output=True, text=True, check=True).stdout.splitlines()
-        self.assertEqual(launched, ['0.85.1'])
+        self.assertEqual(launched, ['0.87.0'])
         self.assertTrue(session.is_file())
         self.run_migration('verify')
 

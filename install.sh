@@ -3,7 +3,7 @@ set -e
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PI_CLI_PACKAGE="@earendil-works/pi-coding-agent"
-PI_CLI_VERSION="0.85.1"
+PI_CLI_VERSION="0.87.0"
 HERDR_INSTALLER_SHA256="bf83668c944cff30b3365eee5a4fe15ff61a4b749ab0c73b98e7a203f70893dd"
 install_failures=()
 INSTALL_FAILURE_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/bootstrap/install-failures.log"
@@ -34,7 +34,7 @@ usage() {
         'Languages: c cpp rust go python typescript elixir zig.' \
         'LSPs: clangd rust-analyzer gopls basedpyright ruff typescript-language-server bash-language-server elixirls zls.' \
         'Tools: zsh starship codex just wget unzip shellcheck ruff headroom.' \
-        'Core is native Bash, Pi 0.85.1, Herdr, Neovim, compiler and Tree-sitter CLI. Python, Zsh and Starship are not core.'
+        'Core is native Bash, Pi 0.87.0, Herdr, Neovim, compiler and Tree-sitter CLI. Python, Zsh and Starship are not core.'
 }
 
 case "${1:-install}" in

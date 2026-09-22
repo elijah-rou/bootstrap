@@ -1,6 +1,6 @@
 # bootstrap
 
-Native, Bash-first terminal, Pi 0.85.1, Herdr, and bundled Neovim setup. The installer supports apt on Debian/Ubuntu, dnf on Fedora, pacman on Arch, and Homebrew on Apple Silicon macOS. It does not use Conda or Linuxbrew and does not require Python at runtime.
+Native, Bash-first terminal, Pi 0.87.0, Herdr, and bundled Neovim setup. The installer supports apt on Debian/Ubuntu, dnf on Fedora, pacman on Arch, and Homebrew on Apple Silicon macOS. It does not use Conda or Linuxbrew and does not require Python at runtime.
 
 ## Install
 
@@ -75,7 +75,7 @@ Neovim synchronizes pinned plugins, resolves the effective nvim-treesitter parse
 
 Legacy migration is an explicit `inspect -> prepare -> transfer -> activate -> verify -> retire` lifecycle. Read the JSON inspection report before confirming transfer. `prepare` records the source inventory, installs core tools and the owned Pi CLI, and prepares and tests bundled Neovim privately. It does not switch shell hooks, launchers, shared configuration, or legacy state. Existing bundled Neovim profile, lockfile, extras, and writable JSON settings are preserved; external configurations, additional customizations, and unprepared LSP selections block preparation rather than being overwritten. A preparation inventory can be refreshed before transfer starts. Interrupted transfers retain their original recovery inventory.
 
-`migration readiness` executes the real catalog core commands' availability checks, Node >=22.19.0, Neovim >=0.12.0, Tree-sitter >=0.26.1, the owned Pi CLI's exact 0.85.1 version, Herdr's version command, and headless bundled Neovim startup with a verification receipt. It returns `{schemaVersion:1, ready:true, phase, profiles:{pi,sessions,gh,neovim}}` only on success. Activation repeats these probes before switching any links. Preparation uses native packages when needed and verified private fallbacks; it does not require an already activated profile.
+`migration readiness` executes the real catalog core commands' availability checks, Node >=22.19.0, Neovim >=0.12.0, Tree-sitter >=0.26.1, the owned Pi CLI's exact 0.87.0 version, Herdr's version command, and headless bundled Neovim startup with a verification receipt. It returns `{schemaVersion:1, ready:true, phase, profiles:{pi,sessions,gh,neovim}}` only on success. Activation repeats these probes before switching any links. Preparation uses native packages when needed and verified private fallbacks; it does not require an already activated profile.
 
 Transfer requires `--yes` and operator-owned quiescence. It maps `~/.pi/agent/sessions` to the private session root and preserves the entire previous Pi settings and personal-file inventory. GH file configuration moves into `private/gh`; its original configured source remains recorded across activated shells. OS keychain entries are neither extracted nor deleted. Files copy only into absent or identical destinations, including modes. Internal Pi links are remapped, completed-snapshot managed links are retargeted, and unknown external links or nonidentical destinations block before copying. Inspection discloses enrollment of the supported `~/.config/herdr` root for deletion on uninstall; transfer confirmation enrolls it without moving it, stopping Herdr, or overwriting its configuration.
 
