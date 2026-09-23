@@ -66,6 +66,51 @@ class MigrationLifecycleTest(unittest.TestCase):
                                   env=self.env, capture_output=True, text=True, timeout=120)
         self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
 
+    @unittest.skipUnless(RUNTIME_FIXTURE, 'requires cold real BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE')
+    def test_bun_launcher_requires_the_official_package_entrypoint(self):
+        self.seed_legacy()
+        package = self.home / '.bun/install/global/node_modules/@earendil-works/pi-coding-agent'
+        (package / 'dist').mkdir(parents=True)
+        manifest = package / 'package.json'
+        manifest.write_text(json.dumps({'name': '@earendil-works/pi-coding-agent', 'bin': {'pi': 'dist/cli.js'}}))
+        entry = package / 'dist/cli.js'
+        entry.write_text('throw Error("legacy executable must not run during inspection")\n')
+        entry.chmod(0o755)
+        binary = self.home / '.bun/bin/pi'
+        binary.parent.mkdir(parents=True)
+        binary.symlink_to(entry)
+        launcher = self.home / '.local/bin/pi'
+        launcher.parent.mkdir(parents=True)
+        launcher.symlink_to(binary)
+        self.assertTrue(json.loads(self.run_migration('inspect').stdout)['ready'])
+        for target in [self.home / 'unrelated', package / 'dist/foreign.js']:
+            target.write_text('unrelated')
+            binary.unlink()
+            binary.symlink_to(target)
+            report = json.loads(self.run_migration('inspect').stdout)
+            self.assertFalse(report['ready'])
+            self.assertTrue(any(item['path'] == str(launcher) for item in report['conflicts']))
+        binary.unlink()
+        binary.symlink_to(entry)
+        for value in [None, [], {}, {'name': 'not-pi', 'bin': {'pi': 'dist/cli.js'}},
+                      {'name': '@earendil-works/pi-coding-agent', 'bin': None},
+                      {'name': '@earendil-works/pi-coding-agent', 'bin': {'pi': '../outside'}}]:
+            manifest.write_text(json.dumps(value))
+            self.assertFalse(json.loads(self.run_migration('inspect').stdout)['ready'])
+        valid = json.dumps({'name': '@earendil-works/pi-coding-agent', 'bin': {'pi': 'dist/cli.js'}})
+        manifest.write_text(valid.ljust(65536))
+        self.assertTrue(json.loads(self.run_migration('inspect').stdout)['ready'])
+        manifest.write_text(valid.ljust(65537))
+        self.assertFalse(json.loads(self.run_migration('inspect').stdout)['ready'])
+        manifest.write_text(valid)
+        entry.chmod(0o644)
+        self.assertFalse(json.loads(self.run_migration('inspect').stdout)['ready'])
+        entry.chmod(0o755)
+        for phase, confirm in [('prepare', False), ('transfer', True), ('activate', True), ('verify', False), ('rollback', True)]:
+            self.run_migration(phase, confirm)
+        self.assertEqual(launcher.readlink(), binary)
+        self.assertEqual(binary.readlink(), entry)
+
     def test_readiness_rejects_legacy_only_command_path(self):
         self.seed_legacy()
         self.run_migration('prepare')

@@ -26,7 +26,11 @@ export PI_CODING_AGENT_SESSION_DIR="$BOOTSTRAP_PRIVATE_ROOT/pi/sessions"
 export GH_CONFIG_DIR="$BOOTSTRAP_PRIVATE_ROOT/gh"
 export NVIM_APPNAME="bootstrap-nvim"
 export BOOTSTRAP_LSP_SELECTIONS="$BOOTSTRAP_PRIVATE_ROOT/neovim/config/lsp-selections.json"
-export HISTFILE="$BOOTSTRAP_PRIVATE_ROOT/bash/history"
+if [[ -n "${ZSH_VERSION:-}" ]]; then
+    export HISTFILE="$BOOTSTRAP_PRIVATE_ROOT/zsh/history"
+else
+    export HISTFILE="$BOOTSTRAP_PRIVATE_ROOT/bash/history"
+fi
 export TMUX_TMPDIR="$BOOTSTRAP_PRIVATE_ROOT/tmux"
 export PATH="$DOTFILES_BARE_ROOT/bin:$CARGO_HOME/bin:$BUN_INSTALL/bin:$npm_config_prefix/bin:$GOBIN:$HOME/.local/bin:$PATH"
 export EDITOR=nvim

@@ -19,7 +19,7 @@ const sessionRoot = join(privateRoot, 'pi/sessions');
 const stateRoot = resolve(process.env.BOOTSTRAP_STATE_ROOT || join(process.env.XDG_STATE_HOME || join(home, '.local/state'), 'bootstrap'));
 const journalPath = join(stateRoot, 'migration.json');
 const checkoutRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const maxEntries = 20000;
+const maxEntries = 200000;
 const configHome = resolve(process.env.XDG_CONFIG_HOME || join(home, '.config'));
 function recordedGhSource() {
   if (!existsSync(journalPath)) return undefined;
@@ -447,11 +447,28 @@ function activationTargets() {
 function bashLoginTarget() {
   return ['.bash_profile', '.bash_login', '.profile'].map(name => join(home, name)).find(path => lstatSafe(path)) || join(home, '.bash_profile');
 }
+function bunPiLauncher(target, actual) {
+  if (target !== join(home, '.local/bin/pi') || actual.type !== 'symlink') return false;
+  const binary = join(home, '.bun/bin/pi');
+  if (resolve(dirname(target), actual.target) !== binary) return false;
+  const packageRoot = join(home, '.bun/install/global/node_modules/@earendil-works/pi-coding-agent');
+  const manifest = join(packageRoot, 'package.json');
+  const stat = lstatSafe(manifest);
+  if (!stat?.isFile() || stat.isSymbolicLink() || stat.size > 65536) return false;
+  try {
+    const metadata = JSON.parse(readFileSync(manifest, 'utf8'));
+    if (metadata.name !== '@earendil-works/pi-coding-agent' || !['dist/cli.js', 'dist/bundle/cli.js'].includes(metadata.bin?.pi)) return false;
+    const entry = join(packageRoot, metadata.bin.pi);
+    const entryStat = lstatSafe(entry);
+    return Boolean(entryStat?.isFile() && !entryStat.isSymbolicLink() && (entryStat.mode & 0o111) && realpathSync(binary) === entry);
+  } catch { return false; }
+}
 function activationConflict(item) {
   const actual = descriptor(item.target);
   if (item.target === bashLoginTarget() && actual.type === 'file' && !/mamba|conda/i.test(readFileSync(item.target, 'utf8'))) return undefined;
   if (item.target === nvimSource && actual.type === 'symlink' && lstatSafe(join(item.target, 'init.lua')) && realpathSync(join(item.target, 'init.lua')) === join(checkoutRoot, 'neovim/config/init.lua')) return undefined;
   if (actual.type === 'absent' || (actual.type === 'symlink' && actual.target === item.source)) return undefined;
+  if (bunPiLauncher(item.target, actual)) return undefined;
   if (actual.type === 'symlink' && snapshotLinkTarget(resolve(dirname(item.target), actual.target)) === item.source) return undefined;
   return { path: item.target, reason: 'activation target is not absent or a proven managed link' };
 }

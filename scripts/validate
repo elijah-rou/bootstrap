@@ -23,7 +23,7 @@ git diff --check
 git diff --cached --check
 python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
-shell_files=(bootstrap.sh configure.sh install.sh scripts/validate tests/bare_install_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/native_package_test.sh tests/native_artifact_smoke.sh tests/native_runtime_journey.sh tests/native_toolchain_smoke.sh tests/native_selected_lsp_smoke.sh tests/native_candidate_probe.sh tests/real_nvim_lsp_test.sh tests/prepare_neovim_runtime.sh tests/prepare_migration_runtime.sh tests/bundled_neovim_repair_test.sh tests/bundled_neovim_fixture.sh tests/uninstall_test.sh tests/neovim_config_test.sh tests/bundled_neovim_runtime_test.sh tests/codex_link_test.sh tests/pi_package_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace scripts/pi-owned scripts/codex-owned scripts/migration-runtime)
+shell_files=(bootstrap.sh configure.sh install.sh scripts/validate tests/bare_install_test.sh tests/shell_history_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/native_package_test.sh tests/native_artifact_smoke.sh tests/native_runtime_journey.sh tests/native_toolchain_smoke.sh tests/native_selected_lsp_smoke.sh tests/native_candidate_probe.sh tests/real_nvim_lsp_test.sh tests/prepare_neovim_runtime.sh tests/prepare_migration_runtime.sh tests/bundled_neovim_repair_test.sh tests/bundled_neovim_fixture.sh tests/uninstall_test.sh tests/neovim_config_test.sh tests/bundled_neovim_runtime_test.sh tests/codex_link_test.sh tests/pi_package_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace scripts/pi-owned scripts/codex-owned scripts/migration-runtime)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
 for file in zshrc zshenv zprofile; do zsh -n "$file"; done
 shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"
@@ -82,6 +82,7 @@ assert len(codex_skills) == len(set(codex_skills)), "duplicate Codex skill expor
 assert set(codex_skills) <= skill_names, "Codex export names an unavailable skill"
 print("structured config and skill parsing passed")
 PY
+bash tests/shell_history_test.sh
 bash tests/bare_install_test.sh
 bash tests/pi_install_test.sh
 bash tests/languages_test.sh
@@ -119,6 +120,7 @@ if [[ "${NVIM_BUNDLED_RUNTIME:-0}" == 1 ]]; then
 fi
 python3 tests/configure_contract_test.py
 python3 tests/snapshot_upgrade_test.py
+python3 tests/migration_capacity_test.py
 python3 tests/migration_lifecycle_test.py
 bash tests/codex_link_test.sh
 bash tests/pi_package_test.sh
