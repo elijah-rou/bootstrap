@@ -75,6 +75,22 @@ class OwnershipTest(unittest.TestCase):
                 self.assertFalse((home / 'pi').exists())
                 self.assertFalse((home / 'bash').exists())
 
+    def test_initializer_rejects_replaced_enrolled_roots(self):
+        private = self.home / '.local/share/bootstrap/private'
+        private.mkdir(parents=True)
+        self.execute('init')
+        self.execute('enroll', private)
+        private.rename(private.with_name('original-private'))
+        private.mkdir(mode=0o755)
+        result = subprocess.run(
+            ['bash', '-c', 'source "$DOTFILES_DIR/scripts/bare-env.sh"; source "$DOTFILES_DIR/scripts/lib/install/bare.sh"; initialize_bootstrap_component fixture'],
+            env=dict(self.env, DOTFILES_DIR=str(ROOT)), text=True, capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Enrolled location identity changed', result.stderr)
+        self.assertEqual(private.stat().st_mode & 0o777, 0o755)
+        self.assertEqual(list(private.iterdir()), [])
+
     def test_state_root_cannot_be_home_or_a_symlink(self):
         external = pathlib.Path(self.temp.name) / 'external-state'
         external.mkdir()
