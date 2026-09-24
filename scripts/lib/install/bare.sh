@@ -220,7 +220,9 @@ initialize_bootstrap_component() {
         fi
     fi
     node "$DOTFILES_DIR/scripts/state-helper.mjs" component-begin "$component" || return 1
-    mkdir -p "$DOTFILES_BARE_ROOT" "$BOOTSTRAP_PRIVATE_ROOT"/{bash,zsh,gh,pi/agent,pi/sessions,neovim} || return 1
+    mkdir -p "$DOTFILES_BARE_ROOT" || return 1
+    (umask 077; mkdir -p "$BOOTSTRAP_PRIVATE_ROOT"/{bash,zsh,gh,pi/agent,pi/sessions,neovim}) || return 1
+    chmod 0700 "$BOOTSTRAP_PRIVATE_ROOT" || return 1
     node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$DOTFILES_BARE_ROOT" || return 1
     node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT" || return 1
 }

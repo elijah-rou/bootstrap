@@ -36,6 +36,15 @@ class OwnershipTest(unittest.TestCase):
         self.execute('uninstall',ok=False); self.assertEqual(target.read_text(),'user edit')
         record=json.loads((self.state/'install.json').read_text()); record['schemaVersion']=999; (self.state/'install.json').write_text(json.dumps(record)); self.execute('validate',ok=False)
 
+    def test_private_root_is_owner_only_with_a_public_umask(self):
+        result = subprocess.run(
+            ['bash', '-c', 'set -e; umask 022; source "$1/scripts/bare-env.sh"; source "$1/scripts/lib/install/bare.sh"; initialize_bootstrap_component fixture', '_', str(ROOT)],
+            env=dict(self.env, DOTFILES_DIR=str(ROOT)), text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        private = self.home / '.local/share/bootstrap/private'
+        self.assertEqual(private.stat().st_mode & 0o777, 0o700)
+
     def test_state_root_cannot_be_home_or_a_symlink(self):
         external = pathlib.Path(self.temp.name) / 'external-state'
         external.mkdir()
