@@ -54,6 +54,26 @@ with tempfile.TemporaryDirectory(prefix='migration-capacity-') as temporary:
         assert rejected_receipt.returncode != 0, field
         assert 'Malformed full' in rejected_receipt.stderr, rejected_receipt.stderr
         journal[field] = full
+    reduced = dict(journal)
+    for field in ['sourceInventory', 'destinationBefore', 'transferredInventory', 'verifiedInventory']:
+        reduced[field] = journal[field][:1]
+    full = journal['transferredFullInventory']
+    invalid_trees = [
+        [*full[:-1], {'path': 'agent/overflow', 'type': 'directory', 'mode': 448}],
+        [*full[:200001], *full[200002:], {'path': 'sessions/overflow', 'type': 'directory', 'mode': 448}],
+        [*full[:-1], {'path': 'foreign', 'type': 'directory', 'mode': 448}],
+        [dict(full[2], path='agent'), *full[1:3]],
+        full[1:3],
+        [*full[:3], {'path': 'sessions/missing/leaf', 'type': 'directory', 'mode': 448}],
+    ]
+    for field in ['transferredFullInventory', 'verifiedFullInventory']:
+        for invalid in invalid_trees:
+            reduced[field] = invalid
+            journal_path.write_text(json.dumps(reduced))
+            rejected_tree = subprocess.run(command[:-1] + ['status'], env=env, capture_output=True, text=True, timeout=180)
+            assert rejected_tree.returncode != 0, field
+            assert 'Malformed full' in rejected_tree.stderr, rejected_tree.stderr
+        reduced[field] = full
     journal_path.write_text(json.dumps(journal))
     (legacy / 'one-too-many').touch()
     rejected = subprocess.run(command, env=env, capture_output=True, text=True, timeout=180)
