@@ -20,6 +20,8 @@ const stateRoot = resolve(process.env.BOOTSTRAP_STATE_ROOT || join(process.env.X
 const journalPath = join(stateRoot, 'migration.json');
 const checkoutRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const maxEntries = 200000;
+// Full receipts combine the independently bounded agent/session trees and their roots.
+const maxFullEntries = 2 * maxEntries + 2;
 const configHome = resolve(process.env.XDG_CONFIG_HOME || join(home, '.config'));
 function recordedGhSource() {
   if (!existsSync(journalPath)) return undefined;
@@ -283,8 +285,8 @@ function validStoredDescriptor(item, withPath = true, source = false) {
   const keys = source ? [...prefix, 'type', 'target', 'classification'] : [...prefix, 'type', 'target'];
   return exactKeys(item, keys) && typeof item.target === 'string' && !item.target.includes('\0') && (!source || ['internal', 'managed'].includes(item.classification));
 }
-function validateUniqueInventory(items, name, source = false) {
-  if (!Array.isArray(items) || items.length > maxEntries) fail(`Malformed ${name}`);
+function validateUniqueInventory(items, name, source = false, limit = maxEntries) {
+  if (!Array.isArray(items) || items.length > limit) fail(`Malformed ${name}`);
   const paths = new Set();
   for (const item of items) {
     if (!validStoredDescriptor(item, true, source) || paths.has(item.path)) fail(`Malformed ${name}`);
@@ -328,7 +330,7 @@ function validateJournal(value) {
     validateUniqueInventory(value.transferredInventory, 'transferred migration inventory');
     if (value.transferredInventory.length !== value.sourceInventory.length) fail('Transferred inventory does not correspond');
     value.sourceInventory.forEach((item, index) => { if (!sameDescriptor(value.transferredInventory[index], expectedTransferredEntry(item)) || value.transferredInventory[index].path !== item.path) fail('Transferred inventory does not correspond'); });
-    validateUniqueInventory(value.transferredFullInventory, 'full transferred inventory');
+    validateUniqueInventory(value.transferredFullInventory, 'full transferred inventory', false, maxFullEntries);
     const full = new Map(value.transferredFullInventory.map(item => [item.path, item]));
     for (const item of value.transferredInventory) if (!sameDescriptor(full.get(fullPathForSource(item.path)) || { type: 'absent' }, item)) fail('Full transferred inventory does not correspond');
   }
@@ -336,7 +338,7 @@ function validateJournal(value) {
     validateUniqueInventory(value.verifiedInventory, 'verified migration inventory');
     if (value.verifiedInventory.length !== value.sourceInventory.length) fail('Verified inventory does not correspond');
     value.verifiedInventory.forEach((item, index) => { if (item.path !== value.sourceInventory[index].path) fail('Verified inventory does not correspond'); });
-    validateUniqueInventory(value.verifiedFullInventory, 'full verified inventory');
+    validateUniqueInventory(value.verifiedFullInventory, 'full verified inventory', false, maxFullEntries);
     const full = new Map(value.verifiedFullInventory.map(item => [item.path, item]));
     for (const item of value.verifiedInventory) if (!sameDescriptor(full.get(fullPathForSource(item.path)) || { type: 'absent' }, item)) fail('Full verified inventory does not correspond');
   }
