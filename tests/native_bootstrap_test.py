@@ -37,13 +37,43 @@ class OwnershipTest(unittest.TestCase):
         record=json.loads((self.state/'install.json').read_text()); record['schemaVersion']=999; (self.state/'install.json').write_text(json.dumps(record)); self.execute('validate',ok=False)
 
     def test_private_root_is_owner_only_with_a_public_umask(self):
-        result = subprocess.run(
-            ['bash', '-c', 'set -e; umask 022; source "$1/scripts/bare-env.sh"; source "$1/scripts/lib/install/bare.sh"; initialize_bootstrap_component fixture', '_', str(ROOT)],
-            env=dict(self.env, DOTFILES_DIR=str(ROOT)), text=True, capture_output=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         private = self.home / '.local/share/bootstrap/private'
-        self.assertEqual(private.stat().st_mode & 0o777, 0o700)
+        for attempt in range(2):
+            if attempt:
+                private.chmod(0o755)
+            result = subprocess.run(
+                ['bash', '-c', 'set -e; umask 022; source "$1/scripts/bare-env.sh"; source "$1/scripts/lib/install/bare.sh"; initialize_bootstrap_component fixture', '_', str(ROOT)],
+                env=dict(self.env, DOTFILES_DIR=str(ROOT)), text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(private.stat().st_mode & 0o777, 0o700)
+
+    def test_initializer_rejects_unsafe_private_roots_before_touching_them(self):
+        for kind in ['symlink', 'ancestor', 'home']:
+            with self.subTest(kind=kind):
+                home = self.home / kind
+                home.mkdir(mode=0o755)
+                external = pathlib.Path(self.temp.name) / f'external-{kind}'
+                external.mkdir(mode=0o755)
+                private = home
+                if kind == 'symlink':
+                    private = home / 'private'
+                    private.symlink_to(external, target_is_directory=True)
+                elif kind == 'ancestor':
+                    (home / 'alias').symlink_to(external, target_is_directory=True)
+                    private = home / 'alias/private'
+                result = subprocess.run(
+                    ['bash', '-c', 'source "$DOTFILES_DIR/scripts/bare-env.sh"; source "$DOTFILES_DIR/scripts/lib/install/bare.sh"; initialize_bootstrap_component fixture'],
+                    env=dict(self.env, HOME=str(home), DOTFILES_DIR=str(ROOT),
+                             BOOTSTRAP_PRIVATE_ROOT=str(private), BOOTSTRAP_STATE_ROOT=str(home / 'state'),
+                             DOTFILES_BARE_ROOT=str(home / 'tools')), text=True, capture_output=True,
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(external.stat().st_mode & 0o777, 0o755)
+                self.assertEqual(list(external.iterdir()), [])
+                self.assertEqual(home.stat().st_mode & 0o777, 0o755)
+                self.assertFalse((home / 'pi').exists())
+                self.assertFalse((home / 'bash').exists())
 
     def test_state_root_cannot_be_home_or_a_symlink(self):
         external = pathlib.Path(self.temp.name) / 'external-state'
