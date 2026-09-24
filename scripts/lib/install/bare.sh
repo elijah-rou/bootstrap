@@ -406,9 +406,12 @@ install_lsp_selection() {
     while IFS= read -r prerequisite; do [[ -z "$prerequisite" ]] || packages+=("$prerequisite"); done < <(catalog_query group lsp "$selection")
     [[ ${#packages[@]} -eq 0 ]] || install_native_keys "${packages[@]}" || return 1
     if [[ "$selection" == typescript-language-server ]]; then
-        # The server needs its implementation package even when a foreign server
-        # executable already exists. This does not select the TS development extra.
-        bun install --global --exact typescript@6.0.2 typescript-language-server@5.3.0 || return 1
+        # Preserve usable owned pairs, including user upgrades. A foreign server
+        # still needs the owned implementation; this does not select a dev extra.
+        if [[ ! -x "$BUN_INSTALL/bin/typescript-language-server" ]] ||
+            ! node -e 'require.resolve(process.argv[1]+"/lib/cli.mjs"); require.resolve("typescript/lib/tsserver.js", {paths:[process.argv[1]]})' "$BUN_INSTALL/install/global/node_modules/typescript-language-server" >/dev/null 2>&1; then
+            bun install --global --exact typescript@6.0.2 typescript-language-server@5.3.0 || return 1
+        fi
         node -e 'require.resolve("typescript/lib/tsserver.js", {paths:[process.argv[1]]})' "$BUN_INSTALL/install/global/node_modules/typescript-language-server" || return 1
         link_managed_file "$BUN_INSTALL/bin/typescript-language-server" "$DOTFILES_BARE_ROOT/bin/typescript-language-server" || return 1
     fi

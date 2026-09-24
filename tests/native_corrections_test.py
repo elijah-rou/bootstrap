@@ -245,6 +245,40 @@ install_lsp_selection typescript-language-server
 [[ -L "$DOTFILES_BARE_ROOT/bin/typescript-language-server" ]]
 ''')
 
+    def test_existing_owned_typescript_pair_is_not_downgraded(self):
+        self.shell('''
+node "$DOTFILES_DIR/scripts/state-helper.mjs" init
+server="$BUN_INSTALL/install/global/node_modules/typescript-language-server"
+mkdir -p "$BUN_INSTALL/bin" "$server/lib" "$BUN_INSTALL/install/global/node_modules/typescript/lib"
+printf '#!/bin/sh\\nprintf "6.0.0\\\\n"\\n' >"$server/lib/cli.mjs"
+chmod +x "$server/lib/cli.mjs"
+ln -s "$server/lib/cli.mjs" "$BUN_INSTALL/bin/typescript-language-server"
+printf 'module.exports={};\\n' >"$BUN_INSTALL/install/global/node_modules/typescript/lib/tsserver.js"
+bun() { printf 'unexpected reinstall\\n' >&2; return 99; }
+verify_selected_lsp() { [[ "$("$BUN_INSTALL/bin/typescript-language-server" --version)" == 6.0.0 ]]; }
+install_lsp_selection typescript-language-server
+[[ -L "$DOTFILES_BARE_ROOT/bin/typescript-language-server" ]]
+[[ "$(node "$DOTFILES_DIR/scripts/state-helper.mjs" selections)" == $'lsp\\ttypescript-language-server' ]]
+''')
+
+    def test_owned_typescript_pair_repairs_missing_compiler(self):
+        self.shell('''
+node "$DOTFILES_DIR/scripts/state-helper.mjs" init
+server="$BUN_INSTALL/install/global/node_modules/typescript-language-server"
+mkdir -p "$BUN_INSTALL/bin" "$server/lib"
+printf '#!/bin/sh\\nexit 0\\n' >"$server/lib/cli.mjs"; chmod +x "$server/lib/cli.mjs"
+ln -s "$server/lib/cli.mjs" "$BUN_INSTALL/bin/typescript-language-server"
+bun() {
+  [[ "$*" == 'install --global --exact typescript@6.0.2 typescript-language-server@5.3.0' ]] || return 99
+  mkdir -p "$BUN_INSTALL/install/global/node_modules/typescript/lib"
+  printf 'module.exports={};\\n' >"$BUN_INSTALL/install/global/node_modules/typescript/lib/tsserver.js"
+  printf repaired >"$HOME/repaired"
+}
+verify_selected_lsp() { [[ -f "$HOME/repaired" ]]; }
+install_lsp_selection typescript-language-server
+[[ -f "$HOME/repaired" && -L "$DOTFILES_BARE_ROOT/bin/typescript-language-server" ]]
+''')
+
     def test_core_reconciles_persisted_independent_selections(self):
         self.shell('''
 node "$DOTFILES_DIR/scripts/state-helper.mjs" init
