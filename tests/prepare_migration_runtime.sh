@@ -21,10 +21,13 @@ export HOME="$fixture/home" XDG_CONFIG_HOME="$fixture/home/.config" XDG_DATA_HOM
 export XDG_STATE_HOME="$fixture/home/.state" XDG_CACHE_HOME="$fixture/home/.cache"
 export DOTFILES_BARE_ROOT="$fixture/home/tools" BOOTSTRAP_PRIVATE_ROOT="$fixture/home/private" BOOTSTRAP_STATE_ROOT="$fixture/home/state/bootstrap"
 unset GH_CONFIG_DIR BOOTSTRAP_LEGACY_GH_ROOT BOOTSTRAP_LEGACY_PI_ROOT NVIM_CONFIG_CHECKOUT_DIR NVIM_CONFIG_REPO_URL BOOTSTRAP_NEOVIM_PROFILE
-mkdir -p "$HOME/.pi/agent"
+mkdir -p "$HOME/.pi/agent/sessions"
+chmod 0755 "$HOME/.pi/agent/sessions"
 printf '{"packages":[]}\n' >"$HOME/.pi/agent/settings.json"
 # The command and version preconditions keep native transactions empty.
 bash "$ROOT/install.sh" migration prepare
+node "$ROOT/scripts/migration-helper.mjs" inspect > "$fixture/prepared-inspect.json"
+node -e 'const r=require(process.argv[1]);if(!r.ready)throw Error(JSON.stringify(r.conflicts))' "$fixture/prepared-inspect.json"
 if [[ "${BOOTSTRAP_NATIVE_DISPOSABLE:-0}" != 1 ]]; then
     node -e 'const r=require(process.argv[1]);if(r.packages.length)throw Error("Fixture unexpectedly installed native packages")' "$BOOTSTRAP_STATE_ROOT/install.json"
 fi

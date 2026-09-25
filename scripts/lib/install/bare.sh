@@ -224,7 +224,11 @@ initialize_bootstrap_component() {
     node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$DOTFILES_BARE_ROOT" || return 1
     node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT" || return 1
     mkdir -p "$DOTFILES_BARE_ROOT" || return 1
-    (umask 077; mkdir -p "$BOOTSTRAP_PRIVATE_ROOT"/{bash,zsh,gh,pi/agent,pi/sessions,neovim}) || return 1
+    (umask 077; mkdir -p "$BOOTSTRAP_PRIVATE_ROOT"/{bash,zsh,gh,pi/agent,neovim}) || return 1
+    # Transfer owns the split session root's mode; preparation must not preempt it.
+    if [[ "${BOOTSTRAP_PREPARE_ONLY:-0}" != 1 ]]; then
+        (umask 077; mkdir -p "$BOOTSTRAP_PRIVATE_ROOT/pi/sessions") || return 1
+    fi
     node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$DOTFILES_BARE_ROOT" || return 1
     node "$DOTFILES_DIR/scripts/state-helper.mjs" enroll "$BOOTSTRAP_PRIVATE_ROOT" || return 1
     chmod 0700 "$BOOTSTRAP_PRIVATE_ROOT" || return 1

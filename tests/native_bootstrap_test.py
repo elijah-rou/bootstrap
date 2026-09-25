@@ -48,6 +48,26 @@ class OwnershipTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(private.stat().st_mode & 0o777, 0o700)
 
+    def test_runtime_preparation_leaves_session_directory_mode_to_transfer(self):
+        legacy = self.home / '.pi/agent'
+        (legacy / 'sessions').mkdir(parents=True, mode=0o755)
+        (legacy / 'sessions').chmod(0o755)
+        environment = {key: value for key, value in self.env.items()
+                       if not key.startswith(('BOOTSTRAP_', 'DOTFILES_', 'XDG_', 'PI_', 'GH_CONFIG_DIR'))}
+        environment.update(HOME=str(self.home.resolve()), DOTFILES_DIR=str(ROOT), BOOTSTRAP_PREPARE_ONLY='1')
+        result = subprocess.run(
+            ['bash', '-c', 'set -e; umask 077; source "$DOTFILES_DIR/scripts/bare-env.sh"; source "$DOTFILES_DIR/scripts/lib/install/bare.sh"; initialize_bootstrap_component migration-runtime'],
+            env=environment, text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        inspected = subprocess.run(['node', str(ROOT / 'scripts/migration-helper.mjs'), 'inspect'],
+                                   env=environment, text=True, capture_output=True)
+        self.assertEqual(inspected.returncode, 0, inspected.stdout + inspected.stderr)
+        report = json.loads(inspected.stdout)
+        self.assertTrue(report['ready'], report['conflicts'])
+        self.assertFalse((self.home / '.local/share/bootstrap/private/pi/sessions').exists())
+        self.assertEqual((self.home / '.local/share/bootstrap/private').stat().st_mode & 0o777, 0o700)
+
     def test_initializer_rejects_unsafe_private_roots_before_touching_them(self):
         for kind in ['symlink', 'ancestor', 'home']:
             with self.subTest(kind=kind):
