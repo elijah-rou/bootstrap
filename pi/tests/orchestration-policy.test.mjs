@@ -31,7 +31,7 @@ test("active Pi extensions use portable immutable sources", async () => {
 		return typeof source === "string" && source.includes("pi-subagents");
 	});
 	assert.deepEqual(subagentPackages, [
-		"git:github.com/elijah-rou/pi-subagents@e45ccac7518bb5648263f65ba239b9fc5bf6e5ab",
+		"git:github.com/elijah-rou/pi-subagents@38ddf4c694c3cc3d2b453bd44ca3071b104873ee",
 	]);
 	for (const entry of settings.packages) {
 		const source = typeof entry === "string" ? entry : entry?.source;
@@ -91,7 +91,7 @@ test("scout returns inline without writing a default context artifact", async ()
 test("active settings preserve the parent and route only child compute", async () => {
 	const settings = JSON.parse(await readPiFile("settings.json"));
 	assert.equal(settings.defaultProvider, "openai-codex");
-	assert.equal(settings.defaultModel, "gpt-6-astra");
+	assert.equal(settings.defaultModel, "gpt-6.1-sol");
 	assert.equal(settings.defaultThinkingLevel, "low");
 	assert.deepEqual(settings.compaction, {
 		enabled: true,
@@ -99,7 +99,7 @@ test("active settings preserve the parent and route only child compute", async (
 		keepRecentTokens: 20000,
 	});
 	assert.deepEqual(settings.subagents.agentOverrides.worker, {
-		model: "openai-codex/gpt-5.6-sol",
+		model: "openai-codex/gpt-6.1-sol",
 		fallbackModels: ["opencode/grok-4.6:high"],
 		thinking: "medium",
 		defaultContext: "fresh",

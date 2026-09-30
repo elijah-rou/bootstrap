@@ -1,6 +1,6 @@
 {
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-6-astra",
+  "defaultModel": "gpt-6.1-sol",
   "defaultThinkingLevel": "low",
   "theme": "iroaseta",
   "compaction": {
@@ -16,8 +16,8 @@
     "bun"
   ],
   "packages": [
-    "git:github.com/elijah-rou/pi-subagents@e45ccac7518bb5648263f65ba239b9fc5bf6e5ab",
-    "npm:pi-web-access@0.24.2",
+    "git:github.com/elijah-rou/pi-subagents@38ddf4c694c3cc3d2b453bd44ca3071b104873ee",
+    "npm:pi-web-access@0.34.0",
     "git:github.com/elijah-rou/pi-privileged-operations@8728b268bc8d1cc31d7e0f4b51a74974fc72216d",
     "git:github.com/elijah-rou/pi-sub-limits@b968a179c05d323f8fea126ba3ad3e5fdf1cfc09",
     "git:github.com/elijah-rou/pi-effort@9400dcea4a591b90c994187432e3bdcd0f3fa4ff",
@@ -25,7 +25,7 @@
   ],
   "subagents": {
     "maxSubagentDepth": 2,
-    "defaultModel": "openai-codex/gpt-5.6-sol",
+    "defaultModel": "openai-codex/gpt-6.1-sol",
     "defaultThinking": "high",
     "agentOverrides": {
       "delegate": {
@@ -36,7 +36,7 @@
         "thinking": "high"
       },
       "worker": {
-        "model": "openai-codex/gpt-5.6-sol",
+        "model": "openai-codex/gpt-6.1-sol",
         "fallbackModels": [
           "opencode/grok-4.6:high"
         ],
@@ -53,14 +53,14 @@
         "thinking": "medium"
       },
       "reviewer": {
-        "model": "openai-codex/gpt-6-astra",
+        "model": "openai-codex/gpt-6.1-sol",
         "fallbackModels": [
           "opencode/grok-4.6:high"
         ],
         "thinking": "high"
       },
       "oracle": {
-        "model": "openai-codex/gpt-5.6-sol",
+        "model": "openai-codex/gpt-6.1-sol",
         "thinking": "high",
         "disabled": true
       },

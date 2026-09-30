@@ -333,7 +333,7 @@ class ConfigurationContract(unittest.TestCase):
         result = subprocess.run(['bash', str(ROOT / 'install.sh'), 'pi-version'], env=self.env,
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, '0.87.0\n')
+        self.assertEqual(result.stdout, '0.99.1\n')
         result = subprocess.run(['bash', str(ROOT / 'install.sh'), 'pi-check'], env=self.env,
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)

@@ -127,7 +127,7 @@ jobs:
           source ./install.sh
           export BUN_INSTALL="$RUNNER_TEMP/bootstrap-test-bun"
           bun install --global --ignore-scripts \
-            "$PI_CLI_PACKAGE@$PI_CLI_VERSION" pi-web-access@0.24.2 @openai/codex@0.153.4
+            "$PI_CLI_PACKAGE@$PI_CLI_VERSION" pi-web-access@0.34.0 @openai/codex@0.153.4
           runtime="$BUN_INSTALL/install/global/node_modules"
           subagents="$RUNNER_TEMP/bootstrap-test-subagents"
           read -r _ repository revision <<< "$(read_pi_subagents_package pi/settings.json)"

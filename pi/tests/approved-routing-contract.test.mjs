@@ -17,11 +17,11 @@ function parseFrontmatter(source) {
 
 test("explicit roles preserve parent and approved compute choices", () => {
  const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
- assert.equal(settings.defaultModel, "gpt-6-astra");
+ assert.equal(settings.defaultModel, "gpt-6.1-sol");
  assert.equal(settings.defaultThinkingLevel, "low");
  assert.equal(settings.subagents.childRouting, undefined, "no classifier is configured");
  for (const [name, model, thinking, fallback] of [
-  ["deep", "openai-codex/gpt-6-astra", "xhigh", "opencode/claude-opus-4-8:xhigh"],
+  ["deep", "openai-codex/gpt-6.1-sol", "xhigh", "opencode/claude-opus-4-8:xhigh"],
   ["second-opinion", "opencode/grok-4.6", "high", "opencode/claude-opus-4-8:high"],
  ]) {
   const agent = parseFrontmatter(readFileSync(new URL(`../agents/${name}.md`, import.meta.url), "utf8"));
@@ -32,7 +32,7 @@ test("explicit roles preserve parent and approved compute choices", () => {
  }
 });
 
-const pinnedSubagentsSource = "git:github.com/elijah-rou/pi-subagents@e45ccac7518bb5648263f65ba239b9fc5bf6e5ab";
+const pinnedSubagentsSource = "git:github.com/elijah-rou/pi-subagents@38ddf4c694c3cc3d2b453bd44ca3071b104873ee";
 
 test("subagents are active with static fail-open role defaults", () => {
 	const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
@@ -53,7 +53,7 @@ test("subagents are active with static fail-open role defaults", () => {
 		thinking: "high",
 	});
 	assert.deepEqual(settings.subagents.agentOverrides.worker, {
-		model: "openai-codex/gpt-5.6-sol",
+		model: "openai-codex/gpt-6.1-sol",
 		fallbackModels: ["opencode/grok-4.6:high"],
 		thinking: "medium",
 		defaultContext: "fresh",
@@ -66,7 +66,7 @@ test("subagents are active with static fail-open role defaults", () => {
 		thinking: "medium",
 	});
 	assert.deepEqual(settings.subagents.agentOverrides.reviewer, {
-		model: "openai-codex/gpt-6-astra",
+		model: "openai-codex/gpt-6.1-sol",
 		fallbackModels: ["opencode/grok-4.6:high"],
 		thinking: "high",
 	});
@@ -81,9 +81,11 @@ test("subagents are active with static fail-open role defaults", () => {
 
 test("researcher override uses the SearXNG-backed web tools and bounded duration contract", () => {
 	const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
-	assert.ok(settings.packages.includes("npm:pi-web-access@0.24.2"), "the immutable pi-web-access package must provide the researcher web tools");
+	assert.ok(settings.packages.includes("npm:pi-web-access@0.34.0"), "the immutable pi-web-access package must provide the researcher web tools");
 	const webSearch = JSON.parse(readFileSync(new URL("../web-search.json", import.meta.url), "utf8"));
 	assert.equal(webSearch.provider, "searxng");
+	assert.equal(webSearch.toolActivation, "eager");
+	assert.equal(webSearch.workflow, "summary-review");
 	assert.deepEqual(webSearch.searchRouting.providers, ["searxng"]);
 	assert.equal(webSearch.fetchRouting.allowRemoteHostedProviders, false);
 
@@ -166,9 +168,9 @@ async function assertRuntimeContract(runtimeRoot) {
   const discovered = agentsModule.discoverAgents(sandbox, "project");
   const roles = new Map(discovered.agents.map(agent => [agent.name, agent]));
   for (const [name, model, thinking] of [
-   ["worker", "openai-codex/gpt-5.6-sol", "medium"],
-   ["reviewer", "openai-codex/gpt-6-astra", "high"],
-   ["deep", "openai-codex/gpt-6-astra", "xhigh"],
+   ["worker", "openai-codex/gpt-6.1-sol", "medium"],
+   ["reviewer", "openai-codex/gpt-6.1-sol", "high"],
+   ["deep", "openai-codex/gpt-6.1-sol", "xhigh"],
    ["second-opinion", "opencode/grok-4.6", "high"],
   ]) {
    assert.equal(roles.get(name)?.model, model, name);

@@ -1,7 +1,7 @@
 ---
 name: deep
 description: Explicit deep implementation or diagnosis for consequential uncertainty; not ordinary worker tasks
-model: openai-codex/gpt-6-astra
+model: openai-codex/gpt-6.1-sol
 thinking: xhigh
 fallbackModels: opencode/claude-opus-4-8:xhigh
 tools: read, grep, find, ls, bash, edit, write, contact_supervisor
