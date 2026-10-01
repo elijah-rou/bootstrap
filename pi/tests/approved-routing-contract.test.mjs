@@ -81,7 +81,7 @@ test("subagents are active with static fail-open role defaults", () => {
 
 test("researcher override uses the SearXNG-backed web tools and bounded duration contract", () => {
 	const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
-	assert.ok(settings.packages.includes("npm:pi-web-access@0.34.0"), "the immutable pi-web-access package must provide the researcher web tools");
+	assert.ok(settings.packages.includes("npm:pi-web-access@0.35.0"), "the immutable pi-web-access package must provide the researcher web tools");
 	const webSearch = JSON.parse(readFileSync(new URL("../web-search.json", import.meta.url), "utf8"));
 	assert.equal(webSearch.provider, "searxng");
 	assert.equal(webSearch.toolActivation, "eager");

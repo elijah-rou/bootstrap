@@ -176,24 +176,24 @@ install_upstream_tool() {
         return
     fi
     case "$key/$platform" in
-        node/linux-64) archive=node-v24.18.0-linux-x64.tar.xz; sha=55aa7153f9d88f28d765fcdad5ae6945b5c0f98a36881703817e4c450fa76742 ;;
-        node/linux-aarch64) archive=node-v24.18.0-linux-arm64.tar.xz; sha=58c9520501f6ae2b52d5b210444e24b9d0c029a58c5011b797bc1fe7105886f6 ;;
-        node/osx-arm64) archive=node-v24.18.0-darwin-arm64.tar.xz; sha=4477b9f78efb77744cf5eb57a0e9594dba66466b38b4e93fa9f35cb907a095a6 ;;
-        tree-sitter/linux-64) archive=tree-sitter-linux-x64.gz; sha=4367a46bc8abbb8328d6efbeb26e86807af0a3a7e462548a3924f87289ee1e9c ;;
-        tree-sitter/linux-aarch64) archive=tree-sitter-linux-arm64.gz; sha=86a317732cc597e1576f8b11b4853f78fedd2a3c756923e33f323667dee6b4be ;;
-        tree-sitter/osx-arm64) archive=tree-sitter-macos-arm64.gz; sha=24162119aca35a160a2752a4457b17f3c47f7b2895ab63002c66b8dfd1bb41d1 ;;
+        node/linux-64) archive=node-v24.21.0-linux-x64.tar.xz; sha=fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6 ;;
+        node/linux-aarch64) archive=node-v24.21.0-linux-arm64.tar.xz; sha=6ad1325edbdb5649c379b75a237147a666c95d4f9ae8d340fef2d1575d289ad2 ;;
+        node/osx-arm64) archive=node-v24.21.0-darwin-arm64.tar.xz; sha=6239d4cf92d864487ec8cd3615038f7b67e7f58b77b21cd2f09ea9fbd68065fe ;;
+        tree-sitter/linux-64) archive=tree-sitter-linux-x64.gz; sha=20a1f39ec1c45f2211492dcb8881c802b643b554bb196869a29ac3778277fa77 ;;
+        tree-sitter/linux-aarch64) archive=tree-sitter-linux-arm64.gz; sha=3a35a2dd961ad842384e982c75daf792c01d1a67e442fc3914d4de37bd8a59cb ;;
+        tree-sitter/osx-arm64) archive=tree-sitter-macos-arm64.gz; sha=70f7573b2b2e5371a5b58cc5227d2ad981fd5374596b9874e770af486060774e ;;
         neovim/linux-64) archive=nvim-linux-x86_64.tar.gz; sha=bce0f56eda1f1b1db6eee8f4133d7a38813ea07933837dd1777411ca384c6875 ;;
         neovim/linux-aarch64) archive=nvim-linux-arm64.tar.gz; sha=1aa5ca085249580ae0f91eb14f27ec0919773ff2d99a163d03f3d6c21ac29725 ;;
         neovim/osx-arm64) archive=nvim-macos-arm64.tar.gz; sha=65fb000099e47ca1b762584c484cc833f40e30851a0ec450d4174e16317c1f9b ;;
-        delta/linux-64) archive=delta-0.18.2-x86_64-unknown-linux-gnu.tar.gz; sha=99607c43238e11a77fe90a914d8c2d64961aff84b60b8186c1b5691b39955b0f ;;
-        delta/linux-aarch64) archive=delta-0.18.2-aarch64-unknown-linux-gnu.tar.gz; sha=adf7674086daa4582f598f74ce9caa6b70c1ba8f4a57d2911499b37826b014f9 ;;
-        delta/osx-arm64) archive=delta-0.18.2-aarch64-apple-darwin.tar.gz; sha=6ba38dce9f91ee1b9a24aa4aede1db7195258fe176c3f8276ae2d4457d8170a0 ;;
-        uv/linux-64) archive=uv-x86_64-unknown-linux-gnu.tar.gz; sha=745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd ;;
-        uv/linux-aarch64) archive=uv-aarch64-unknown-linux-gnu.tar.gz; sha=2eaa5d94f5db7b3a1a092156b9420459e42ab0217d917fe74a876309cef9b5e9 ;;
-        uv/osx-arm64) archive=uv-aarch64-apple-darwin.tar.gz; sha=7e6ddb9316acc00f2296c82ff4d99977870ee34b2f0ddcae9444d714db9364ed ;;
-        ruff/linux-64) archive=ruff-x86_64-unknown-linux-gnu.tar.gz; sha=73894c7b7c9a53fd66ed715eb3a1ec65077f316328e377057a98bdb7fcba0326 ;;
-        ruff/linux-aarch64) archive=ruff-aarch64-unknown-linux-gnu.tar.gz; sha=1e06b11127c28387c8066da4ce6a617a84a359591be09dbf581fbb0c3e006239 ;;
-        ruff/osx-arm64) archive=ruff-aarch64-apple-darwin.tar.gz; sha=80221a5e0b1ae29262a74496f2ad1380c1ab52b3edd8cee13ec76d8acff406ca ;;
+        delta/linux-64) archive=delta-0.19.2-x86_64-unknown-linux-musl.tar.gz; sha=f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b ;;
+        delta/linux-aarch64) archive=delta-0.19.2-aarch64-unknown-linux-gnu.tar.gz; sha=0bfce159a5cddd5feb3d6db4a616d883ff51253ce08ac7ec11cb1d208cfaab9e ;;
+        delta/osx-arm64) archive=delta-0.19.2-aarch64-apple-darwin.tar.gz; sha=9be36612a5a13e9e386dc498fb8e50dc87c72ee42b63db0ea05b32f99a72a69a ;;
+        uv/linux-64) archive=uv-x86_64-unknown-linux-gnu.tar.gz; sha=23f02075b652bb1df64178cfae41b5caf160822e720e2663568f3f5d63bc52c0 ;;
+        uv/linux-aarch64) archive=uv-aarch64-unknown-linux-gnu.tar.gz; sha=030b69227b40af8c1981b7301793dc66e71ed3c796ea8688209dd268bd91ec51 ;;
+        uv/osx-arm64) archive=uv-aarch64-apple-darwin.tar.gz; sha=b88bda573e566ef9bced66b155fe0408626fbbc053aee1c30ba686f0728c9447 ;;
+        ruff/linux-64) archive=ruff-x86_64-unknown-linux-gnu.tar.gz; sha=9567ff1201e2fb3da31ff04c35587d768c66d6cb42dfa84de474e2bfe360b608 ;;
+        ruff/linux-aarch64) archive=ruff-aarch64-unknown-linux-gnu.tar.gz; sha=dc0d74de837ef0a7bcc62ce98c48a622b075d057161f13b958be2934becd55a6 ;;
+        ruff/osx-arm64) archive=ruff-aarch64-apple-darwin.tar.gz; sha=f051cd306de2691262a0574f8857cd1f4d6bfcd448084ea23d61b9c1c37df510 ;;
         zig/linux-64) archive=zig-x86_64-linux-0.16.0.tar.xz; sha=70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00 ;;
         zig/linux-aarch64) archive=zig-aarch64-linux-0.16.0.tar.xz; sha=ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17 ;;
         zig/osx-arm64) archive=zig-aarch64-macos-0.16.0.tar.xz; sha=b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489 ;;
@@ -203,22 +203,22 @@ install_upstream_tool() {
         just/linux-64) archive=just-1.58.0-x86_64-unknown-linux-musl.tar.gz; sha=4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d ;;
         just/linux-aarch64) archive=just-1.58.0-aarch64-unknown-linux-musl.tar.gz; sha=748237128c4c40cbdabc65e841d05ceba13cc23a91eaba395495894c1d9764df ;;
         just/osx-arm64) archive=just-1.58.0-aarch64-apple-darwin.tar.gz; sha=50ae3e996c974a0bf32ea7d10f495070df33f1b43e0616b2769e3d4821ed8f48 ;;
-        bun/linux-64) archive=bun-linux-x64-baseline-1.4.0.tgz; sha=e8d1fcb859272945fdb9ed1de1fb787ab8ff4f85c5ad15a0a7134b76b63ceaa5 ;;
-        bun/linux-aarch64) archive=bun-linux-aarch64-1.4.0.tgz; sha=39ea1a8ee3bf4c96143aa3ffc9a259b3cce5b7d0a4b1fe5ba3f741643d6cafbf ;;
-        bun/osx-arm64) archive=bun-darwin-aarch64-1.4.0.tgz; sha=5aaf52d21001a538a995b01e85847d8d353a048f017d40e87795d50e86911ce4 ;;
+        bun/linux-64) archive=bun-linux-x64-baseline-1.4.2.tgz; sha=129ae8dfaca565e8008735e3d6adae7515421c5b226d6f1f90c4bcb35803a647 ;;
+        bun/linux-aarch64) archive=bun-linux-aarch64-1.4.2.tgz; sha=9ab3970a19660b5cd089f17fb021d900e1ca1b988dafd461d66d0a0ff4d6eac4 ;;
+        bun/osx-arm64) archive=bun-darwin-aarch64-1.4.2.tgz; sha=a9df486eaf7e9db9bdebb1fa425e8c9809abd783b1c518d1dbc5096a53b861ed ;;
         eza/linux-64) archive=eza_x86_64-unknown-linux-musl.tar.gz; sha=e06eebab74b73d6b7d51a796a353824b001bea82df077706382e100815d28904 ;;
         eza/linux-aarch64) archive=eza_aarch64-unknown-linux-gnu.tar.gz; sha=40b87ae8628aa2ff0f0d2dc24ab52f689631366385c3da630bae745671fd71ec ;;
         *) warn "No verified official artifact for $key on $platform"; return 1 ;;
     esac
     case "$key" in
-        bun) version=1.4.0; url="https://registry.npmjs.org/@oven/${archive%-1.4.0.tgz}/-/$archive" ;;
+        bun) version=1.4.2; url="https://registry.npmjs.org/@oven/${archive%-$version.tgz}/-/$archive" ;;
         eza) version=0.23.5; url="https://github.com/eza-community/eza/releases/download/v$version/$archive" ;;
-        node) version=24.18.0; url="https://nodejs.org/dist/v$version/$archive" ;;
-        tree-sitter) version=0.26.7; url="https://github.com/tree-sitter/tree-sitter/releases/download/v$version/$archive" ;;
+        node) version=24.21.0; url="https://nodejs.org/dist/v$version/$archive" ;;
+        tree-sitter) version=0.27.0; url="https://github.com/tree-sitter/tree-sitter/releases/download/v$version/$archive" ;;
         neovim) version=0.12.5; url="https://github.com/neovim/neovim/releases/download/v$version/$archive" ;;
-        delta) version=0.18.2; url="https://github.com/dandavison/delta/releases/download/$version/$archive" ;;
-        uv) version=0.12.13; url="https://github.com/astral-sh/uv/releases/download/$version/$archive" ;;
-        ruff) version=0.16.7; url="https://github.com/astral-sh/ruff/releases/download/$version/$archive" ;;
+        delta) version=0.19.2; url="https://github.com/dandavison/delta/releases/download/$version/$archive" ;;
+        uv) version=0.12.21; url="https://github.com/astral-sh/uv/releases/download/$version/$archive" ;;
+        ruff) version=0.16.10; url="https://github.com/astral-sh/ruff/releases/download/$version/$archive" ;;
         zig) version=0.16.0; url="https://ziglang.org/download/$version/$archive" ;;
         starship) version=1.26.0; url="https://github.com/starship/starship/releases/download/v$version/$archive" ;;
         just) version=1.58.0; url="https://github.com/casey/just/releases/download/$version/$archive" ;;

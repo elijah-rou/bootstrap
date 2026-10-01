@@ -134,10 +134,15 @@ adopt_bootstrap_node_journal() {
 }
 
 ensure_pi_node_version() {
-    local version
-    if ! version="$(node --version 2>/dev/null)" || ! version_at_least "$version" 22.19.0; then install_upstream_tool node || return 1; hash -r; fi
+    [[ $# -le 1 ]] || { warn 'ensure_pi_node_version accepts one minimum version'; return 2; }
+    local version minimum="${1-22.19.0}"
+    case "$minimum" in
+        22.19.0|22.22.2) ;;
+        *) warn "Unsupported Node.js minimum: $minimum"; return 2 ;;
+    esac
+    if ! version="$(node --version 2>/dev/null)" || ! version_at_least "$version" "$minimum"; then install_upstream_tool node || return 1; hash -r; fi
     version="$(node --version 2>/dev/null)" || return 1
-    version_at_least "$version" 22.19.0 || { warn 'Pi requires Node.js >=22.19.0'; return 1; }
+    version_at_least "$version" "$minimum" || { warn "Node.js requires >=$minimum"; return 1; }
 }
 
 ensure_runtime_versions() {
@@ -410,20 +415,21 @@ install_lsp_selection() {
     while IFS= read -r prerequisite; do [[ -z "$prerequisite" ]] || packages+=("$prerequisite"); done < <(catalog_query group lsp "$selection")
     [[ ${#packages[@]} -eq 0 ]] || install_native_keys "${packages[@]}" || return 1
     if [[ "$selection" == typescript-language-server ]]; then
+        ensure_pi_node_version 22.22.2 || return 1
         # Preserve usable owned pairs, including user upgrades. A foreign server
         # still needs the owned implementation; this does not select a dev extra.
         if [[ ! -x "$BUN_INSTALL/bin/typescript-language-server" ]] ||
             ! node -e 'require.resolve(process.argv[1]+"/lib/cli.mjs"); require.resolve("typescript/lib/tsserver.js", {paths:[process.argv[1]]})' "$BUN_INSTALL/install/global/node_modules/typescript-language-server" >/dev/null 2>&1; then
-            bun install --global --exact typescript@6.0.2 typescript-language-server@5.3.0 || return 1
+            bun install --global --exact typescript@6.0.3 typescript-language-server@6.0.1 || return 1
         fi
         node -e 'require.resolve("typescript/lib/tsserver.js", {paths:[process.argv[1]]})' "$BUN_INSTALL/install/global/node_modules/typescript-language-server" || return 1
         link_managed_file "$BUN_INSTALL/bin/typescript-language-server" "$DOTFILES_BARE_ROOT/bin/typescript-language-server" || return 1
     fi
     if ! command -v "$executable" >/dev/null; then
         case "$selection" in
-            basedpyright) bun install --global --exact basedpyright@1.38.3 ;;
+            basedpyright) bun install --global --exact basedpyright@1.40.1 ;;
 
-            bash-language-server) bun install --global --exact bash-language-server@5.6.0 ;;
+            bash-language-server) bun install --global --exact bash-language-server@5.8.1 ;;
             gopls) command -v go >/dev/null || { warn 'gopls blocked by missing Go build prerequisite'; return 1; }; GOBIN="$DOTFILES_BARE_ROOT/bin" go install golang.org/x/tools/gopls@v0.23.0 ;;
             rust-analyzer) warn 'rust-analyzer has no native package candidate on this host'; return 1 ;;
             elixirls) install_bare_elixir_ls ;;
@@ -450,13 +456,13 @@ install_bootstrap_selections() {
                     python)
                         if ! python3 -c 'import sys; assert sys.version_info.major == 3'; then install_upstream_tool python || return 1; hash -r; fi
                         python3 -c 'import sys; assert sys.version_info.major == 3' || return 1 ;;
-                    rust) install_bare_rust || return 1 ;; typescript) bun install --global --exact typescript@6.0.2 || return 1 ;; esac
+                    rust) install_bare_rust || return 1 ;; typescript) bun install --global --exact typescript@6.0.3 || return 1 ;; esac
                 node "$DOTFILES_DIR/scripts/state-helper.mjs" select languages "$selection" || return 1 ;;
             lsp) install_lsp_selection "$selection" || return 1 ;;
             tools)
                 local keys=() key; while IFS= read -r key; do [[ -z "$key" ]] || keys+=("$key"); done < <(catalog_query group tools "$selection")
                 [[ ${#keys[@]} -eq 0 ]] || install_native_keys "${keys[@]}" || return 1
-                case "$selection" in codex) bun install --global --exact @openai/codex@0.153.4; link_bare_codex_config ;; headroom) command -v headroom >/dev/null || { warn 'Headroom external application is not installed'; return 1; } ;; esac
+                case "$selection" in codex) bun install --global --exact @openai/codex@0.159.3; link_bare_codex_config ;; headroom) command -v headroom >/dev/null || { warn 'Headroom external application is not installed'; return 1; } ;; esac
                 node "$DOTFILES_DIR/scripts/state-helper.mjs" select tools "$selection" || return 1
                 case "$selection" in zsh|starship) link_selected_shell_config || return 1 ;; esac ;;
         esac

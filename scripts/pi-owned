@@ -4,7 +4,7 @@ profile="$HOME/.config/dotfiles/bare-env.sh"
 [[ -f "$profile" ]] || { printf 'Owned Pi profile is missing; rerun the Pi installer.\n' >&2; exit 1; }
 # shellcheck source=scripts/bare-env.sh
 source "$profile"
-cli="$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+cli="$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
 [[ -f "$cli" ]] || { printf 'Owned Pi CLI is missing; rerun the Pi installer.\n' >&2; exit 1; }
 # Pi dispatches management commands before parsing session options.
 case "${1:-}" in

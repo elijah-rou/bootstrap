@@ -286,7 +286,7 @@ configure_terminal_overlays() (
 
 link_pi_launchers() {
     link_runtime_environment || return 1
-    if [[ -f "$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" ]]; then
+    if [[ -f "$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js" ]]; then
         link_managed_file "$DOTFILES_DIR/scripts/pi-owned" "$HOME/.local/bin/pi" || return 1
         link_managed_file "$DOTFILES_DIR/scripts/pi-owned" "$DOTFILES_BARE_ROOT/bin/pi" || return 1
     fi

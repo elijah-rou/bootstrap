@@ -9,5 +9,5 @@ bun() { printf '%s\n' "$*" >"$HOME/bun"; }
 link_bare_codex_config() { touch "$HOME/codex-linked"; }
 install_bare_optional tools zsh starship just codex
 for value in zsh starship just codex; do node "$ROOT/scripts/state-helper.mjs" selections | grep -qx $'tools\t'"$value"; done
-grep -q '^zsh$' "$HOME/native"; grep -q '^starship$' "$HOME/native"; grep -q '@openai/codex@0.153.4' "$HOME/bun"; [[ -f "$HOME/codex-linked" ]]
+grep -q '^zsh$' "$HOME/native"; grep -q '^starship$' "$HOME/native"; grep -q '@openai/codex@0.159.3' "$HOME/bun"; [[ -f "$HOME/codex-linked" ]]
 echo 'PASS tools remain explicit independent selections'

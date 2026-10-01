@@ -9,7 +9,7 @@ for(const name of ['clangd','rust-analyzer','gopls','basedpyright','ruff','types
  const v=c.lsp[name]; if(!v||!v.executable||!v.server||!v.command?.length||!v.fixture||!Array.isArray(v.prerequisites)) throw Error(`incomplete LSP ${name}`);
 }
 NODE
-grep -q 'node-v24.18.0-linux-x64.tar.xz' "$ROOT/scripts/lib/install/native.sh"
+grep -q 'node-v24.21.0-linux-x64.tar.xz' "$ROOT/scripts/lib/install/native.sh"
 grep -q 'tree-sitter-linux-x64.gz' "$ROOT/scripts/lib/install/native.sh"
 grep -q 'nvim-linux-x86_64.tar.gz' "$ROOT/scripts/lib/install/native.sh"
 ! grep -Rqi 'micromamba\|conda-forge' "$ROOT/install.sh" "$ROOT/scripts" "$ROOT/packages"

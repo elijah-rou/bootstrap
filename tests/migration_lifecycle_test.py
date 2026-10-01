@@ -408,7 +408,7 @@ class MigrationLifecycleTest(unittest.TestCase):
         self.assertEqual((self.home / '.config/dotfiles/bare-env.sh').readlink(), ROOT / 'scripts/bare-env.sh')
         launched = subprocess.run([self.home / '.local/bin/pi', '--version'], env=self.env,
                                   capture_output=True, text=True, check=True).stdout.splitlines()
-        self.assertEqual(launched, ['0.99.1'])
+        self.assertEqual(launched, ['1.0.0'])
         self.assertTrue(session.is_file())
         self.run_migration('verify')
 
@@ -673,7 +673,7 @@ class MigrationLifecycleTest(unittest.TestCase):
         self.seed_legacy()
         self.run_migration('prepare')
         self.run_migration('transfer', True)
-        cli = self.home / 'tools/bun/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js'
+        cli = self.home / 'tools/bun/install/global/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js'
         saved = cli.with_suffix('.saved')
         cli.rename(saved)
         blocked = self.run_migration('activate', True, status=1)

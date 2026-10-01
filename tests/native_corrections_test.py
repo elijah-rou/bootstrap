@@ -228,13 +228,43 @@ uninstall_bare
 [[ ! -e "$BOOTSTRAP_PRIVATE_ROOT" && ! -e "$DOTFILES_BARE_ROOT" && "$(cat "$HOME/.npm/sentinel")" == foreign ]]
 ''')
 
+    def test_node_floor_for_updated_typescript_server(self):
+        self.shell('''
+current=22.19.0
+installed=0
+node() { if [[ "$*" == --version ]]; then printf 'v%s\\n' "$current"; else command node "$@"; fi; }
+install_upstream_tool() { [[ "$1" == node ]]; installed=1; current=22.22.2; }
+ensure_pi_node_version
+[[ "$installed" == 0 && "$current" == 22.19.0 ]]
+for current in 22.19.0 22.22.1; do
+  installed=0
+  ensure_pi_node_version 22.22.2
+  [[ "$installed" == 1 && "$current" == 22.22.2 ]]
+done
+installed=0
+ensure_pi_node_version 22.22.2
+[[ "$installed" == 0 ]]
+current=22.19.0
+install_upstream_tool() { current=22.22.1; }
+if ensure_pi_node_version 22.22.2; then exit 1; fi
+for minimum in '' nonsense 22.22.1; do
+  status=0
+  ensure_pi_node_version "$minimum" || status=$?
+  [[ "$status" == 2 ]]
+done
+status=0
+ensure_pi_node_version 22.22.2 extra || status=$?
+[[ "$status" == 2 ]]
+''')
+        return None
+
     def test_existing_typescript_server_repairs_implementation_only(self):
         self.shell('''
 node "$DOTFILES_DIR/scripts/state-helper.mjs" init
 mkdir -p "$DOTFILES_BARE_ROOT/bin"
 typescript-language-server() { return 0; }
 bun() {
-  [[ "$*" == 'install --global --exact typescript@6.0.2 typescript-language-server@5.3.0' ]] || return 99
+  [[ "$*" == 'install --global --exact typescript@6.0.3 typescript-language-server@6.0.1' ]] || return 99
   mkdir -p "$BUN_INSTALL/bin" "$BUN_INSTALL/install/global/node_modules/typescript/lib" "$BUN_INSTALL/install/global/node_modules/typescript-language-server"
   printf 'module.exports={};\\n' >"$BUN_INSTALL/install/global/node_modules/typescript/lib/tsserver.js"
   printf '#!/bin/sh\\nexit 0\\n' >"$BUN_INSTALL/bin/typescript-language-server"; chmod +x "$BUN_INSTALL/bin/typescript-language-server"
@@ -269,7 +299,7 @@ mkdir -p "$BUN_INSTALL/bin" "$server/lib"
 printf '#!/bin/sh\\nexit 0\\n' >"$server/lib/cli.mjs"; chmod +x "$server/lib/cli.mjs"
 ln -s "$server/lib/cli.mjs" "$BUN_INSTALL/bin/typescript-language-server"
 bun() {
-  [[ "$*" == 'install --global --exact typescript@6.0.2 typescript-language-server@5.3.0' ]] || return 99
+  [[ "$*" == 'install --global --exact typescript@6.0.3 typescript-language-server@6.0.1' ]] || return 99
   mkdir -p "$BUN_INSTALL/install/global/node_modules/typescript/lib"
   printf 'module.exports={};\\n' >"$BUN_INSTALL/install/global/node_modules/typescript/lib/tsserver.js"
   printf repaired >"$HOME/repaired"
@@ -293,7 +323,7 @@ command() {
   if [[ "$*" == '-v basedpyright-langserver' ]]; then [[ -x "$DOTFILES_BARE_ROOT/bin/basedpyright-langserver" ]]; else builtin command "$@"; fi
 }
 bun() {
-  [[ "$*" == 'install --global --exact basedpyright@1.38.3' ]] || return 99
+  [[ "$*" == 'install --global --exact basedpyright@1.40.1' ]] || return 99
   mkdir -p "$DOTFILES_BARE_ROOT/bin"
   printf '#!/bin/sh\\nexit 0\\n' >"$DOTFILES_BARE_ROOT/bin/basedpyright-langserver"
   chmod +x "$DOTFILES_BARE_ROOT/bin/basedpyright-langserver"

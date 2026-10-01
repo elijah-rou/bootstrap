@@ -17,25 +17,25 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.13'
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: "24.18.0"
+          node-version: "24.21.0"
       - uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7
         with:
           version: v0.12.5
           neovim: true
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: '1.4.0'
+          bun-version: '1.4.2'
       - name: Install test tools on Linux
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes build-essential fd-find ripgrep shellcheck zsh && bun install --global --exact basedpyright@1.38.3
+        run: sudo apt-get update && sudo apt-get install --yes build-essential fd-find ripgrep shellcheck zsh && bun install --global --exact basedpyright@1.40.1
       - name: Install test tools on macOS
         if: runner.os == 'macOS'
         run: |
@@ -43,7 +43,7 @@ jobs:
           brew list ripgrep || brew install ripgrep
           brew list shellcheck || brew install shellcheck
           brew list coreutils || brew install coreutils
-          bun install --global --exact basedpyright@1.38.3
+          bun install --global --exact basedpyright@1.40.1
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
       - name: Prepare cold locked Neovim and standalone LSP fixtures
         run: |
@@ -92,7 +92,7 @@ jobs:
           if command -v apt-get; then apt-get update && apt-get install -y --no-install-recommends ca-certificates git curl tar xz-utils procps bash; fi
           if command -v dnf; then dnf install -y --setopt=install_weak_deps=False ca-certificates git curl tar xz procps-ng bash; fi
           if command -v pacman; then pacman -Syu --noconfirm ca-certificates git curl tar xz procps-ng bash; fi
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Clean native runtime and cleanup journey
@@ -108,18 +108,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.13'
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: "24.18.0"
+          node-version: "24.21.0"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
-          bun-version: "1.4.0"
+          bun-version: "1.4.2"
       - name: Install test tools
         run: sudo apt-get update && sudo apt-get install --yes fd-find ripgrep shellcheck zsh
       - name: Install isolated pinned runtime dependencies
@@ -127,7 +127,7 @@ jobs:
           source ./install.sh
           export BUN_INSTALL="$RUNNER_TEMP/bootstrap-test-bun"
           bun install --global --ignore-scripts \
-            "$PI_CLI_PACKAGE@$PI_CLI_VERSION" pi-web-access@0.34.0 @openai/codex@0.153.4
+            "$PI_CLI_PACKAGE@$PI_CLI_VERSION" pi-web-access@0.35.0 @openai/codex@0.159.3
           runtime="$BUN_INSTALL/install/global/node_modules"
           subagents="$RUNNER_TEMP/bootstrap-test-subagents"
           read -r _ repository revision <<< "$(read_pi_subagents_package pi/settings.json)"

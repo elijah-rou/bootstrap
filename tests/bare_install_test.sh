@@ -17,8 +17,8 @@ bun() {
     if [[ "$*" == --version ]]; then printf '1.4.0\n'; return; fi
     [[ "$*" == "install --global --exact $PI_CLI_PACKAGE@$PI_CLI_VERSION" ]]
 
-    mkdir -p "$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist"
-    printf 'console.log("%s");\n' "$PI_CLI_VERSION" >"$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+    mkdir -p "$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/bundle"
+    printf 'console.log("%s");\n' "$PI_CLI_VERSION" >"$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
 }
 
 pi() { [[ "${1:-}" == --version ]] && printf '%s\n' "$PI_CLI_VERSION" || :; }

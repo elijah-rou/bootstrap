@@ -20,11 +20,11 @@ bare_stage="$(mktemp -d "$BOOTSTRAP_STATE_ROOT/fixture.XXXXXX")"
 trap 'rm -rf "$bare_stage"' EXIT
 install_upstream_tool tree-sitter
 case "$(bare_platform)" in
-    linux-64) artifact=rust-analyzer-x86_64-unknown-linux-gnu.gz; checksum=a3500183aa08bf740c0da6e030ad262d4cfa1c19e7ce195ab5f772bdf9ddfb12 ;;
-    osx-arm64) artifact=rust-analyzer-aarch64-apple-darwin.gz; checksum=16e9b2af9db7c0ce015ffe88f85db27669b05c84887a59c737d697d2c5f8d349 ;;
+    linux-64) artifact=rust-analyzer-x86_64-unknown-linux-gnu.gz; checksum=23f711d86b5f826e22886f01d7355dc01e0f4c1357dafa29710a95b903b48c85 ;;
+    osx-arm64) artifact=rust-analyzer-aarch64-apple-darwin.gz; checksum=54ec873d8996e2c127d758bf45d4eacb6d3371dae4f6f6d5d3f05cedbae5fd59 ;;
     *) printf 'No pinned standalone Rust fixture for this CI platform\n' >&2; exit 1 ;;
 esac
-download_verified "https://github.com/rust-lang/rust-analyzer/releases/download/2026-09-07/$artifact" "$checksum" "$bare_stage/rust-analyzer.gz"
+download_verified "https://github.com/rust-lang/rust-analyzer/releases/download/2026-09-28/$artifact" "$checksum" "$bare_stage/rust-analyzer.gz"
 mkdir "$cache_root/bin"
 gzip -dc "$bare_stage/rust-analyzer.gz" > "$cache_root/bin/rust-analyzer"
 chmod 0755 "$cache_root/bin/rust-analyzer"

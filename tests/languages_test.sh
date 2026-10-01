@@ -11,7 +11,7 @@ install_bare_optional languages c rust typescript
 node "$ROOT/scripts/state-helper.mjs" selections | grep -qx $'languages\tc'
 node "$ROOT/scripts/state-helper.mjs" selections | grep -qx $'languages\trust'
 node "$ROOT/scripts/state-helper.mjs" selections | grep -qx $'languages\ttypescript'
-[[ -f "$HOME/rust" ]] && grep -q 'compiler make pkg-config' "$HOME/native" && grep -q 'typescript@6.0.2' "$HOME/bun"
+[[ -f "$HOME/rust" ]] && grep -q 'compiler make pkg-config' "$HOME/native" && grep -q 'typescript@6.0.3' "$HOME/bun"
 if node "$ROOT/scripts/state-helper.mjs" selections | grep -q '^lsp'; then exit 1; fi
 install_bare_optional languages python
 if node "$ROOT/scripts/state-helper.mjs" selections | grep -q basedpyright; then exit 1; fi

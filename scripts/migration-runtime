@@ -27,7 +27,7 @@ verify_migration_runtime() (
     version="$(node --version)"; version_at_least "$version" 22.19.0 || return 1
     output="$(nvim --version)"; read -r _ version _ <<<"$output"; version_at_least "$version" 0.12.0 || return 1
     output="$(tree-sitter --version)"; read -r _ version _ <<<"$output"; version_at_least "$version" 0.26.1 || return 1
-    local cli="$BUN_INSTALL/install/global/node_modules/$PI_CLI_PACKAGE/dist/cli.js"
+    local cli="$BUN_INSTALL/install/global/node_modules/$PI_CLI_PACKAGE/dist/bundle/cli.js"
     [[ -f "$cli" ]] || { warn 'Migration runtime owned Pi CLI is missing'; return 1; }
     [[ "$(node "$cli" --version)" == "$PI_CLI_VERSION" ]] || { warn "Migration runtime requires Pi $PI_CLI_VERSION"; return 1; }
     command -v herdr >/dev/null || { warn 'Migration runtime missing Herdr'; return 1; }
