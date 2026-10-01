@@ -85,7 +85,7 @@ test("researcher override uses the SearXNG-backed web tools and bounded duration
 	const webSearch = JSON.parse(readFileSync(new URL("../web-search.json", import.meta.url), "utf8"));
 	assert.equal(webSearch.provider, "searxng");
 	assert.equal(webSearch.toolActivation, "eager");
-	assert.equal(webSearch.workflow, "summary-review");
+	assert.equal(webSearch.workflow, "none");
 	assert.deepEqual(webSearch.searchRouting.providers, ["searxng"]);
 	assert.equal(webSearch.fetchRouting.allowRemoteHostedProviders, false);
 
