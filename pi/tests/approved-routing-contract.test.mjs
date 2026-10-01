@@ -18,10 +18,10 @@ function parseFrontmatter(source) {
 test("explicit roles preserve parent and approved compute choices", () => {
  const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
  assert.equal(settings.defaultModel, "gpt-6.1-sol");
- assert.equal(settings.defaultThinkingLevel, "low");
+ assert.equal(settings.defaultThinkingLevel, "high");
  assert.equal(settings.subagents.childRouting, undefined, "no classifier is configured");
  for (const [name, model, thinking, fallback] of [
-  ["deep", "openai-codex/gpt-6.1-sol", "xhigh", "opencode/claude-opus-4-8:xhigh"],
+  ["deep", "openai-codex/gpt-6.1-sol", "max", "opencode/claude-opus-4-8:xhigh"],
   ["second-opinion", "opencode/grok-4.6", "high", "opencode/claude-opus-4-8:high"],
  ]) {
   const agent = parseFrontmatter(readFileSync(new URL(`../agents/${name}.md`, import.meta.url), "utf8"));
@@ -68,7 +68,7 @@ test("subagents are active with static fail-open role defaults", () => {
 	assert.deepEqual(settings.subagents.agentOverrides.reviewer, {
 		model: "openai-codex/gpt-6.1-sol",
 		fallbackModels: ["opencode/grok-4.6:high"],
-		thinking: "high",
+		thinking: "xhigh",
 	});
 	assert.equal(settings.subagents.agentOverrides.oracle.disabled, true);
 	assert.equal(settings.subagents.agentOverrides["oracle-eval"].disabled, true);
@@ -169,8 +169,8 @@ async function assertRuntimeContract(runtimeRoot) {
   const roles = new Map(discovered.agents.map(agent => [agent.name, agent]));
   for (const [name, model, thinking] of [
    ["worker", "openai-codex/gpt-6.1-sol", "medium"],
-   ["reviewer", "openai-codex/gpt-6.1-sol", "high"],
-   ["deep", "openai-codex/gpt-6.1-sol", "xhigh"],
+   ["reviewer", "openai-codex/gpt-6.1-sol", "xhigh"],
+   ["deep", "openai-codex/gpt-6.1-sol", "max"],
    ["second-opinion", "opencode/grok-4.6", "high"],
   ]) {
    assert.equal(roles.get(name)?.model, model, name);
