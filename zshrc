@@ -136,9 +136,6 @@ command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 # thefuck (type 'fuck' to correct previous command)
 command -v thefuck &>/dev/null && eval "$(thefuck --alias)"
 
-# OrbStack integration
-[[ -f ~/.orbstack/shell/init.zsh ]] && source ~/.orbstack/shell/init.zsh
-
 # opam initialized in zshenv
 
 # Fig post block. Keep at the bottom of this file.
