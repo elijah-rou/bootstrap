@@ -7,6 +7,7 @@ thinking: medium
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+skills: source-grounded-research
 defaultContext: fork
 checkpointAfterMs: 480000
 timeoutMs: 900000

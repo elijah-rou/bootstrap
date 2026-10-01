@@ -83,10 +83,12 @@ test("researcher override uses the SearXNG-backed web tools and bounded duration
 	const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
 	assert.ok(settings.packages.includes("npm:pi-web-access@0.35.0"), "the immutable pi-web-access package must provide the researcher web tools");
 	const webSearch = JSON.parse(readFileSync(new URL("../web-search.json", import.meta.url), "utf8"));
-	assert.equal(webSearch.provider, "searxng");
+	assert.equal(webSearch.provider, undefined);
+	assert.equal(webSearch.searchProvider, undefined);
 	assert.equal(webSearch.toolActivation, "eager");
 	assert.equal(webSearch.workflow, "none");
-	assert.deepEqual(webSearch.searchRouting.providers, ["searxng"]);
+	assert.deepEqual(webSearch.searchRouting.providers, ["searxng", "openai"]);
+	assert.deepEqual(webSearch.searchRouting.fallbackOn, ["transient", "quota", "network", "invalid-response"]);
 	assert.equal(webSearch.fetchRouting.allowRemoteHostedProviders, false);
 
 	const researcher = parseFrontmatter(readFileSync(new URL("../agents/researcher.md", import.meta.url), "utf8"));
@@ -95,6 +97,7 @@ test("researcher override uses the SearXNG-backed web tools and bounded duration
 	assert.equal(researcher.timeoutMs, "900000");
 	assert.equal(researcher.maxTimeoutMs, "900000");
 	assert.equal(researcher.defaultContext, "fork");
+	assert.equal(researcher.skills, "source-grounded-research");
 	assert.equal(researcher.fallbackModels, "opencode/deepseek-v4-flash:high");
 	assert.equal(researcher.thinking, "medium");
 
@@ -176,6 +179,7 @@ async function assertRuntimeContract(runtimeRoot) {
    assert.equal(roles.get(name)?.model, model, name);
    assert.equal(roles.get(name)?.thinking, thinking, name);
   }
+  assert.deepEqual(roles.get("researcher")?.skills, ["source-grounded-research"]);
   assert.equal(roles.get("scout")?.fast, false);
   assert.deepEqual(roles.get("deep")?.fallbackModels, ["opencode/claude-opus-4-8:xhigh"]);
   assert.deepEqual(roles.get("second-opinion")?.fallbackModels, ["opencode/claude-opus-4-8:high"]);

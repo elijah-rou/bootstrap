@@ -1,11 +1,11 @@
 {
   "toolActivation": "eager",
   "workflow": "none",
-  "provider": "searxng",
   "searxngBaseUrl": "http://127.0.0.1:8888",
   "searchRouting": {
     "providers": [
-      "searxng"
+      "searxng",
+      "openai"
     ],
     "fallbackOn": [
       "transient",
