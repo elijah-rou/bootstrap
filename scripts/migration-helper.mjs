@@ -22,6 +22,9 @@ const checkoutRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const maxEntries = 200000;
 // Full receipts combine the independently bounded agent/session trees and their roots.
 const maxFullEntries = 2 * maxEntries + 2;
+const migrationProgressFields = ['transferStarted', 'transferredInventory', 'transferredFullInventory', 'transferredAt',
+  'activation', 'verifiedInventory', 'verifiedFullInventory', 'verifiedAt', 'rollbackState', 'rolledBackAt', 'retiredAt',
+  'ghTransferred', 'ghVerified'];
 const configHome = resolve(process.env.XDG_CONFIG_HOME || join(home, '.config'));
 function recordedGhSource() {
   if (!existsSync(journalPath)) return undefined;
@@ -250,7 +253,7 @@ function inspect() {
   if (herdr) conflicts.push(herdr);
   return {
     schemaVersion: 1,
-    phase: existsSync(journalPath) ? loadJournal().phase : 'unprepared',
+    phase: existsSync(journalPath) ? loadJournal(true).phase : 'unprepared',
     sourceRoot,
     agentRoot,
     sessionRoot,
@@ -314,8 +317,9 @@ function expectedTransferredEntry(source) {
   return { path: source.path, type: source.type, ...(source.mode === undefined ? {} : { mode: source.mode }), ...(source.size === undefined ? {} : { size: source.size }), ...(source.sha256 === undefined ? {} : { sha256: source.sha256 }), ...(source.type === 'symlink' ? { target: source.target } : {}) };
 }
 function fullPathForSource(path) { return path === 'sessions' || path.startsWith(`sessions${sep}`) ? path : `agent${sep}${path}`; }
-function validateJournal(value) {
-  const allowedKeys = ['schemaVersion','phase','sourceRoot','agentRoot','sessionRoot','sourceInventory','destinationBefore','rootIdentities','preparedAt','transferredInventory','transferredFullInventory','transferredAt','activation','verifiedInventory','verifiedFullInventory','verifiedAt','rollbackState','rolledBackAt','retiredAt','ghSource','ghInventory','ghBefore','ghTransferred','ghVerified','enrollmentOnTransfer','neovimSeed','transferStarted'];
+function validateJournal(value, allowPreparedSnapshotRefresh = false) {
+  const allowedKeys = ['schemaVersion','phase','sourceRoot','agentRoot','sessionRoot','sourceInventory','destinationBefore',
+    'rootIdentities','preparedAt','ghSource','ghInventory','ghBefore','enrollmentOnTransfer','neovimSeed', ...migrationProgressFields];
   if (!plainObject(value) || Object.keys(value).some(key => !allowedKeys.includes(key)) || value.schemaVersion !== 1 || !['prepared', 'transferred', 'activated', 'verified', 'retiring', 'rolling-back', 'rolled-back', 'retired'].includes(value.phase)) fail('Malformed migration journal');
   if (value.sourceRoot !== sourceRoot || value.agentRoot !== agentRoot || value.sessionRoot !== sessionRoot) fail('Migration roots differ from the recorded operation');
   validateRootIdentities(value.rootIdentities);
@@ -333,6 +337,8 @@ function validateJournal(value) {
   validateUniqueInventory(value.sourceInventory, 'source migration inventory', true);
   validateUniqueInventory(value.destinationBefore, 'destination migration inventory');
   if (value.destinationBefore.length !== value.sourceInventory.length) fail('Migration inventories do not correspond');
+  const canRefreshSnapshot = allowPreparedSnapshotRefresh && value.phase === 'prepared' &&
+    !migrationProgressFields.some(key => Object.hasOwn(value, key));
   value.sourceInventory.forEach((item, index) => {
     if (value.destinationBefore[index].path !== item.path) fail('Migration inventories do not correspond');
     const destination = destinationFor(item.path);
@@ -340,7 +346,13 @@ function validateJournal(value) {
     if (item.type === 'symlink') {
       const resolvedTarget = resolve(dirname(destination), item.target);
       if (item.classification === 'internal' && !within(agentRoot, resolvedTarget, true) && !within(sessionRoot, resolvedTarget, true)) fail('Internal migration link escaped destination roots');
-      if (item.classification === 'managed' && !within(checkoutRoot, resolvedTarget, true)) fail('Managed migration link escaped the selected source');
+      if (item.classification === 'managed' && !within(checkoutRoot, resolvedTarget, true)) {
+        // Reading an untransferred preparation may recognize its previous completed snapshot.
+        // Transfer still requires an explicit preparation against the selected source.
+        if (!canRefreshSnapshot || !isAbsolute(item.target) || !snapshotLinkTarget(resolvedTarget)) {
+          fail('Managed migration link escaped the selected source');
+        }
+      }
     }
   });
   if (value.transferredInventory !== undefined) {
@@ -373,10 +385,10 @@ function validateJournal(value) {
   }
   return value;
 }
-function loadJournal() {
+function loadJournal(allowPreparedSnapshotRefresh = false) {
   let value;
   try { value = JSON.parse(readFileSync(journalPath, 'utf8')); } catch { fail(`Migration is not prepared: ${journalPath}`); }
-  return validateJournal(value);
+  return validateJournal(value, allowPreparedSnapshotRefresh);
 }
 function inventoriesEqual(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
 function ghEntries(items) { return items.map(item => ({ ...item, destination: join(ghDestination, item.path) })); }
@@ -540,11 +552,14 @@ switch (command) {
   case 'prepare': {
     if (args.length) fail('migration prepare accepts no arguments', 2);
     if (existsSync(journalPath)) {
-      const existing = loadJournal();
+      const existing = loadJournal(true);
       if (existing.phase !== 'prepared') fail(`Preparation cannot replace migration state in phase ${existing.phase}`);
       if (existing.transferStarted) {
         requireSourceIdentity(existing);
         fail('Transfer has already started; retry transfer rather than replacing its recovery inventory');
+      }
+      if (migrationProgressFields.some(key => Object.hasOwn(existing, key))) {
+        fail('Migration progress is recorded; preserve its recovery inventory instead of preparing again');
       }
     }
     const report = inspect();

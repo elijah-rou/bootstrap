@@ -229,6 +229,144 @@ class MigrationLifecycleTest(unittest.TestCase):
         (old / 'pi/AGENTS.md').write_text('old managed source\n')
         (self.legacy / 'AGENTS.md').symlink_to(old / 'pi/AGENTS.md')
 
+    def stage_migration_snapshots(self):
+        self.seed_legacy()
+        snapshots = [self.home / ('cache/snapshots/' + character * 40) for character in ('a', 'b')]
+        for snapshot in snapshots:
+            shutil.copytree(ROOT, snapshot, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns('.git', '__pycache__', 'node_modules'))
+            (snapshot / '.bootstrap-archive-sha256').write_text('c' * 64 + '\n')
+        return snapshots
+
+    def run_snapshot_helper(self, snapshot, phase, status=0):
+        result = subprocess.run(['node', str(snapshot / 'scripts/migration-helper.mjs'), phase],
+                                env=self.env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+        return result
+
+    def test_untransferred_preparation_refreshes_after_snapshot_upgrade(self):
+        old, new = self.stage_migration_snapshots()
+        self.run_snapshot_helper(old, 'prepare')
+        journal_path = self.state / 'migration.json'
+        before = journal_path.read_bytes()
+        source_auth = (self.legacy / 'auth.json').read_bytes()
+        report = json.loads(self.run_snapshot_helper(new, 'inspect').stdout)
+        self.assertEqual(report['phase'], 'prepared')
+        self.assertTrue(report['ready'])
+        self.assertEqual(journal_path.read_bytes(), before, 'inspection must not rewrite preparation')
+        blocked = self.run_snapshot_helper(new, 'transfer', status=1)
+        self.assertIn('Managed migration link escaped the selected source', blocked.stderr)
+        self.assertEqual(journal_path.read_bytes(), before)
+        self.assertFalse(self.agent.exists(), 'stale transfer must not create destinations')
+
+        self.run_snapshot_helper(new, 'prepare')
+        refreshed = json.loads(journal_path.read_text())
+        managed = [item for item in refreshed['sourceInventory'] if item.get('classification') == 'managed']
+        self.assertEqual(managed[0]['target'], str(new / 'pi/AGENTS.md'))
+        self.assertNotIn('transferStarted', refreshed)
+        self.assertEqual((self.legacy / 'AGENTS.md').readlink(), old / 'pi/AGENTS.md')
+        self.assertEqual((self.legacy / 'auth.json').read_bytes(), source_auth)
+        self.assertFalse(self.agent.exists())
+        self.assertFalse((self.home / '.config/dotfiles/bare-env.sh').exists())
+        self.run_snapshot_helper(new, 'prepare')
+        repeated = json.loads(journal_path.read_text())
+        self.assertEqual(repeated['sourceInventory'], refreshed['sourceInventory'])
+        self.assertEqual(repeated['destinationBefore'], refreshed['destinationBefore'])
+        subprocess.run(['node', str(new / 'scripts/state-helper.mjs'), 'init'], env=self.env, check=True)
+        self.run_snapshot_helper(new, 'transfer')
+        self.assertEqual((self.agent / 'auth.json').read_bytes(), source_auth)
+        self.assertEqual((self.agent / 'AGENTS.md').readlink(), new / 'pi/AGENTS.md')
+
+    def test_snapshot_refresh_preserves_partial_transfer_recovery(self):
+        old, new = self.stage_migration_snapshots()
+        self.run_snapshot_helper(old, 'prepare')
+        journal_path = self.state / 'migration.json'
+        record = json.loads(journal_path.read_text())
+        record['transferStarted'] = True
+        journal_path.write_text(json.dumps(record))
+        self.agent.mkdir(parents=True)
+        shutil.copy2(self.legacy / 'auth.json', self.agent / 'auth.json')
+        before = journal_path.read_bytes()
+        destination_auth = (self.agent / 'auth.json').read_bytes()
+        self.run_snapshot_helper(new, 'inspect', status=1)
+        self.run_snapshot_helper(new, 'prepare', status=1)
+        self.assertEqual(journal_path.read_bytes(), before)
+        self.assertEqual((self.agent / 'auth.json').read_bytes(), destination_auth)
+        blocked = self.run_snapshot_helper(old, 'prepare', status=1)
+        self.assertIn('Transfer has already started', blocked.stderr)
+        subprocess.run(['node', str(old / 'scripts/state-helper.mjs'), 'init'], env=self.env, check=True)
+        self.run_snapshot_helper(old, 'transfer')
+        self.assertEqual((self.agent / 'auth.json').read_bytes(), destination_auth)
+
+    def test_snapshot_refresh_cannot_replace_transferred_preparation(self):
+        old, new = self.stage_migration_snapshots()
+        self.run_snapshot_helper(old, 'prepare')
+        subprocess.run(['node', str(old / 'scripts/state-helper.mjs'), 'init'], env=self.env, check=True)
+        self.run_snapshot_helper(old, 'transfer')
+        journal_path = self.state / 'migration.json'
+        before = journal_path.read_bytes()
+        self.run_snapshot_helper(new, 'prepare', status=1)
+        self.run_snapshot_helper(new, 'transfer', status=1)
+        self.assertEqual(journal_path.read_bytes(), before)
+        self.assertEqual((self.agent / 'AGENTS.md').readlink(), old / 'pi/AGENTS.md')
+        self.run_snapshot_helper(old, 'transfer')
+
+    def test_snapshot_refresh_preserves_receipt_only_recovery_evidence(self):
+        old, new = self.stage_migration_snapshots()
+        self.run_snapshot_helper(old, 'prepare')
+        journal_path = self.state / 'migration.json'
+        baseline = journal_path.read_bytes()
+        for key, value in [('transferStarted', True), ('transferredInventory', []),
+                           ('transferredFullInventory', []), ('transferredAt', '2026-01-01T00:00:00Z'),
+                           ('activation', []), ('verifiedInventory', []), ('verifiedFullInventory', []),
+                           ('verifiedAt', '2026-01-01T00:00:00Z'), ('rollbackState', {'destinationsRemoved': []}),
+                           ('rolledBackAt', '2026-01-01T00:00:00Z'), ('retiredAt', '2026-01-01T00:00:00Z'),
+                           ('ghTransferred', []), ('ghVerified', []),
+                           ('verifiedAt', None), ('verifiedAt', False), ('verifiedAt', 0),
+                           ('verifiedAt', ''), ('verifiedAt', {})]:
+            for snapshot in (old, new):
+                with self.subTest(field=key, snapshot=snapshot.name):
+                    record = json.loads(baseline)
+                    record[key] = value
+                    journal_path.write_text(json.dumps(record))
+                    before = journal_path.read_bytes()
+                    self.run_snapshot_helper(snapshot, 'prepare', status=1)
+                    self.assertEqual(journal_path.read_bytes(), before)
+                    self.assertFalse(self.agent.exists())
+
+    def test_snapshot_refresh_rejects_unproven_managed_targets(self):
+        old, new = self.stage_migration_snapshots()
+        self.run_snapshot_helper(old, 'prepare')
+        journal_path = self.state / 'migration.json'
+        before = journal_path.read_bytes()
+        marker = old / '.bootstrap-archive-sha256'
+        valid_marker = marker.read_text()
+        for contents in ('', 'not-a-digest\n', 'c' * 63, 'c' * 65):
+            with self.subTest(marker=contents):
+                marker.write_text(contents)
+                self.run_snapshot_helper(new, 'prepare', status=1)
+                self.assertEqual(journal_path.read_bytes(), before)
+        marker.unlink()
+        self.run_snapshot_helper(new, 'prepare', status=1)
+        marker.symlink_to(new / '.bootstrap-archive-sha256')
+        self.run_snapshot_helper(new, 'prepare', status=1)
+        marker.unlink()
+        marker.write_text(valid_marker)
+        managed = next(item for item in json.loads(before)['sourceInventory'] if item.get('classification') == 'managed')
+        for target in (str(self.home / 'foreign/pi/AGENTS.md'), os.path.relpath(old / 'pi/AGENTS.md', self.agent)):
+            with self.subTest(target=target):
+                record = json.loads(before)
+                next(item for item in record['sourceInventory'] if item['path'] == managed['path'])['target'] = target
+                journal_path.write_text(json.dumps(record))
+                tampered = journal_path.read_bytes()
+                self.run_snapshot_helper(new, 'prepare', status=1)
+                self.assertEqual(journal_path.read_bytes(), tampered)
+        journal_path.write_bytes(before)
+        (new / 'pi/AGENTS.md').unlink()
+        self.run_snapshot_helper(new, 'prepare', status=1)
+        self.assertEqual(journal_path.read_bytes(), before)
+        self.assertFalse(self.agent.exists())
+
     @unittest.skipUnless(RUNTIME_FIXTURE, 'requires cold real BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE')
     def test_full_transfer_activation_and_retirement_preserve_personal_state(self):
         self.seed_legacy()
