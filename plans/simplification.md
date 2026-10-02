@@ -90,7 +90,7 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
    `modelusage` moved there; `bootstrap.lock` is a commit checked out by `scripts/bootstrap`;
    workstation and local overlays render into `~/.config/bootstrap/`; offline relink uses
    bootstrap's `install.sh link`; workstation keeps `CODEX_HOME=~/.codex`.
-6. [ ] Workstation cutover with the owner present. Publishing the bootstrap branch comes first,
+6. [x] Workstation cutover (done 2026-10-02; see Evidence). Original steps, kept for reference: Publishing the bootstrap branch comes first,
    because `bootstrap.lock` must name a commit GitHub serves.
    1. Before changing anything: run dotfiles `scripts/bootstrap fetch`; keep `snapshots/` until
       step 7 passes (it is the rollback path). The Firecrawl key was purged on 2026-10-02.
@@ -119,13 +119,13 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
       `tools/bin`, `~/.local/state/bootstrap/`, and the moved-aside files from step 4.
    Known gap: the Meridian LaunchAgent PATH has no `tools/bin`; check whether it starts `pi`.
 
-7. [ ] agent-kit split (2026-10-02): instructions, skills, Pi extensions, and Claude mods moved to
-   the public `elijah-rou/agent-kit` (Claude mods ported to Bun TypeScript). Pi, Claude, Codex, and
-   Herdr became opt-in tools. Remaining: promote branch `agent-kit-split`; dotfiles selects
-   `pi claude herdr`, sets `CLAUDE_CONFIG_DIR=~/.claude`, adds a `claude-settings.json` overlay, and
-   points its checks at `tools/agent-kit`; the cutover also removes old links in
-   `private/pi/agent/{extensions,skills,prompts,themes}`, `~/.claude`, and `~/.agents/skills` that
-   point into the `claude-port` worktree or old snapshots, then retires that worktree.
+7. [x] agent-kit split (2026-10-02): instructions, skills, Pi extensions, and Claude mods live in the public
+   `elijah-rou/agent-kit` (Claude mods in Bun TypeScript); Pi, Claude, Codex, and Herdr are opt-in tools;
+   dotfiles selects them and keeps `~/.codex` and an implicit `~/.claude`.
+8. [ ] Cleanup once the owner confirms the new setup: delete `~/.local/state/bootstrap-cutover-20261002T224829`
+   (the moved-aside old links), `~/.local/share/bootstrap/{snapshots,neovim,tools/tools}`, the old Neovim data
+   (`~/.config/bootstrap-nvim` already moved, `~/.local/share/bootstrap-nvim`, `private/neovim`), dangling links in
+   `tools/bin`, `~/.local/state/bootstrap/`, the legacy `~/.pi/agent`, and the `claude-port` worktree and branch.
 
 ## Evidence (2026-10-02, branch `simplify`)
 
@@ -147,6 +147,11 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
 - Review: two independent reviews (install/purge safety; dotfiles contract and cutover). Their P0/P1
   findings were fixed in `36361bf` and dotfiles; `tests/uninstall_edges.sh` fails on the pre-fix
   commit and passes after. Round-trips reran green on Ubuntu (root and user), Fedora, and macOS.
+
+- Cutover (2026-10-02): 115 old links and generated files moved aside; dotfiles `bare` and `link` ran
+  cleanly. Fresh login, non-interactive zsh, and bash login resolve all tools from bootstrap first; `CODEX_HOME`
+  is `~/.codex`, `CLAUDE_CONFIG_DIR` unset; both doctors pass; Claude Code and gh keep their existing
+  keychain logins; Neovim loads 61 plugins from `~/dotfiles/neovim`; Pi lists the agent-kit package.
 
 ## Open items
 
