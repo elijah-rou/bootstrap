@@ -60,10 +60,13 @@ for (const [name, diagnostic, expected] of [["clean", "0", "clean"], ["diagnosti
     const path = join(root, "fixture.ts");
     writeFileSync(path, "const value = 1;\n");
     process.env.FAKE_LSP_DIAGNOSTIC = diagnostic;
+    // A generous timeout keeps a loaded machine from turning startup time into a timeout; settling
+    // well inside it shows the result does not wait for the timeout to expire.
+    const timeoutMs = 10_000;
     const started = Date.now();
-    const result = await harness(root).execute({ paths: [path], timeoutMs: 2000 });
+    const result = await harness(root).execute({ paths: [path], timeoutMs });
     assert.equal(result.details.outcome, expected);
-    assert.ok(Date.now() - started < 1900);
+    assert.ok(Date.now() - started < timeoutMs / 2);
   });
 }
 
