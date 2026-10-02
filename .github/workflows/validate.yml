@@ -34,8 +34,8 @@ jobs:
       matrix:
         include:
           - { image: 'ubuntu:24.04', account: user, args: '' }
-          - { image: 'ubuntu:24.04', account: root, args: '--languages rust go python typescript zig c --lsp rust-analyzer gopls basedpyright ruff typescript-language-server bash-language-server zls clangd --tools zsh tmux starship just shellcheck codex' }
-          - { image: 'debian:13', account: user, args: '' }
+          - { image: 'ubuntu:24.04', account: root, args: '--languages rust go python typescript zig c --lsp rust-analyzer gopls basedpyright ruff typescript-language-server bash-language-server zls clangd --tools zsh tmux starship just shellcheck codex pi claude herdr' }
+          - { image: 'debian:13', account: user, args: '--tools pi claude herdr' }
           - { image: 'fedora:42', account: root, args: '--languages c --tools zsh tmux' }
           - { image: 'archlinux:latest', account: root, args: '--languages c --tools zsh tmux' }
     steps:
@@ -56,4 +56,4 @@ jobs:
           mkdir "$RUNNER_TEMP/home"
           env -i HOME="$RUNNER_TEMP/home" USER="$USER" TERM=xterm \
             PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
-            /bin/bash tests/roundtrip.sh "$PWD" --languages go --lsp gopls
+            /bin/bash tests/roundtrip.sh "$PWD" --languages go --lsp gopls --tools pi claude herdr

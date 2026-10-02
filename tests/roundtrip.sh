@@ -35,7 +35,15 @@ cp -R "$source_dir" "$checkout"
 "$checkout/install.sh" "$@"   # a rerun must converge without errors
 "$checkout/install.sh" link   # configuration-only relink
 "$checkout/install.sh" doctor
-bash -ic 'set -e; for command in pi hx herdr rg fd fzf bat jq delta gh zoxide node; do command -v "$command" >/dev/null; done; pi --version; hx --version; node -e "console.log(process.versions.bun)"'
+bash -ic 'set -e; for command in hx rg fd fzf bat jq delta gh zoxide node; do command -v "$command" >/dev/null; done; hx --version; node -e "console.log(process.versions.bun)"'
+# Selected agents must start from an interactive shell; Claude also runs a Mod command, which writes its
+# caches, at zero model cost.
+for agent in pi claude codex herdr; do
+    if grep -qx "select	tools	$agent" "$HOME/.local/share/bootstrap/state.tsv"; then bash -ic "$agent --version" >/dev/null; fi
+done
+if grep -qx "select	tools	claude" "$HOME/.local/share/bootstrap/state.tsv"; then
+    bash -ic 'cd "$(mktemp -d)" && claude --print /tps --output-format json --no-session-persistence --max-budget-usd 0.01' | grep -q '"total_cost_usd":0'
+fi
 
 # A signed-in gh (file storage) must be signed out without stalling uninstall.
 bash -c '. "$HOME/.local/share/bootstrap/repo/shell/env.sh"

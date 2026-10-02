@@ -16,6 +16,8 @@ PLATFORM=''
 BACKEND=''
 PACKAGE_INDEX_FRESH=0
 FAILURES=''
+# Set by `install.sh link`: steps then change configuration only and never download.
+OFFLINE=0
 
 info() { printf '[bootstrap] %s\n' "$*"; }
 warn() { printf '[bootstrap] warning: %s\n' "$*" >&2; }
@@ -305,6 +307,24 @@ install_download() {
     done
 }
 
+# Keeps tools/NAME checked out at REVISION; a commit id pins the content. BOOTSTRAP_AGENT_KIT may name
+# a local agent-kit checkout to develop against instead.
+install_git() {
+    local name="$1" revision="$2" url="$3" checkout="$TOOLS/$1"
+    [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || die "catalog row for $name needs a full commit id"
+    if [[ "$name" == agent-kit && -n "${BOOTSTRAP_AGENT_KIT:-}" ]]; then
+        [[ -f "$BOOTSTRAP_AGENT_KIT/package.json" ]] || die "BOOTSTRAP_AGENT_KIT is not an agent-kit checkout"
+        rm -rf "$checkout" && link_private "$BOOTSTRAP_AGENT_KIT" "$checkout"
+        return
+    fi
+    if [[ -L "$checkout" ]]; then rm -f "$checkout"; fi
+    if [[ -d "$checkout/.git" && "$(git -C "$checkout" rev-parse HEAD)" == "$revision" ]]; then return 0; fi
+    [[ "$OFFLINE" == 0 ]] || { warn "$name is not checked out at the pinned commit; run install.sh"; return 1; }
+    if [[ ! -d "$checkout/.git" ]]; then rm -rf "$checkout" && git clone --quiet "$url" "$checkout" || return 1; fi
+    git -C "$checkout" fetch --quiet origin "$revision" &&
+        git -C "$checkout" -c advice.detachedHead=false checkout --quiet --detach "$revision"
+}
+
 # ---------------------------------------------------------------- catalog
 
 catalog_names() {
@@ -351,6 +371,7 @@ install_name() {
             pkg:*) ;;
             https://*) install_download "$name" "$version" "$source" "$sha" "$bins" ;;
             npm:*) bun install --global --exact "${source#npm:}@$version" >/dev/null ;;
+            git:*) install_git "$name" "$version" "${source#git:}" ;;
             go:*)
                 command -v go >/dev/null || { warn "$name needs Go; add --languages go"; return 1; }
                 GOBIN="$TOOLS/bin" go install "${source#go:}@$version" ;;
@@ -384,13 +405,68 @@ step_elixirls() {
         link_private "$package/language_server.sh" "$TOOLS/bin/elixir-ls"
 }
 
-step_codex() {
-    local name skill file
-    link_private "$ROOT/repo/bin/codex" "$TOOLS/bin/codex" || return 1
-    for file in AGENTS.md native-tools.md; do
-        if [[ "$CODEX_HOME" == "$ROOT"/* ]]; then link_private "$ROOT/repo/codex/$file" "$CODEX_HOME/$file"
-        else link "$ROOT/repo/codex/$file" "$CODEX_HOME/$file"; fi || return 1
+# Links inside the root need no record; anything outside it (an existing ~/.codex or ~/.claude) does.
+place() {
+    if [[ "$2" == "$ROOT"/* ]]; then link_private "$1" "$2"; else link "$1" "$2"; fi
+}
+
+# Renders BASE merged with OVERLAY into TARGET, with @AGENT_KIT@ replaced by the agent-kit checkout.
+# Agents rewrite their settings at runtime (model choice, packages), so TARGET is replaced only when
+# the rendering itself changed; the replaced copy is kept as .bak.
+render_config() {
+    local base="$1" overlay="$2" target="$3" stamp
+    stamp="$(dirname "$target")/.$(basename "$target").rendered"
+    if [[ "$target" != "$ROOT"/* ]]; then own "$target" "$stamp" "$target.bak"; fi
+    node "$REPO/bin/merge-json.mjs" "$base" "$overlay" "@AGENT_KIT@=$TOOLS/agent-kit" >"$ROOT/tmp/render" ||
+        die "could not render $target; a Node-compatible runtime is required"
+    if [[ ! -f "$target" ]] || ! cmp -s "$ROOT/tmp/render" "$stamp"; then
+        if [[ -f "$target" ]]; then cp "$target" "$target.bak"; fi
+        (umask 077 && cp "$ROOT/tmp/render" "$target" && cp "$ROOT/tmp/render" "$stamp")
+    fi
+}
+
+ensure_agent_kit() { install_name agent-kit; }
+
+# Pi state lives in the private root; only its router configuration sits in XDG config. Extensions,
+# skills, the prompt, and the theme load from agent-kit as a local Pi package.
+step_pi() {
+    local agent="$PRIVATE/pi/agent" kit="$TOOLS/agent-kit" directory file source
+    ensure_agent_kit || return 1
+    (umask 077 && mkdir -p "$PRIVATE/pi/sessions" "$agent/extensions/subagent" "$agent/agents") || return 1
+    own "$CONFIG_HOME/pi"
+    link_private "$ROOT/repo/bin/pi" "$TOOLS/bin/pi" && link_private "$ROOT/repo/bin/pi-workspace" "$TOOLS/bin/pi-workspace" &&
+        link_private "$ROOT/repo/bin/pi-workspace" "$TOOLS/bin/piw" || return 1
+    for file in web-search profile-router strategy-router; do
+        link "$ROOT/repo/pi/$file.json" "$CONFIG_HOME/pi/$file.json" || return 1
     done
+    link_private "$kit/pi/AGENTS.md" "$agent/AGENTS.md" && link_private "$kit/pi/WORKTREE_STREAMS.md" "$agent/WORKTREE_STREAMS.md" &&
+        link_private "$ROOT/repo/pi/subagent-config.json" "$agent/extensions/subagent/config.json" || return 1
+    # Earlier layouts linked resources one by one; any link into a bootstrap root is replaced here.
+    for directory in extensions skills prompts themes agents; do
+        mkdir -p "$agent/$directory"
+        for file in "$agent/$directory"/*; do
+            if [[ -L "$file" && "$(readlink "$file")" == "$ROOT/"* ]]; then rm -f "$file"; fi
+        done
+    done
+    for source in "$REPO/pi/agents"/*.md; do
+        link_private "$ROOT/repo/pi/agents/${source##*/}" "$agent/agents/${source##*/}" || return 1
+    done
+    for file in settings models; do
+        render_config "$REPO/pi/$file.json" "$CONFIG_HOME/bootstrap/pi-$file.json" "$agent/$file.json" || return 1
+    done
+    [[ "$OFFLINE" == 0 ]] || return 0
+    if command -v herdr >/dev/null; then herdr integration install pi >/dev/null || return 1; fi
+    while IFS= read -r source; do
+        if [[ "$source" != /* ]]; then pi install "$source" >/dev/null || { warn "Pi package failed: $source"; return 1; }; fi
+    done < <(node -e 'for (const p of require(process.argv[1]).packages ?? []) console.log(typeof p === "string" ? p : p.source)' "$agent/settings.json")
+}
+
+step_codex() {
+    local kit="$TOOLS/agent-kit" name skill file
+    ensure_agent_kit || return 1
+    link_private "$ROOT/repo/bin/codex" "$TOOLS/bin/codex" || return 1
+    if [[ "$CODEX_HOME" != "$ROOT"/* ]]; then make_dirs "$CODEX_HOME"; else mkdir -p "$CODEX_HOME"; fi
+    for file in AGENTS.md native-tools.md; do place "$kit/codex/$file" "$CODEX_HOME/$file" || return 1; done
     if [[ ! -e "$CODEX_HOME/config.toml" ]]; then
         own "$CODEX_HOME/config.toml"
         cp "$REPO/codex/config.toml" "$CODEX_HOME/config.toml" || return 1
@@ -399,8 +475,30 @@ step_codex() {
     while IFS= read -r name; do
         skill="$HOME/.agents/skills/$name"
         if [[ -e "$skill" && ! -L "$skill" ]]; then warn "keeping existing skill $skill"; continue; fi
-        link "$ROOT/repo/pi/skills/$name" "$skill" || return 1
-    done <"$REPO/codex/skills.txt"
+        link "$kit/skills/$name" "$skill" || return 1
+    done <"$kit/codex/skills.txt"
+}
+
+# Claude Code's configuration directory defaults to the private root (see shell/env.sh).
+step_claude() {
+    local kit="$TOOLS/agent-kit" entry
+    ensure_agent_kit || return 1
+    # Claude Code keeps per-project logs in the platform cache, which CLAUDE_CONFIG_DIR does not move.
+    own "$CACHE_HOME/claude-cli-nodejs" "$HOME/Library/Caches/claude-cli-nodejs"
+    if [[ "$CLAUDE_CONFIG_DIR" != "$ROOT"/* ]]; then make_dirs "$CLAUDE_CONFIG_DIR/skills"; else (umask 077 && mkdir -p "$CLAUDE_CONFIG_DIR/skills"); fi
+    place "$kit/claude/CLAUDE.md" "$CLAUDE_CONFIG_DIR/CLAUDE.md" || return 1
+    while IFS= read -r entry; do
+        if [[ -n "$entry" ]]; then place "$kit/$entry" "$CLAUDE_CONFIG_DIR/skills/${entry##*/}" || return 1; fi
+    done <"$kit/claude/skills.txt"
+    # Claude Code discovers the Mod's plugin manifest under its skills directory.
+    place "$kit/claude/mods/trial-tools" "$CLAUDE_CONFIG_DIR/skills/trial-tools" || return 1
+    render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$CLAUDE_CONFIG_DIR/settings.json"
+}
+
+step_herdr() {
+    own "$CONFIG_HOME/herdr"
+    link "$ROOT/repo/config/herdr.toml" "$CONFIG_HOME/herdr/config.toml" || return 1
+    if [[ "$OFFLINE" == 0 ]] && command -v pi >/dev/null; then herdr integration install pi >/dev/null || return 1; fi
 }
 
 step_zsh() {
@@ -434,67 +532,10 @@ case \$- in *i*) if [ -r \"$ROOT/repo/shell/bashrc\" ]; then . \"$ROOT/repo/shel
 
 configure_apps() {
     # Go's telemetry directory cannot be relocated; it is claimed only when it does not exist yet.
-    own "$CONFIG_HOME/herdr" "$CONFIG_HOME/pi" "$CACHE_HOME/helix" \
-        "$STATE_HOME/gh" "$CACHE_HOME/gh" "$CONFIG_HOME/go/telemetry" "$HOME/Library/Application Support/go/telemetry"
+    own "$CACHE_HOME/helix" "$STATE_HOME/gh" "$CACHE_HOME/gh" "$CONFIG_HOME/go/telemetry" "$HOME/Library/Application Support/go/telemetry"
     mkdir -p "$PRIVATE/gh"
     link "$ROOT/repo/config/gitignore" "$CONFIG_HOME/git/ignore"
     link "$ROOT/repo/config/helix" "$CONFIG_HOME/helix"
-    link "$ROOT/repo/config/herdr.toml" "$CONFIG_HOME/herdr/config.toml"
-}
-
-# Pi state lives in the private root; only its router configuration sits in XDG config.
-# With "offline", Pi packages and the Herdr integration are left as they are.
-configure_pi() {
-    local mode="${1:-}" agent="$PRIVATE/pi/agent" directory pattern source file overlay
-    (umask 077 && mkdir -p "$PRIVATE/pi/sessions" "$agent/extensions/subagent")
-    link_private "$ROOT/repo/bin/pi" "$TOOLS/bin/pi"
-    link_private "$ROOT/repo/bin/pi-workspace" "$TOOLS/bin/pi-workspace"
-    link_private "$ROOT/repo/bin/pi-workspace" "$TOOLS/bin/piw"
-    for file in web-search profile-router strategy-router; do
-        link "$ROOT/repo/pi/$file.json" "$CONFIG_HOME/pi/$file.json"
-    done
-    link_private "$ROOT/repo/pi/AGENTS.md" "$agent/AGENTS.md"
-    link_private "$ROOT/repo/pi/WORKTREE_STREAMS.md" "$agent/WORKTREE_STREAMS.md"
-    link_private "$ROOT/repo/pi/subagent-config.json" "$agent/extensions/subagent/config.json"
-
-    # Drop links to files removed from the repository, then link the current set.
-    for directory in extensions agents prompts skills themes; do
-        mkdir -p "$agent/$directory"
-        for file in "$agent/$directory"/*; do
-            if [[ -L "$file" && "$(readlink "$file")" == "$ROOT/repo/"* && ! -e "$file" ]]; then rm -f "$file"; fi
-        done
-    done
-    while read -r directory pattern; do
-        for source in "$REPO/pi/$directory"/$pattern; do
-            if [[ -e "$source" ]]; then link_private "$ROOT/repo/pi/$directory/${source##*/}" "$agent/$directory/${source##*/}"; fi
-        done
-    done <<'LINKS'
-extensions *.ts
-extensions *.json
-agents *.md
-prompts *.md
-skills *
-themes *.json
-LINKS
-
-    # Pi rewrites settings at runtime (model choice, packages), so they are copies rendered from the
-    # repository plus optional overlays. A copy is replaced only when that rendering changes, which
-    # keeps runtime edits between updates; the replaced copy is kept as .bak.
-    for file in settings models; do
-        overlay="$CONFIG_HOME/bootstrap/pi-$file.json"
-        node "$REPO/bin/merge-json.mjs" "$REPO/pi/$file.json" "$overlay" >"$ROOT/tmp/pi-$file.json" ||
-            die "could not render Pi $file.json; a Node-compatible runtime is required"
-        if [[ ! -f "$agent/$file.json" ]] || ! cmp -s "$ROOT/tmp/pi-$file.json" "$agent/.$file.json.rendered"; then
-            if [[ -f "$agent/$file.json" ]]; then cp "$agent/$file.json" "$agent/$file.json.bak"; fi
-            (umask 077 && cp "$ROOT/tmp/pi-$file.json" "$agent/$file.json" && cp "$ROOT/tmp/pi-$file.json" "$agent/.$file.json.rendered")
-        fi
-    done
-
-    [[ "$mode" != offline ]] || return 0
-    herdr integration install pi >/dev/null
-    while IFS= read -r source; do
-        pi install "$source" >/dev/null || { warn "Pi package failed: $source"; return 1; }
-    done < <(node -e 'for (const p of require(process.argv[1]).packages ?? []) console.log(typeof p === "string" ? p : p.source)' "$agent/settings.json")
 }
 
 # ---------------------------------------------------------------- commands
@@ -542,10 +583,18 @@ prepare_root() {
 
 # Relinks configuration without downloading or installing anything.
 cmd_link() {
+    local group name
     prepare_root
     configure_shell
     configure_apps
-    configure_pi offline
+    OFFLINE=1
+    while IFS=$'\t' read -r _ group name; do
+        case "$name" in
+            pi|codex|claude|herdr|zsh|tmux) "step_$name" - || FAILURES="$FAILURES $name" ;;
+            *) ;;
+        esac
+    done < <(awk -F '\t' '$1 == "select"' "$STATE")
+    [[ -z "$FAILURES" ]] || die "configuration incomplete:$FAILURES"
     info "configuration linked"
 }
 
@@ -578,7 +627,6 @@ cmd_install() {
     [[ -z "$FAILURES" ]] || die "core tools failed:$FAILURES"
     configure_shell
     configure_apps
-    configure_pi
 
     while IFS=$'\t' read -r _ group name; do
         install_selection "$group" "$name"
@@ -602,8 +650,10 @@ cmd_doctor() {
             else printf 'missing  %-28s %s\n' "$name" "$bin"; failed=1; fi
         done
     done
-    version="$(awk -F '\t' '$1 == "pi" { print $3; exit }' "$CATALOG")"
-    if [[ "$(pi --version 2>/dev/null)" != "$version" ]]; then printf 'wrong    pi version, want %s\n' "$version"; failed=1; fi
+    if grep -qx "select"$'\t'"tools"$'\t'"pi" "$STATE"; then
+        version="$(awk -F '\t' '$1 == "pi" { print $3; exit }' "$CATALOG")"
+        if [[ "$(pi --version 2>/dev/null)" != "$version" ]]; then printf 'wrong    pi version, want %s\n' "$version"; failed=1; fi
+    fi
     return "$failed"
 }
 
@@ -634,6 +684,14 @@ cmd_uninstall() {
             [[ -n "$host" && -n "$user" ]] || continue
             gh auth logout --hostname "$host" --user "$user" </dev/null >/dev/null 2>&1 || warn "could not sign gh out of $user on $host"
         done < <(gh auth status --json hosts --jq '.hosts | to_entries[] | .key as $host | .value[] | [$host, .login] | @tsv' </dev/null 2>/dev/null)
+    fi
+    # Claude Code names its macOS keychain items after a hash of a custom config directory, so only
+    # bootstrap's own login is removed, never a default ~/.claude one.
+    if [[ "$(uname -s)" == Darwin && "$CLAUDE_CONFIG_DIR" == "$ROOT"/* ]]; then
+        value="$(printf '%s' "$CLAUDE_CONFIG_DIR" | sha256 /dev/stdin | cut -c1-8)"
+        for host in "Claude Code-credentials-$value" "Claude Code-$value"; do
+            security delete-generic-password -s "$host" >/dev/null 2>&1 || true
+        done
     fi
     if command -v herdr >/dev/null && [[ -S "$CONFIG_HOME/herdr/herdr.sock" ]]; then herdr server stop || true; fi
     for path in "$TMUX_TMPDIR"/tmux-*/*; do

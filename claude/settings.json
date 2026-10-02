@@ -1,0 +1,10 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bun @AGENT_KIT@/claude/statusline.ts",
+    "refreshInterval": 60
+  },
+  "env": {
+    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
+  }
+}
