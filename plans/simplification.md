@@ -86,10 +86,27 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
 4. [x] Delete the old machinery: `bootstrap.sh`, `configure.sh`, `scripts/state-helper.mjs`,
    migration helpers, snapshot ownership, readiness state, Neovim bundle, old tests, completed
    plans. Rewrite README and CI around the round-trip test.
-5. [ ] Dotfiles: move Neovim, Headroom launcher, and other optional personal setup; adopt the
-   pinned-clone contract and local overlay files. Requires owner authorization for the private repo.
-6. [ ] Workstation cutover with the owner present: `migration retire --yes` with the old code,
-   run the new installer, remove `install.json`, `migration.json`, and the old snapshots.
+5. [x] Dotfiles (local branch `bootstrap-simplify`, not pushed): Neovim, `pi-headroom`, and
+   `modelusage` moved there; `bootstrap.lock` is a commit checked out by `scripts/bootstrap`;
+   workstation and local overlays render into `~/.config/bootstrap/`; offline relink uses
+   bootstrap's `install.sh link`; workstation keeps `CODEX_HOME=~/.codex`.
+6. [ ] Workstation cutover with the owner present. Publishing the bootstrap branch comes first,
+   because `bootstrap.lock` must name a commit GitHub serves. Then, with Pi, Herdr, and Neovim
+   stopped:
+   1. Optionally `~/.local/share/bootstrap/snapshots/6ee84fb…/install.sh migration retire --yes`
+      to delete the legacy `~/.pi/agent` with the old safeguards.
+   2. Replace the snapshot symlinks that the new installer must edit or relink: `~/.bashrc`,
+      `~/.zshrc`, `~/.zshenv`, `~/.zprofile` (block edits refuse symlinked files), and remove old
+      launchers in `~/.local/bin` (`pi`, `piw`, `pi-workspace`, `pih`, `pi-headroom`, `dev-shell`,
+      `modelusage`, and their `.bak.*` links) and `~/.config/dotfiles/`.
+   3. Run dotfiles `./install.sh` (bootstrap with zsh, starship, codex plus overlays), then
+      `./install.sh link`.
+   4. Neovim moves from the `bootstrap-nvim` app name to `~/.config/nvim`; plugins reinstall into
+      `~/.local/share/nvim`. Remove `~/.config/bootstrap-nvim`, `~/.local/share/bootstrap-nvim`,
+      `~/.local/share/bootstrap/neovim`, and `~/.local/share/bootstrap/private/neovim` afterwards.
+   5. Remove `~/.local/state/bootstrap/{install.json,migration.json,neovim-backups}`, the
+      `snapshots/` directory, and dangling links in `tools/bin`; run `./install.sh doctor` in
+      both repositories.
 
 ## Evidence (2026-10-02, branch `simplify`)
 
@@ -101,6 +118,11 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
 - Bun gate: Pi 1.0.0 with all extensions and packages reached a provider request under Bun;
   basedpyright, typescript-language-server, and bash-language-server run through the `node`
   wrapper. Interactive Pi TUI was not exercised.
+- Dotfiles: its validator passes against this branch; a disposable macOS HOME ran dotfiles
+  `bare`, `link --offline`, `bare-doctor`, and `uninstall`; bootstrap removed everything it
+  owned and only dotfiles-owned links remained.
+- `pi/tests/lsp-diagnostics.test.mjs` "fake LSP clean result settles before timeout" fails under
+  heavy machine load on this branch and on `main`; it passes alone.
 
 ## Open items
 
