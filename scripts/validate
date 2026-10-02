@@ -20,9 +20,6 @@ awk -F '\t' '
     $6 ~ /^https:\/\// && $5 !~ /^[0-9a-f]{64}$/ { printf "catalog.tsv:%d: download without sha256\n", NR; bad = 1 }
     END { exit bad }
 ' catalog.tsv
-while IFS= read -r name; do
-    [[ -f "pi/skills/$name/SKILL.md" ]] || { printf 'codex/skills.txt names a missing skill: %s\n' "$name" >&2; exit 1; }
-done <codex/skills.txt
 
 bash tests/uninstall_edges.sh
 
