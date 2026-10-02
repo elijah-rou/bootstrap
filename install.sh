@@ -481,18 +481,18 @@ step_codex() {
 
 # Claude Code's configuration directory defaults to the private root (see shell/env.sh).
 step_claude() {
-    local kit="$TOOLS/agent-kit" entry
+    local kit="$TOOLS/agent-kit" entry home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
     ensure_agent_kit || return 1
     # Claude Code keeps per-project logs in the platform cache, which CLAUDE_CONFIG_DIR does not move.
     own "$CACHE_HOME/claude-cli-nodejs" "$HOME/Library/Caches/claude-cli-nodejs"
-    if [[ "$CLAUDE_CONFIG_DIR" != "$ROOT"/* ]]; then make_dirs "$CLAUDE_CONFIG_DIR/skills"; else (umask 077 && mkdir -p "$CLAUDE_CONFIG_DIR/skills"); fi
-    place "$kit/claude/CLAUDE.md" "$CLAUDE_CONFIG_DIR/CLAUDE.md" || return 1
+    if [[ "$home" != "$ROOT"/* ]]; then make_dirs "$home/skills"; else (umask 077 && mkdir -p "$home/skills"); fi
+    place "$kit/claude/CLAUDE.md" "$home/CLAUDE.md" || return 1
     while IFS= read -r entry; do
-        if [[ -n "$entry" ]]; then place "$kit/$entry" "$CLAUDE_CONFIG_DIR/skills/${entry##*/}" || return 1; fi
+        if [[ -n "$entry" ]]; then place "$kit/$entry" "$home/skills/${entry##*/}" || return 1; fi
     done <"$kit/claude/skills.txt"
     # Claude Code discovers the Mod's plugin manifest under its skills directory.
-    place "$kit/claude/mods/trial-tools" "$CLAUDE_CONFIG_DIR/skills/trial-tools" || return 1
-    render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$CLAUDE_CONFIG_DIR/settings.json"
+    place "$kit/claude/mods/trial-tools" "$home/skills/trial-tools" || return 1
+    render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$home/settings.json"
 }
 
 step_herdr() {
@@ -687,7 +687,7 @@ cmd_uninstall() {
     fi
     # Claude Code names its macOS keychain items after a hash of a custom config directory, so only
     # bootstrap's own login is removed, never a default ~/.claude one.
-    if [[ "$(uname -s)" == Darwin && "$CLAUDE_CONFIG_DIR" == "$ROOT"/* ]]; then
+    if [[ "$(uname -s)" == Darwin && "${CLAUDE_CONFIG_DIR:-}" == "$ROOT"/* ]]; then
         value="$(printf '%s' "$CLAUDE_CONFIG_DIR" | sha256 /dev/stdin | cut -c1-8)"
         for host in "Claude Code-credentials-$value" "Claude Code-$value"; do
             security delete-generic-password -s "$host" >/dev/null 2>&1 || true

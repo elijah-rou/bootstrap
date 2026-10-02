@@ -29,6 +29,9 @@ if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap/env.sh" ]; then . "${XDG_CO
 # Defaults that the machine-specific file may set first. An existing CODEX_HOME, such as a
 # workstation's ~/.codex or ~/.claude, is kept; uninstall then removes only the links bootstrap put there.
 export CODEX_HOME="${CODEX_HOME:-$_private/codex}" CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$_private/claude}"
+# Claude Code keys its keychain login to any explicit CLAUDE_CONFIG_DIR, so its default home stays
+# implicit; otherwise an existing ~/.claude login would no longer be found.
+if [ "$CLAUDE_CONFIG_DIR" = "$HOME/.claude" ]; then unset CLAUDE_CONFIG_DIR; fi
 # Agents are pinned in catalog.tsv; their own updaters would move them off the pin.
 export DISABLE_AUTOUPDATER=1
 
