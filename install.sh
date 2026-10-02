@@ -64,9 +64,11 @@ as_admin() {
     if [[ "$BACKEND" == brew || "$(id -u)" == 0 ]]; then "$@"; else sudo -- "$@"; fi
 }
 
-# Homebrew otherwise autoremoves, cleans up, and upgrades formulae it did not install for us.
+# Homebrew otherwise autoremoves, cleans up, and upgrades formulae it did not install for us, and
+# keeps downloads and logs in the user's Library; ours stay in the root.
 export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_AUTOREMOVE=1 HOMEBREW_NO_INSTALL_CLEANUP=1
 export HOMEBREW_NO_INSTALL_UPGRADE=1 HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+export HOMEBREW_CACHE="$PRIVATE/cache/homebrew" HOMEBREW_LOGS="$PRIVATE/cache/homebrew-logs"
 
 # Packages dpkg knows in any state count as present, so a removed-but-configured package that
 # install brings back is never purged later.
@@ -85,6 +87,8 @@ package_install() {
     local status=0
     if [[ "$BACKEND" == apt && "$PACKAGE_INDEX_FRESH" == 0 ]]; then as_admin apt-get update || return 1; PACKAGE_INDEX_FRESH=1; fi
     package_list >"$ROOT/package-baseline" || return 1
+    # systemd-tmpfiles, run by some package hooks (Arch), creates /root/.ssh; it is removed only if empty.
+    if [[ ! -e "$HOME/.ssh" ]]; then record dir "$HOME/.ssh"; fi
     case "$BACKEND" in
         apt)
             # Only names in this transaction count, not packages another process adds meanwhile.
