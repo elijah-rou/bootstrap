@@ -36,6 +36,12 @@ cp -R "$source_dir" "$checkout"
 "$checkout/install.sh" link   # configuration-only relink
 "$checkout/install.sh" doctor
 bash -ic 'set -e; for command in hx rg fd fzf bat jq delta gh zoxide node; do command -v "$command" >/dev/null; done; hx --version; node -e "console.log(process.versions.bun)"'
+# Bootstrap's tools come first on PATH in login shells too, after macOS path_helper has run.
+tools="$HOME/.local/share/bootstrap/tools/bin"
+[[ "$(bash -lc 'printf %s "${PATH%%:*}"')" == "$tools" ]] || { printf 'FAIL: bash login PATH does not start with %s\n' "$tools" >&2; exit 1; }
+if grep -qx "select	tools	zsh" "$HOME/.local/share/bootstrap/state.tsv"; then
+    [[ "$(zsh -lc 'printf %s "${PATH%%:*}"')" == "$tools" ]] || { printf 'FAIL: zsh login PATH does not start with %s\n' "$tools" >&2; exit 1; }
+fi
 # Selected agents must start from an interactive shell; Claude also runs a Mod command, which writes its
 # caches, at zero model cost.
 for agent in pi claude codex herdr; do

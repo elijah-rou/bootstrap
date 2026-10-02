@@ -55,4 +55,4 @@ jobs:
           mkdir "$RUNNER_TEMP/home"
           env -i HOME="$RUNNER_TEMP/home" USER="$USER" TERM=xterm \
             PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
-            /bin/bash tests/roundtrip.sh "$PWD" --languages go --lsp gopls --tools pi claude herdr
+            /bin/bash tests/roundtrip.sh "$PWD" --languages go --lsp gopls --tools zsh pi claude herdr

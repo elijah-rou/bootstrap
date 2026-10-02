@@ -511,9 +511,12 @@ step_herdr() {
     if [[ "$OFFLINE" == 0 ]] && command -v pi >/dev/null; then herdr integration install pi >/dev/null || return 1; fi
 }
 
+# Login shells rerun the environment from ~/.zprofile because macOS /etc/zprofile reorders PATH after
+# ~/.zshenv, and non-interactive login shells never read ~/.zshrc.
 step_zsh() {
     mkdir -p "$PRIVATE/zsh" &&
         add_block "$HOME/.zshenv" env bottom "if [ -r \"$ROOT/repo/shell/env.sh\" ]; then . \"$ROOT/repo/shell/env.sh\"; fi" &&
+        add_block "$HOME/.zprofile" env bottom "if [ -r \"$ROOT/repo/shell/env.sh\" ]; then . \"$ROOT/repo/shell/env.sh\"; fi" &&
         add_block "$HOME/.zshrc" interactive bottom "if [ -r \"$ROOT/repo/shell/zshrc\" ]; then . \"$ROOT/repo/shell/zshrc\"; fi"
 }
 
