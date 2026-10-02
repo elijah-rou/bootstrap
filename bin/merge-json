@@ -1,0 +1,22 @@
+// Prints BASE deep-merged with OVERLAY (when that file exists). Objects merge; other values replace.
+// Usage: bun merge-json BASE OVERLAY
+import { existsSync, readFileSync } from "node:fs";
+
+const [base, overlay] = process.argv.slice(2);
+if (!base || !overlay) throw new Error("usage: merge-json BASE OVERLAY");
+
+const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const merge = (left, right) => {
+	if (!isObject(left) || !isObject(right)) return right;
+	const result = { ...left };
+	for (const [key, value] of Object.entries(right)) result[key] = key in result ? merge(result[key], value) : value;
+	return result;
+};
+const read = (path) => {
+	const value = JSON.parse(readFileSync(path, "utf8"));
+	if (!isObject(value)) throw new Error(`${path} must contain a JSON object`);
+	return value;
+};
+
+const merged = existsSync(overlay) ? merge(read(base), read(overlay)) : read(base);
+process.stdout.write(`${JSON.stringify(merged, null, 2)}\n`);

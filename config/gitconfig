@@ -1,5 +1,6 @@
 [include]
     path = ~/.gitconfig.local
+    path = ~/.config/bootstrap/gitconfig
 
 [core]
     pager = delta

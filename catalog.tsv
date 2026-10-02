@@ -1,0 +1,134 @@
+# Every pinned install source. One row per artifact; a name may have several rows.
+#
+# name     selection name (core rows install on every run)
+# groups   core, or a comma list of: languages, lsp, tools
+# version  pinned version; scripts/pin replaces it in the URL when updating
+# platform linux-x86_64, linux-aarch64, darwin-arm64, any, or a system backend (apt, dnf, pacman, brew)
+# sha256   for https sources; - otherwise
+# source   https URL (archive or bare binary), npm:PACKAGE, go:MODULE, pkg:SYSTEM_PACKAGE, or step:NAME
+# bins     comma list of executables this row provides; download rows link them into tools/bin
+#
+# Download rows win over system rows. System rows are skipped when their bins already exist.
+
+#name	groups	version	platform	sha256	source	bins
+bun	core	1.4.2	linux-x86_64	129ae8dfaca565e8008735e3d6adae7515421c5b226d6f1f90c4bcb35803a647	https://registry.npmjs.org/@oven/bun-linux-x64-baseline/-/bun-linux-x64-baseline-1.4.2.tgz	bun
+bun	core	1.4.2	linux-aarch64	9ab3970a19660b5cd089f17fb021d900e1ca1b988dafd461d66d0a0ff4d6eac4	https://registry.npmjs.org/@oven/bun-linux-aarch64/-/bun-linux-aarch64-1.4.2.tgz	bun
+bun	core	1.4.2	darwin-arm64	a9df486eaf7e9db9bdebb1fa425e8c9809abd783b1c518d1dbc5096a53b861ed	https://registry.npmjs.org/@oven/bun-darwin-aarch64/-/bun-darwin-aarch64-1.4.2.tgz	bun
+pi	core	1.0.0	any	-	npm:@earendil-works/pi-coding-agent	pi
+herdr	core	0.9.3	linux-x86_64	18a8dc65f1c2fa485884344356dea1cfd911c6f06cf46fa78e193f4087f4dba7	https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-linux-x86_64	herdr
+herdr	core	0.9.3	linux-aarch64	4de7aa3e25678812e92960de64f7c2aaa1bca1f0f80a3c5e559837e231e1f5c0	https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-linux-aarch64	herdr
+herdr	core	0.9.3	darwin-arm64	5173a3e0ae42d5d1ab7ebfa5d5e6329f7c3d23f8e1a3677c7ce3231da2884157	https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-macos-aarch64	herdr
+hx	core	20250915	linux-x86_64	3c46157547e200c946f05bcf297ecc89f7ccd1a9ba94aeff3a68348636efcb6c	https://github.com/usagi-flow/evil-helix/releases/download/release-20250915/evil-helix-amd64-linux.tar.gz	hx
+hx	core	20250915	linux-aarch64	ec968d37819fce4488904012aaa7a25e08a6704ebdef9088b5e1801d6b740868	https://github.com/usagi-flow/evil-helix/releases/download/release-20250915/evil-helix-aarch64-linux.tar.gz	hx
+hx	core	20250915	darwin-arm64	2f79fb3f842658d384939f3a9f1f784479cd2e9d7b9984f98b98f22894847b57	https://github.com/usagi-flow/evil-helix/releases/download/release-20250915/evil-helix-aarch64-macos.tar.gz	hx
+rg	core	15.2.0	linux-x86_64	33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c	https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz	rg
+rg	core	15.2.0	linux-aarch64	800b1e7206afe799dfb5a6901f23147cfaabe0e52210538100f61e86e1740915	https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-aarch64-unknown-linux-musl.tar.gz	rg
+rg	core	15.2.0	darwin-arm64	3750b2e93f37e0c692657da574d7019a101c0084da05a790c83fd335bad973e4	https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15.2.0-aarch64-apple-darwin.tar.gz	rg
+fd	core	10.5.0	linux-x86_64	761c72dc8e120d85b22292063be8a796e2eeb20eb3e4f38b8fa2343ccf3514a7	https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-x86_64-unknown-linux-musl.tar.gz	fd
+fd	core	10.5.0	linux-aarch64	d76c4317f7d5dba69f8a2a15856c90c777e7f0dd4e85f0de8c76de6992c374d4	https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-aarch64-unknown-linux-musl.tar.gz	fd
+fd	core	10.5.0	darwin-arm64	b67e1836c468e42e411984b56e52fa7abec08c2bd22c867398e7cc134aac5e12	https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-aarch64-apple-darwin.tar.gz	fd
+fzf	core	0.74.4	linux-x86_64	05e6813a337cc722c3ed07e54a764b75cc5d671e2e60459db0ba696ee5fa7504	https://github.com/junegunn/fzf/releases/download/v0.74.4/fzf-0.74.4-linux_amd64.tar.gz	fzf
+fzf	core	0.74.4	linux-aarch64	5d673b849f494f0d64ec471d8640b153ca8849e3846a31da17abdcfce8df6b46	https://github.com/junegunn/fzf/releases/download/v0.74.4/fzf-0.74.4-linux_arm64.tar.gz	fzf
+fzf	core	0.74.4	darwin-arm64	4f6a113bfc0c7959e0005c78d566a51afc4fcefc956f43735c62a9deb19e92ae	https://github.com/junegunn/fzf/releases/download/v0.74.4/fzf-0.74.4-darwin_arm64.tar.gz	fzf
+bat	core	0.26.1	linux-x86_64	0dcd8ac79732c0d5b136f11f4ee00e581440e16a44eab5b3105b611bbf2cf191	https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-x86_64-unknown-linux-musl.tar.gz	bat
+bat	core	0.26.1	linux-aarch64	6369242c584065f195fb20cb36fbd7cb63ae690605bbe89868a7596b596c2c23	https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-aarch64-unknown-linux-musl.tar.gz	bat
+bat	core	0.26.1	darwin-arm64	e30beff26779c9bf60bb541e1d79046250cb74378f2757f8eb250afddb19e114	https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-aarch64-apple-darwin.tar.gz	bat
+eza	core	0.23.5	linux-x86_64	e06eebab74b73d6b7d51a796a353824b001bea82df077706382e100815d28904	https://github.com/eza-community/eza/releases/download/v0.23.5/eza_x86_64-unknown-linux-musl.tar.gz	eza
+eza	core	0.23.5	linux-aarch64	40b87ae8628aa2ff0f0d2dc24ab52f689631366385c3da630bae745671fd71ec	https://github.com/eza-community/eza/releases/download/v0.23.5/eza_aarch64-unknown-linux-gnu.tar.gz	eza
+eza	core	-	brew	-	pkg:eza	eza
+zoxide	core	0.10.0	linux-x86_64	2d93385b99f3e82cf2701609a1bffcad863fbeb75aa3fe7eb6be4d29be68b1ae	https://github.com/ajeetdsouza/zoxide/releases/download/v0.10.0/zoxide-0.10.0-x86_64-unknown-linux-musl.tar.gz	zoxide
+zoxide	core	0.10.0	linux-aarch64	f1f16c5d6298d63dee467eedea1cdcd8490e43e493bea43acd416dc9033ef641	https://github.com/ajeetdsouza/zoxide/releases/download/v0.10.0/zoxide-0.10.0-aarch64-unknown-linux-musl.tar.gz	zoxide
+zoxide	core	0.10.0	darwin-arm64	b55ae6f2f5f23d0a6ccb3bd4eeb2af9c7e0a6556e5255c82100e40305129bbb0	https://github.com/ajeetdsouza/zoxide/releases/download/v0.10.0/zoxide-0.10.0-aarch64-apple-darwin.tar.gz	zoxide
+jq	core	1.8.2	linux-x86_64	b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f	https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-linux-amd64	jq
+jq	core	1.8.2	linux-aarch64	8b85c817833814ddca00a144c33705546355afccf0cf39b188f3cdb48b852309	https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-linux-arm64	jq
+jq	core	1.8.2	darwin-arm64	2d75340ba57a4b4b4c8708a21c2dc8e958a48aaa8bba13b27f77f6e4c0eca07e	https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-macos-arm64	jq
+delta	core	0.19.2	linux-x86_64	f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b	https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz	delta
+delta	core	0.19.2	linux-aarch64	0bfce159a5cddd5feb3d6db4a616d883ff51253ce08ac7ec11cb1d208cfaab9e	https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-aarch64-unknown-linux-gnu.tar.gz	delta
+delta	core	0.19.2	darwin-arm64	9be36612a5a13e9e386dc498fb8e50dc87c72ee42b63db0ea05b32f99a72a69a	https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-aarch64-apple-darwin.tar.gz	delta
+gh	core	2.102.0	linux-x86_64	bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386	https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz	gh
+gh	core	2.102.0	linux-aarch64	7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484	https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_arm64.tar.gz	gh
+gh	core	2.102.0	darwin-arm64	da922c20d1792e5b2cbf375593d7a658acf034c12c84e007e71c76ef959c337e	https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_macOS_arm64.zip	gh
+
+c	languages	-	apt	-	pkg:build-essential	cc
+c	languages	-	apt	-	pkg:pkg-config	pkg-config
+c	languages	-	dnf	-	pkg:gcc	cc
+c	languages	-	dnf	-	pkg:make	make
+c	languages	-	dnf	-	pkg:pkgconf-pkg-config	pkg-config
+c	languages	-	pacman	-	pkg:gcc	cc
+c	languages	-	pacman	-	pkg:make	make
+c	languages	-	pacman	-	pkg:pkgconf	pkg-config
+c	languages	-	brew	-	pkg:pkg-config	pkg-config
+cpp	languages	-	apt	-	pkg:build-essential	c++
+cpp	languages	-	dnf	-	pkg:gcc-c++	c++
+cpp	languages	-	pacman	-	pkg:gcc	c++
+rust	languages	1.28.2	linux-x86_64	20a06e644b0d9bd2fbdbfd52d42540bdde820ea7df86e92e533c073da0cdd43c	https://static.rust-lang.org/rustup/archive/1.28.2/x86_64-unknown-linux-gnu/rustup-init	rustup-init
+rust	languages	1.28.2	linux-aarch64	e3853c5a252fca15252d07cb23a1bdd9377a8c6f3efa01531109281ae47f841c	https://static.rust-lang.org/rustup/archive/1.28.2/aarch64-unknown-linux-gnu/rustup-init	rustup-init
+rust	languages	1.28.2	darwin-arm64	20ef5516c31b1ac2290084199ba77dbbcaa1406c45c1d978ca68558ef5964ef5	https://static.rust-lang.org/rustup/archive/1.28.2/aarch64-apple-darwin/rustup-init	rustup-init
+rust	languages	stable	any	-	step:rust	cargo
+go	languages	1.27.1	linux-x86_64	63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445	https://go.dev/dl/go1.27.1.linux-amd64.tar.gz	go,gofmt
+go	languages	1.27.1	linux-aarch64	3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec	https://go.dev/dl/go1.27.1.linux-arm64.tar.gz	go,gofmt
+go	languages	1.27.1	darwin-arm64	ee215d57e0ec269c60cc9ceca68e6bda321ba9ee5afe24f4b0988703c2d87d12	https://go.dev/dl/go1.27.1.darwin-arm64.tar.gz	go,gofmt
+python	languages	0.12.21	linux-x86_64	23f02075b652bb1df64178cfae41b5caf160822e720e2663568f3f5d63bc52c0	https://github.com/astral-sh/uv/releases/download/0.12.21/uv-x86_64-unknown-linux-gnu.tar.gz	uv,uvx
+python	languages	0.12.21	linux-aarch64	030b69227b40af8c1981b7301793dc66e71ed3c796ea8688209dd268bd91ec51	https://github.com/astral-sh/uv/releases/download/0.12.21/uv-aarch64-unknown-linux-gnu.tar.gz	uv,uvx
+python	languages	0.12.21	darwin-arm64	b88bda573e566ef9bced66b155fe0408626fbbc053aee1c30ba686f0728c9447	https://github.com/astral-sh/uv/releases/download/0.12.21/uv-aarch64-apple-darwin.tar.gz	uv,uvx
+python	languages	3.13	any	-	step:python	python3
+typescript	languages	6.0.3	any	-	npm:typescript	tsc
+elixir	languages	-	apt	-	pkg:elixir	elixir
+elixir	languages	-	dnf	-	pkg:elixir	elixir
+elixir	languages	-	pacman	-	pkg:elixir	elixir
+elixir	languages	-	brew	-	pkg:elixir	elixir
+zig	languages	0.16.0	linux-x86_64	70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00	https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz	zig
+zig	languages	0.16.0	linux-aarch64	ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17	https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz	zig
+zig	languages	0.16.0	darwin-arm64	b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489	https://ziglang.org/download/0.16.0/zig-aarch64-macos-0.16.0.tar.xz	zig
+
+clangd	lsp	-	apt	-	pkg:clangd	clangd
+clangd	lsp	-	dnf	-	pkg:clang-tools-extra	clangd
+clangd	lsp	-	pacman	-	pkg:clang	clangd
+rust-analyzer	lsp	2026-09-28	linux-x86_64	23f711d86b5f826e22886f01d7355dc01e0f4c1357dafa29710a95b903b48c85	https://github.com/rust-lang/rust-analyzer/releases/download/2026-09-28/rust-analyzer-x86_64-unknown-linux-gnu.gz	rust-analyzer
+rust-analyzer	lsp	2026-09-28	linux-aarch64	03bad9c3dabb0f07a2678d5f9f8f1575a3742ea141506e14b3a26b42a1f896f3	https://github.com/rust-lang/rust-analyzer/releases/download/2026-09-28/rust-analyzer-aarch64-unknown-linux-gnu.gz	rust-analyzer
+rust-analyzer	lsp	2026-09-28	darwin-arm64	54ec873d8996e2c127d758bf45d4eacb6d3371dae4f6f6d5d3f05cedbae5fd59	https://github.com/rust-lang/rust-analyzer/releases/download/2026-09-28/rust-analyzer-aarch64-apple-darwin.gz	rust-analyzer
+gopls	lsp	v0.23.0	any	-	go:golang.org/x/tools/gopls	gopls
+basedpyright	lsp	1.40.1	any	-	npm:basedpyright	basedpyright-langserver
+ruff	lsp,tools	0.16.10	linux-x86_64	9567ff1201e2fb3da31ff04c35587d768c66d6cb42dfa84de474e2bfe360b608	https://github.com/astral-sh/ruff/releases/download/0.16.10/ruff-x86_64-unknown-linux-gnu.tar.gz	ruff
+ruff	lsp,tools	0.16.10	linux-aarch64	dc0d74de837ef0a7bcc62ce98c48a622b075d057161f13b958be2934becd55a6	https://github.com/astral-sh/ruff/releases/download/0.16.10/ruff-aarch64-unknown-linux-gnu.tar.gz	ruff
+ruff	lsp,tools	0.16.10	darwin-arm64	f051cd306de2691262a0574f8857cd1f4d6bfcd448084ea23d61b9c1c37df510	https://github.com/astral-sh/ruff/releases/download/0.16.10/ruff-aarch64-apple-darwin.tar.gz	ruff
+typescript-language-server	lsp	6.0.3	any	-	npm:typescript	tsc
+typescript-language-server	lsp	6.0.1	any	-	npm:typescript-language-server	typescript-language-server
+bash-language-server	lsp	5.8.1	any	-	npm:bash-language-server	bash-language-server
+elixirls	lsp	-	apt	-	pkg:unzip	unzip
+elixirls	lsp	-	dnf	-	pkg:unzip	unzip
+elixirls	lsp	-	pacman	-	pkg:unzip	unzip
+elixirls	lsp	0.31.1	any	bac08322ea3698157eb2373bb5b65e38c15df9dd41e1c06f142f874367fa472f	https://github.com/elixir-lsp/elixir-ls/releases/download/v0.31.1/elixir-ls-v0.31.1.zip	-
+elixirls	lsp	0.31.1	any	-	step:elixirls	elixir-ls
+zls	lsp	0.16.0	linux-x86_64	ded6d562a0b86ee878b1ddf70ffab2797ce3cdca3b02d6077548f9d56dff96b6	https://github.com/zigtools/zls/releases/download/0.16.0/zls-x86_64-linux.tar.xz	zls
+zls	lsp	0.16.0	linux-aarch64	430cd293d201eb70ae2519dbc96c854bf8791b8df7fc9392e8d2dc9680a2bed7	https://github.com/zigtools/zls/releases/download/0.16.0/zls-aarch64-linux.tar.xz	zls
+zls	lsp	0.16.0	darwin-arm64	b93ec549f8558a7e85984a840e9276d274f1059b54ade4254296ef4982958359	https://github.com/zigtools/zls/releases/download/0.16.0/zls-aarch64-macos.tar.xz	zls
+
+zsh	tools	-	apt	-	pkg:zsh	zsh
+zsh	tools	-	dnf	-	pkg:zsh	zsh
+zsh	tools	-	pacman	-	pkg:zsh	zsh
+zsh	tools	-	brew	-	pkg:zsh	zsh
+zsh	tools	-	any	-	step:zsh	zsh
+tmux	tools	-	apt	-	pkg:tmux	tmux
+tmux	tools	-	dnf	-	pkg:tmux	tmux
+tmux	tools	-	pacman	-	pkg:tmux	tmux
+tmux	tools	-	brew	-	pkg:tmux	tmux
+tmux	tools	-	any	-	step:tmux	tmux
+wget	tools	-	apt	-	pkg:wget	wget
+wget	tools	-	dnf	-	pkg:wget	wget
+wget	tools	-	pacman	-	pkg:wget	wget
+wget	tools	-	brew	-	pkg:wget	wget
+unzip	tools	-	apt	-	pkg:unzip	unzip
+unzip	tools	-	dnf	-	pkg:unzip	unzip
+unzip	tools	-	pacman	-	pkg:unzip	unzip
+starship	tools	1.26.0	linux-x86_64	321f0dd7af8340a5f2e6a8fec6538a04f617486f9ec70d878f91c09cd8deef22	https://github.com/starship/starship/releases/download/v1.26.0/starship-x86_64-unknown-linux-gnu.tar.gz	starship
+starship	tools	1.26.0	linux-aarch64	dc30189378d2f2e287384e8a692d3f95ad1df64cf0e8c36aa9201516028aed6b	https://github.com/starship/starship/releases/download/v1.26.0/starship-aarch64-unknown-linux-musl.tar.gz	starship
+starship	tools	1.26.0	darwin-arm64	c40b27b11f580411e068f2fa6c1be7830a387c0bc47a94d1d37f32b054c5361d	https://github.com/starship/starship/releases/download/v1.26.0/starship-aarch64-apple-darwin.tar.gz	starship
+just	tools	1.58.0	linux-x86_64	4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d	https://github.com/casey/just/releases/download/1.58.0/just-1.58.0-x86_64-unknown-linux-musl.tar.gz	just
+just	tools	1.58.0	linux-aarch64	748237128c4c40cbdabc65e841d05ceba13cc23a91eaba395495894c1d9764df	https://github.com/casey/just/releases/download/1.58.0/just-1.58.0-aarch64-unknown-linux-musl.tar.gz	just
+just	tools	1.58.0	darwin-arm64	50ae3e996c974a0bf32ea7d10f495070df33f1b43e0616b2769e3d4821ed8f48	https://github.com/casey/just/releases/download/1.58.0/just-1.58.0-aarch64-apple-darwin.tar.gz	just
+shellcheck	tools	0.11.0	linux-x86_64	b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6	https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.gz	shellcheck
+shellcheck	tools	0.11.0	linux-aarch64	68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc	https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.aarch64.tar.gz	shellcheck
+shellcheck	tools	0.11.0	darwin-arm64	339b930feb1ea764467013cc1f72d09cd6b869ebf1013296ba9055ab2ffbd26f	https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.aarch64.tar.gz	shellcheck
+codex	tools	0.159.3	any	-	npm:@openai/codex	codex
+codex	tools	0.159.3	any	-	step:codex	codex

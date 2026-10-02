@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Runs the pinned Codex CLI with Bun and the private Codex home.
+set -euo pipefail
+# shellcheck source=shell/env.sh
+. "$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)/shell/env.sh"
+cli="$BUN_INSTALL/install/global/node_modules/@openai/codex/bin/codex.js"
+[[ -f "$cli" ]] || { printf 'Codex is not installed; run install.sh --tools codex\n' >&2; exit 1; }
+exec bun "$cli" "$@"

@@ -1,0 +1,33 @@
+# Interactive Zsh configuration, sourced from a block in ~/.zshrc when zsh is selected.
+[[ -o interactive && -z "${__bootstrap_zshrc:-}" ]] || return 0
+__bootstrap_zshrc=1
+
+. "${BOOTSTRAP_ROOT:-$HOME/.local/share/bootstrap}/repo/shell/env.sh"
+
+HISTFILE="$BOOTSTRAP_ROOT/private/zsh/history"
+HISTSIZE=10000
+SAVEHIST=10000
+setopt SHARE_HISTORY HIST_IGNORE_DUPS HIST_IGNORE_SPACE HIST_REDUCE_BLANKS
+setopt AUTO_CD AUTO_PUSHD PUSHD_IGNORE_DUPS
+
+# Vi keys, with prefix history search on the arrows and Ctrl+P/N.
+bindkey -v
+export KEYTIMEOUT=1
+autoload -U history-search-end
+zle -N history-beginning-search-backward-end history-search-end
+zle -N history-beginning-search-forward-end history-search-end
+bindkey '^[[A' history-beginning-search-backward-end
+bindkey '^[[B' history-beginning-search-forward-end
+bindkey '^P' history-beginning-search-backward-end
+bindkey '^N' history-beginning-search-forward-end
+
+autoload -Uz compinit && compinit -d "$BOOTSTRAP_ROOT/private/zsh/compdump"
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
+
+. "$BOOTSTRAP_ROOT/repo/shell/common.sh"
+command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
+command -v fzf >/dev/null && eval "$(fzf --zsh)"
+command -v starship >/dev/null && eval "$(starship init zsh)"
+
+if [[ -f "$HOME/.config/bootstrap/zshrc" ]]; then . "$HOME/.config/bootstrap/zshrc"; fi

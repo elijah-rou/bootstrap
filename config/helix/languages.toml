@@ -1,0 +1,8 @@
+# Only overrides of Helix's defaults. Servers are installed with ./install.sh --lsp.
+[language-server.basedpyright]
+command = "basedpyright-langserver"
+args = ["--stdio"]
+
+[[language]]
+name = "python"
+language-servers = ["basedpyright", "ruff"]

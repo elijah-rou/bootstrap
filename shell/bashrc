@@ -1,0 +1,19 @@
+# shellcheck shell=bash
+# Interactive Bash configuration, sourced from a block in ~/.bashrc or the login profile.
+[[ $- == *i* && -z "${__bootstrap_bashrc:-}" ]] || return 0
+__bootstrap_bashrc=1
+
+. "${BOOTSTRAP_ROOT:-$HOME/.local/share/bootstrap}/repo/shell/env.sh"
+
+HISTFILE="$BOOTSTRAP_ROOT/private/bash/history"
+HISTSIZE=10000
+HISTFILESIZE=10000
+HISTCONTROL=ignoreboth
+shopt -s histappend
+
+. "$BOOTSTRAP_ROOT/repo/shell/common.sh"
+command -v zoxide >/dev/null && eval "$(zoxide init bash)"
+command -v fzf >/dev/null && eval "$(fzf --bash)"
+command -v starship >/dev/null && eval "$(starship init bash)"
+
+if [[ -f "$HOME/.config/bootstrap/bashrc" ]]; then . "$HOME/.config/bootstrap/bashrc"; fi

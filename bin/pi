@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Runs the pinned Pi CLI with Bun and the private session directory.
+set -euo pipefail
+# shellcheck source=shell/env.sh
+. "$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)/shell/env.sh"
+cli="$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
+[[ -f "$cli" ]] || { printf 'Pi is not installed; run install.sh\n' >&2; exit 1; }
+# Pi handles management commands before it parses session options.
+case "${1:-}" in
+    install|remove|update|list|uninstall|config|auth) exec bun "$cli" "$@" ;;
+    *) exec bun "$cli" --session-dir "$PI_CODING_AGENT_SESSION_DIR" "$@" ;;
+esac
