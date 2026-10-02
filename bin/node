@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # `node` for `#!/usr/bin/env node` programs: Bun runs them in its Node mode (argv0 node).
-# Bun rejects Node's version flags, so they are answered here.
+# Bun's Node mode rejects the version flags and `-` (script on stdin), so those are mapped here.
 case "${1:-}" in
     -v|--version) exec bun -p process.version ;;
+    -) shift; exec bun run - "$@" ;;
 esac
 exec -a node bun "$@"
