@@ -27,7 +27,7 @@ curl, tar, gzip, and sha256sum or shasum. No sudo is needed for the core install
 - Records each change in `~/.local/share/bootstrap/state.tsv`.
 
 Rerunning `install.sh` converges: it updates to the pinned versions in `catalog.tsv` and
-reinstalls recorded selections.
+reinstalls recorded selections. `install.sh link` reapplies only the configuration, offline.
 
 ## Selections
 

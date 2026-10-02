@@ -30,4 +30,4 @@ command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
 command -v fzf >/dev/null && eval "$(fzf --zsh)"
 command -v starship >/dev/null && eval "$(starship init zsh)"
 
-if [[ -f "$HOME/.config/bootstrap/zshrc" ]]; then . "$HOME/.config/bootstrap/zshrc"; fi
+if [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap/zshrc" ]]; then . "${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap/zshrc"; fi

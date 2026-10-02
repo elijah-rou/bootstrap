@@ -16,4 +16,4 @@ command -v zoxide >/dev/null && eval "$(zoxide init bash)"
 command -v fzf >/dev/null && eval "$(fzf --bash)"
 command -v starship >/dev/null && eval "$(starship init bash)"
 
-if [[ -f "$HOME/.config/bootstrap/bashrc" ]]; then . "$HOME/.config/bootstrap/bashrc"; fi
+if [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap/bashrc" ]]; then . "${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap/bashrc"; fi

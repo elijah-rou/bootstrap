@@ -1,5 +1,5 @@
 // Prints BASE deep-merged with OVERLAY (when that file exists). Objects merge; other values replace.
-// Usage: bun merge-json BASE OVERLAY
+// Usage: node merge-json.mjs BASE OVERLAY
 import { existsSync, readFileSync } from "node:fs";
 
 const [base, overlay] = process.argv.slice(2);

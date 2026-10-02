@@ -24,6 +24,7 @@ die() { printf '[bootstrap] error: %s\n' "$*" >&2; exit 1; }
 usage() {
     local group
     printf '%s\n' 'Usage: ./install.sh [--languages NAME...] [--lsp NAME...] [--tools NAME...]' \
+        '       ./install.sh link        relink configuration only; no downloads' \
         '       ./install.sh doctor' \
         '       ./install.sh uninstall [--yes]' \
         '' 'Install converges core tools, configuration, and every recorded selection.'
@@ -400,8 +401,9 @@ configure_apps() {
 }
 
 # Pi state lives in the private root; only its router configuration sits in XDG config.
+# With "offline", Pi packages and the Herdr integration are left as they are.
 configure_pi() {
-    local agent="$PRIVATE/pi/agent" directory pattern source file overlay
+    local mode="${1:-}" agent="$PRIVATE/pi/agent" directory pattern source file overlay
     (umask 077 && mkdir -p "$PRIVATE/pi/sessions" "$agent/extensions/subagent")
     link_private "$ROOT/repo/bin/pi" "$TOOLS/bin/pi"
     link_private "$ROOT/repo/bin/pi-workspace" "$TOOLS/bin/pi-workspace"
@@ -436,17 +438,19 @@ LINKS
     # Pi rewrites settings at runtime, so they are rendered copies merged with optional overlays.
     for file in settings models; do
         overlay="$CONFIG_HOME/bootstrap/pi-$file.json"
-        bun "$REPO/bin/merge-json" "$REPO/pi/$file.json" "$overlay" >"$ROOT/tmp/pi-$file.json"
+        node "$REPO/bin/merge-json.mjs" "$REPO/pi/$file.json" "$overlay" >"$ROOT/tmp/pi-$file.json" ||
+            die "could not render Pi $file.json; a Node-compatible runtime is required"
         if ! cmp -s "$ROOT/tmp/pi-$file.json" "$agent/$file.json"; then
             if [[ -f "$agent/$file.json" ]]; then cp "$agent/$file.json" "$agent/$file.json.bak"; fi
             (umask 077 && cp "$ROOT/tmp/pi-$file.json" "$agent/$file.json")
         fi
     done
 
+    [[ "$mode" != offline ]] || return 0
     herdr integration install pi >/dev/null
     while IFS= read -r source; do
         pi install "$source" >/dev/null || { warn "Pi package failed: $source"; return 1; }
-    done < <(bun -e 'for (const p of require(process.argv[1]).packages ?? []) console.log(typeof p === "string" ? p : p.source)' "$agent/settings.json")
+    done < <(node -e 'for (const p of require(process.argv[1]).packages ?? []) console.log(typeof p === "string" ? p : p.source)' "$agent/settings.json")
 }
 
 # ---------------------------------------------------------------- commands
@@ -469,12 +473,38 @@ preflight() {
     if [[ "$PLATFORM" == linux-* ]] && ! getconf GNU_LIBC_VERSION >/dev/null 2>&1; then die "Linux hosts need glibc"; fi
 }
 
+# Creates the root, takes the lock, and points ROOT/repo at this checkout.
+prepare_root() {
+    local root_parents path
+    preflight
+    root_parents="$(absent_dirs "$(dirname "$ROOT")")"
+    acquire_lock
+    mkdir -p "$TOOLS/bin" "$ROOT/tmp"
+    (umask 077 && mkdir -p "$PRIVATE")
+    chmod 0700 "$PRIVATE"
+    touch "$STATE"
+    while IFS= read -r path; do
+        if [[ -n "$path" ]]; then record dir "$path"; fi
+    done <<<"$root_parents"
+    ln -sfn "$REPO" "$ROOT/repo"
+    load_environment
+}
+
+# Relinks configuration without downloading or installing anything.
+cmd_link() {
+    prepare_root
+    configure_shell
+    configure_apps
+    configure_pi offline
+    info "configuration linked"
+}
+
 install_selection() {
     if install_name "$2"; then record select "$1" "$2"; else FAILURES="$FAILURES $2"; fi
 }
 
 cmd_install() {
-    local group='' name requested='' root_parents
+    local group='' name requested=''
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --languages|-l) group=languages ;;
@@ -488,23 +518,12 @@ cmd_install() {
         esac
         shift
     done
-    preflight
-    root_parents="$(absent_dirs "$(dirname "$ROOT")")"
-    acquire_lock
-    mkdir -p "$TOOLS/bin" "$ROOT/tmp"
-    (umask 077 && mkdir -p "$PRIVATE")
-    chmod 0700 "$PRIVATE"
-    touch "$STATE"
-    while IFS= read -r name; do
-        if [[ -n "$name" ]]; then record dir "$name"; fi
-    done <<<"$root_parents"
-    ln -sfn "$REPO" "$ROOT/repo"
-    load_environment
-    # Bun is the only JavaScript runtime; this covers `#!/usr/bin/env node` entrypoints.
-    link_private "$ROOT/repo/bin/node" "$TOOLS/bin/node"
+    prepare_root
 
     for name in $(core_names); do
         if install_name "$name"; then :; elif [[ $? == 2 ]]; then warn "continuing without $name"; else FAILURES="$FAILURES $name"; fi
+        # Bun is the only JavaScript runtime; this covers `#!/usr/bin/env node` entrypoints.
+        if [[ "$name" == bun ]]; then link_private "$ROOT/repo/bin/node" "$TOOLS/bin/node"; fi
     done
     [[ -z "$FAILURES" ]] || die "core tools failed:$FAILURES"
     configure_shell
@@ -600,6 +619,7 @@ cmd_uninstall() {
 
 case "${1:-}" in
     doctor) shift; [[ $# -eq 0 ]] || die "doctor takes no arguments"; cmd_doctor ;;
+    link) shift; [[ $# -eq 0 ]] || die "link takes no arguments"; cmd_link ;;
     uninstall) shift; cmd_uninstall "$@" ;;
     ''|-*) cmd_install "$@" ;;
     *) usage >&2; exit 2 ;;
