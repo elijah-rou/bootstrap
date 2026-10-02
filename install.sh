@@ -348,11 +348,16 @@ step_elixirls() {
 }
 
 step_codex() {
-    local name skill
-    link_private "$ROOT/repo/bin/codex" "$TOOLS/bin/codex" &&
-        link_private "$ROOT/repo/codex/AGENTS.md" "$PRIVATE/codex/AGENTS.md" &&
-        link_private "$ROOT/repo/codex/native-tools.md" "$PRIVATE/codex/native-tools.md" || return 1
-    [[ -e "$PRIVATE/codex/config.toml" ]] || cp "$REPO/codex/config.toml" "$PRIVATE/codex/config.toml" || return 1
+    local name skill file
+    link_private "$ROOT/repo/bin/codex" "$TOOLS/bin/codex" || return 1
+    for file in AGENTS.md native-tools.md; do
+        if [[ "$CODEX_HOME" == "$ROOT"/* ]]; then link_private "$ROOT/repo/codex/$file" "$CODEX_HOME/$file"
+        else link "$ROOT/repo/codex/$file" "$CODEX_HOME/$file"; fi || return 1
+    done
+    if [[ ! -e "$CODEX_HOME/config.toml" ]]; then
+        own "$CODEX_HOME/config.toml"
+        cp "$REPO/codex/config.toml" "$CODEX_HOME/config.toml" || return 1
+    fi
     # Codex discovers skills in the shared agents directory, outside the private root.
     own "$HOME/.agents"
     while IFS= read -r name; do

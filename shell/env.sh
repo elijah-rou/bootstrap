@@ -16,7 +16,9 @@ export UV_PYTHON_BIN_DIR="$_tools/bin" UV_TOOL_DIR="$_tools/uv-tools" UV_TOOL_BI
 export MIX_HOME="$_private/mix" HEX_HOME="$_private/hex" MIX_INSTALL_DIR="$_tools/mix-install"
 
 export PI_CODING_AGENT_DIR="$_private/pi/agent" PI_CODING_AGENT_SESSION_DIR="$_private/pi/sessions"
-export CODEX_HOME="$_private/codex" GH_CONFIG_DIR="$_private/gh"
+# An explicit CODEX_HOME (for example a workstation's existing ~/.codex) is kept; uninstall then
+# removes only the links bootstrap placed there.
+export CODEX_HOME="${CODEX_HOME:-$_private/codex}" GH_CONFIG_DIR="$_private/gh"
 export TMUX_TMPDIR="$_private/tmux" LESSHISTFILE="$_private/less/history" _ZO_DATA_DIR="$_private/zoxide"
 export STARSHIP_CONFIG="$BOOTSTRAP_ROOT/repo/config/starship.toml" STARSHIP_CACHE="$_private/cache/starship"
 export RIPGREP_CONFIG_PATH="$BOOTSTRAP_ROOT/repo/config/ripgrep"
