@@ -405,6 +405,18 @@ step_elixirls() {
         link_private "$package/language_server.sh" "$TOOLS/bin/elixir-ls"
 }
 
+# Agents discover every entry in a skill directory, so a skill link never moves an existing entry aside
+# there: one bootstrap does not own is kept, and stale links into a bootstrap root are replaced.
+link_skill() {
+    local source="$1" target="$2"
+    if [[ -L "$target" && "$(readlink "$target")" == "$ROOT/"* ]] && ! recorded link "$target"; then rm -f "$target"; fi
+    if [[ ( -e "$target" || -L "$target" ) ]] && ! recorded link "$target"; then
+        warn "keeping existing skill $target"
+        return 0
+    fi
+    if [[ "$target" == "$ROOT"/* ]]; then link_private "$source" "$target"; else link "$source" "$target"; fi
+}
+
 # Links inside the root need no record; anything outside it (an existing ~/.codex or ~/.claude) does.
 place() {
     if [[ "$2" == "$ROOT"/* ]]; then link_private "$1" "$2"; else link "$1" "$2"; fi
@@ -462,7 +474,7 @@ step_pi() {
 }
 
 step_codex() {
-    local kit="$TOOLS/agent-kit" name skill file
+    local kit="$TOOLS/agent-kit" name file
     ensure_agent_kit || return 1
     link_private "$ROOT/repo/bin/codex" "$TOOLS/bin/codex" || return 1
     if [[ "$CODEX_HOME" != "$ROOT"/* ]]; then make_dirs "$CODEX_HOME"; else mkdir -p "$CODEX_HOME"; fi
@@ -473,9 +485,7 @@ step_codex() {
     fi
     # Codex discovers skills in the shared agents directory, outside the private root.
     while IFS= read -r name; do
-        skill="$HOME/.agents/skills/$name"
-        if [[ -e "$skill" && ! -L "$skill" ]]; then warn "keeping existing skill $skill"; continue; fi
-        link "$kit/skills/$name" "$skill" || return 1
+        if [[ -n "$name" ]]; then link_skill "$kit/skills/$name" "$HOME/.agents/skills/$name" || return 1; fi
     done <"$kit/codex/skills.txt"
 }
 
@@ -488,10 +498,10 @@ step_claude() {
     if [[ "$home" != "$ROOT"/* ]]; then make_dirs "$home/skills"; else (umask 077 && mkdir -p "$home/skills"); fi
     place "$kit/claude/CLAUDE.md" "$home/CLAUDE.md" || return 1
     while IFS= read -r entry; do
-        if [[ -n "$entry" ]]; then place "$kit/$entry" "$home/skills/${entry##*/}" || return 1; fi
+        if [[ -n "$entry" ]]; then link_skill "$kit/$entry" "$home/skills/${entry##*/}" || return 1; fi
     done <"$kit/claude/skills.txt"
     # Claude Code discovers the Mod's plugin manifest under its skills directory.
-    place "$kit/claude/mods/trial-tools" "$home/skills/trial-tools" || return 1
+    link_skill "$kit/claude/mods/trial-tools" "$home/skills/trial-tools" || return 1
     render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$home/settings.json"
 }
 
