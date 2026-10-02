@@ -89,6 +89,8 @@ package_install() {
     package_list >"$ROOT/package-baseline" || return 1
     # systemd-tmpfiles, run by some package hooks (Arch), creates /root/.ssh; it is removed only if empty.
     if [[ ! -e "$HOME/.ssh" ]]; then record dir "$HOME/.ssh"; fi
+    # Homebrew keeps trust state in ~/.homebrew, which cannot be relocated.
+    if [[ "$BACKEND" == brew ]]; then own "$HOME/.homebrew"; fi
     case "$BACKEND" in
         apt)
             # Only names in this transaction count, not packages another process adds meanwhile.
