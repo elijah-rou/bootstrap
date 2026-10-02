@@ -77,7 +77,7 @@ Install reads optional files from `~/.config/bootstrap/`: `env.sh`, `bashrc`, `z
 
 - `scripts/pin NAME VERSION` moves a catalog entry to a new version and records its checksums.
 - `scripts/validate` runs static checks, the offline link and uninstall edge cases, and the Pi
-  configuration tests (needs Node, shellcheck, and Python).
+  configuration tests (needs Bun, shellcheck, and Python).
 - `tests/container.sh IMAGE root|user [install arguments...]` runs the install, rerun, doctor,
   and uninstall round-trip in a container and fails if HOME or the package list changed.
   `tests/roundtrip.sh` does the same on the current machine for a disposable account.

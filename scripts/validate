@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Static checks and Pi configuration tests. The install round-trip is tests/container.sh.
+# Static checks and Pi configuration tests (needs Bun, shellcheck, and Python). The install round-trip is
+# tests/container.sh.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -23,6 +24,5 @@ awk -F '\t' '
 
 bash tests/uninstall_edges.sh
 
-pi_tests=()
-while IFS= read -r -d '' file; do pi_tests+=("$file"); done < <(find pi/tests -maxdepth 1 -type f -name '*.test.mjs' -print0 | sort -z)
-node --test "${pi_tests[@]}"
+# Pi configuration contract tests; Bun runs their node:test suites.
+bun test pi/tests
