@@ -9,13 +9,9 @@ concurrency:
 permissions:
   contents: read
 jobs:
-  validate:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -25,132 +21,38 @@ jobs:
           python-version: '3.13'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: "24.21.0"
-      - uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7
-        with:
-          version: v0.12.5
-          neovim: true
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: '1.4.2'
-      - name: Install test tools on Linux
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes build-essential fd-find ripgrep shellcheck zsh && bun install --global --exact basedpyright@1.40.1
-      - name: Install test tools on macOS
-        if: runner.os == 'macOS'
-        run: |
-          brew list fd || brew install fd
-          brew list ripgrep || brew install ripgrep
-          brew list shellcheck || brew install shellcheck
-          brew list coreutils || brew install coreutils
-          bun install --global --exact basedpyright@1.40.1
-          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
-      - name: Prepare cold locked Neovim and standalone LSP fixtures
-        run: |
-          fixture="$RUNNER_TEMP/bootstrap-neovim-runtime"
-          bash tests/prepare_neovim_runtime.sh "$fixture"
-          {
-            echo "NVIM_PLUGIN_ROOT=$fixture/home/.local/share/bootstrap-nvim/lazy"
-            echo "NVIM_SITE_ROOT=$fixture/home/.local/share/bootstrap-nvim/site"
-            echo "RUST_ANALYZER_TEST_BIN=$fixture/bin/rust-analyzer"
-            echo "NVIM_BUNDLED_RUNTIME=1"
-          } >> "$GITHUB_ENV"
-          echo "$fixture/home/.local/share/bootstrap/tools/bin" >> "$GITHUB_PATH"
-      - name: Prepare isolated migration runtime
-        env:
-          BOOTSTRAP_NATIVE_DISPOSABLE: '1'
-        run: |
-          fixture="$RUNNER_TEMP/bootstrap-migration-runtime"
-          bash tests/prepare_migration_runtime.sh "$fixture"
-          echo "BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE=$fixture" >> "$GITHUB_ENV"
-          echo "$fixture/home/tools/bin" >> "$GITHUB_PATH"
-      - run: ./scripts/validate
-      - name: Verified official binary and Pi entrypoint smoke
-        run: bash tests/native_artifact_smoke.sh --pi
-      - name: Installed TypeScript server through bundled Neovim
-        run: bash tests/native_selected_lsp_smoke.sh
-      - name: Disposable toolchain cache and interpreter smoke
-        run: bash tests/native_toolchain_smoke.sh
+          node-version: '24.21.0'
+      - run: sudo apt-get update && sudo apt-get install --yes shellcheck zsh
+      - run: scripts/validate
 
-  native-runtime:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {container: 'ubuntu:24.04', runner: ubuntu-latest}
-          - {container: 'debian:bookworm', runner: ubuntu-latest}
-          - {container: 'fedora:latest', runner: ubuntu-latest}
-          - {container: 'archlinux:latest', runner: ubuntu-latest}
-          - {container: 'ubuntu:24.04', runner: ubuntu-24.04-arm}
-          - {container: 'fedora:latest', runner: ubuntu-24.04-arm}
-    runs-on: ${{ matrix.runner }}
-    container: ${{ matrix.container }}
-    timeout-minutes: 25
+          - { image: 'ubuntu:24.04', account: user, args: '' }
+          - { image: 'ubuntu:24.04', account: root, args: '--languages rust go python typescript zig c --lsp rust-analyzer gopls basedpyright ruff typescript-language-server bash-language-server zls clangd --tools zsh tmux starship just shellcheck codex' }
+          - { image: 'debian:13', account: user, args: '' }
+          - { image: 'fedora:42', account: root, args: '--languages c --tools zsh tmux' }
+          - { image: 'archlinux:latest', account: root, args: '--languages c --tools zsh tmux' }
     steps:
-      - name: Install gate prerequisites
-        run: |
-          if command -v apt-get; then apt-get update && apt-get install -y --no-install-recommends ca-certificates git curl tar xz-utils procps bash; fi
-          if command -v dnf; then dnf install -y --setopt=install_weak_deps=False ca-certificates git curl tar xz procps-ng bash; fi
-          if command -v pacman; then pacman -Syu --noconfirm ca-certificates git curl tar xz procps-ng bash; fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Clean native runtime and cleanup journey
-        env:
-          BOOTSTRAP_NATIVE_DISPOSABLE: "1"
-        run: |
-          export HOME=/root USER=root
-          bash tests/native_runtime_journey.sh
-      - name: Verified official binary fallback smoke
-        run: bash tests/native_artifact_smoke.sh --node
+      - run: tests/container.sh '${{ matrix.image }}' '${{ matrix.account }}' ${{ matrix.args }}
 
-  runtime:
-    runs-on: ubuntu-latest
+  macos:
+    runs-on: macos-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: '3.13'
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: "24.21.0"
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        with:
-          bun-version: "1.4.2"
-      - name: Install test tools
-        run: sudo apt-get update && sudo apt-get install --yes fd-find ripgrep shellcheck zsh
-      - name: Install isolated pinned runtime dependencies
+      - name: Round-trip in a disposable HOME
         run: |
-          source ./install.sh
-          export BUN_INSTALL="$RUNNER_TEMP/bootstrap-test-bun"
-          bun install --global --ignore-scripts \
-            "$PI_CLI_PACKAGE@$PI_CLI_VERSION" pi-web-access@0.35.0 @openai/codex@0.159.3
-          runtime="$BUN_INSTALL/install/global/node_modules"
-          subagents="$RUNNER_TEMP/bootstrap-test-subagents"
-          read -r _ repository revision <<< "$(read_pi_subagents_package pi/settings.json)"
-          git init "$subagents"
-          git -C "$subagents" remote add origin "https://$repository.git"
-          git -C "$subagents" fetch --depth=1 origin "$revision"
-          git -C "$subagents" checkout --detach FETCH_HEAD
-          bun install --ignore-scripts --cwd "$subagents"
-          echo "$BUN_INSTALL/bin" >> "$GITHUB_PATH"
-          {
-            echo "PI_BASH_OPERATIONS_TEST_RUNTIME_PATH=$runtime/@earendil-works/pi-coding-agent/dist/core/tools/bash.js"
-            echo "PI_SKILLS_TEST_RUNTIME_PATH=$runtime/@earendil-works/pi-coding-agent/dist/core/skills.js"
-            echo "PI_FAST_RUNTIME_SOURCE=$runtime/@earendil-works/pi-coding-agent"
-            echo "PI_WEB_ACCESS_SSRF_MODULE=$runtime/pi-web-access/ssrf-protection.ts"
-            echo "PI_SUBAGENTS_TEST_RUNTIME_SOURCE=$subagents"
-          } >> "$GITHUB_ENV"
-      - name: Prepare isolated migration runtime
-        env:
-          BOOTSTRAP_NATIVE_DISPOSABLE: '1'
-        run: |
-          fixture="$RUNNER_TEMP/bootstrap-migration-runtime"
-          bash tests/prepare_migration_runtime.sh "$fixture"
-          echo "BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE=$fixture" >> "$GITHUB_ENV"
-          echo "$fixture/home/tools/bin" >> "$GITHUB_PATH"
-      - name: Validate installed Pi and Codex consumers without authentication
-        run: ./scripts/validate --runtime
+          mkdir "$RUNNER_TEMP/home"
+          env -i HOME="$RUNNER_TEMP/home" USER="$USER" TERM=xterm \
+            PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin \
+            /bin/bash tests/roundtrip.sh "$PWD" --languages go --lsp gopls

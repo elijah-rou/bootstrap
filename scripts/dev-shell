@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-profile="$HOME/.config/dotfiles/bare-env.sh"
-[[ -f "$profile" ]] || { printf 'Native bootstrap profile missing; rerun ./install.sh.\n' >&2; exit 1; }
-# shellcheck source=scripts/bare-env.sh
-source "$profile"
-[[ -x "$DOTFILES_BARE_ROOT/bin/pi" || -x "$BUN_INSTALL/bin/pi" ]] || { printf 'Native bootstrap runtime is incomplete; rerun ./install.sh.\n' >&2; exit 1; }
-[[ $# -gt 0 ]] || set -- bash -l
-exec "$@"

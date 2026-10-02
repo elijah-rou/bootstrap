@@ -74,16 +74,16 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
 
 ## Slices
 
-1. [ ] Spine: `install.sh` with root layout, `state.tsv`, lock, catalog downloads for core
+1. [x] Spine: `install.sh` with root layout, `state.tsv`, lock, catalog downloads for core
    binaries, Bun plus node shim, Pi plus Pi config links, shell blocks, doctor, uninstall purge
    including gh logout. Acceptance: round-trip test passes in Ubuntu containers with and without
    sudo, leaving HOME and the package list identical to the baseline.
-2. [ ] Selections: languages, LSPs, tools from the catalog; system-package path with diff
+2. [x] Selections: languages, LSPs, tools from the catalog; system-package path with diff
    recording. Acceptance: round-trip with selections on Ubuntu, Fedora, Arch; macOS install and
    uninstall on the workstation in a disposable HOME.
-3. [ ] Bun-only gate: real Pi session with extensions and packages, Codex, and Node-shebang LSPs
+3. [x] Bun-only gate: real Pi session with extensions and packages, Codex, and Node-shebang LSPs
    (basedpyright, bash-language-server, typescript-language-server) under the Bun shim.
-4. [ ] Delete the old machinery: `bootstrap.sh`, `configure.sh`, `scripts/state-helper.mjs`,
+4. [x] Delete the old machinery: `bootstrap.sh`, `configure.sh`, `scripts/state-helper.mjs`,
    migration helpers, snapshot ownership, readiness state, Neovim bundle, old tests, completed
    plans. Rewrite README and CI around the round-trip test.
 5. [ ] Dotfiles: move Neovim, Headroom launcher, and other optional personal setup; adopt the
@@ -91,12 +91,19 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
 6. [ ] Workstation cutover with the owner present: `migration retire --yes` with the old code,
    run the new installer, remove `install.json`, `migration.json`, and the old snapshots.
 
+## Evidence (2026-10-02, branch `simplify`)
+
+- Round-trip (install, rerun, doctor, signed-in gh, uninstall, HOME and package diff) passed on
+  ubuntu:24.04 and debian:13 without sudo, ubuntu:24.04 as root with every selection, fedora:42 as
+  root, and macOS with a disposable HOME. Elixir and ElixirLS passed in an earlier Ubuntu run.
+- Arch could not run locally: Bun `install` segfaults under amd64 emulation on Apple Silicon. CI
+  runs it natively.
+- Bun gate: Pi 1.0.0 with all extensions and packages reached a provider request under Bun;
+  basedpyright, typescript-language-server, and bash-language-server run through the `node`
+  wrapper. Interactive Pi TUI was not exercised.
+
 ## Open items
 
-- Whether `pi-workspace` (piw), `pi-headroom`, and `modelusage` belong with Pi config here or in
-  dotfiles. Default: piw stays (Pi workflow), Headroom and modelusage move.
-- Helix runtime lookup through a symlinked `hx`; set `HELIX_RUNTIME` if needed.
-- Herdr: pin its release binary instead of the install script.
-- `herdr/config.toml` sets `default_shell = "zsh"`; must work when zsh is not selected.
-- Pi config links: whether Pi accepts extra extension/skill directories in settings, which would
-  replace per-file link syncing.
+- Resolved: piw stays here; `pi-headroom` and `modelusage` move to dotfiles. Helix finds its
+  runtime through the symlink. Herdr is pinned by binary. Herdr no longer forces zsh.
+- Pi config still uses per-file links inside the private root; they need no state records.

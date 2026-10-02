@@ -1,144 +1,29 @@
 #!/usr/bin/env bash
+# Static checks and Pi configuration tests. The install round-trip is tests/container.sh.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-[[ $# -le 1 ]] || { printf 'Usage: %s [--runtime]\n' "$0" >&2; exit 2; }
-case "${1:-}" in
-    '') ;;
-    --runtime)
-        for variable in PI_BASH_OPERATIONS_TEST_RUNTIME_PATH PI_SKILLS_TEST_RUNTIME_PATH PI_FAST_RUNTIME_SOURCE PI_WEB_ACCESS_SSRF_MODULE PI_SUBAGENTS_TEST_RUNTIME_SOURCE; do
-            [[ -n "${!variable:-}" && -e "${!variable}" ]] || {
-                printf '%s must name an installed runtime path\n' "$variable" >&2; exit 2;
-            }
-        done
-        command -v bun >/dev/null || { printf 'Runtime checks require Bun\n' >&2; exit 2; }
-        command -v codex >/dev/null || { printf 'Runtime checks require Codex\n' >&2; exit 2; }
-        ;;
-    *) printf 'Usage: %s [--runtime]\n' "$0" >&2; exit 2 ;;
-esac
-[[ -n "${BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE:-}" && -d "$BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE/home/tools" ]] || {
-    printf 'Build a real fixture with tests/prepare_migration_runtime.sh ABSENT_DIRECTORY and set BOOTSTRAP_MIGRATION_RUNTIME_FIXTURE\n' >&2
-    exit 2
-}
+
 git diff --check
-git diff --cached --check
 python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
-shell_files=(bootstrap.sh configure.sh install.sh scripts/validate tests/bare_install_test.sh tests/shell_history_test.sh tests/languages_test.sh tests/tools_test.sh tests/language_release_test.sh tests/native_package_test.sh tests/native_artifact_smoke.sh tests/native_runtime_journey.sh tests/native_toolchain_smoke.sh tests/native_selected_lsp_smoke.sh tests/native_candidate_probe.sh tests/real_nvim_lsp_test.sh tests/prepare_neovim_runtime.sh tests/prepare_migration_runtime.sh tests/bundled_neovim_repair_test.sh tests/bundled_neovim_fixture.sh tests/uninstall_test.sh tests/neovim_config_test.sh tests/bundled_neovim_runtime_test.sh tests/codex_link_test.sh tests/pi_package_test.sh scripts/lib/install/*.sh scripts/lib/shell-open.sh scripts/dev-shell scripts/pi-headroom scripts/pi-workspace scripts/pi-owned scripts/codex-owned scripts/migration-runtime)
+
+shell_files=(install.sh bin/pi bin/codex bin/node bin/pi-workspace shell/env.sh shell/bashrc shell/common.sh
+    shell/open.sh tests/roundtrip.sh tests/container.sh scripts/pin scripts/validate)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
-for file in zshrc zshenv zprofile; do zsh -n "$file"; done
+if command -v zsh >/dev/null; then zsh -n shell/zshrc; fi
 shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"
-python3 - <<'PY'
-import json, pathlib, re, tomllib
-for path in pathlib.Path('.').rglob('*'):
-    if '.git' in path.parts or not path.is_file():
-        continue
-    if path.suffix == '.json': json.loads(path.read_text())
-    if path.suffix == '.toml': tomllib.loads(path.read_text())
-root = pathlib.Path.cwd()
-settings = json.loads((root / "pi" / "settings.json").read_text(encoding="utf-8"))
-for package in settings.get("packages", []):
-    if package.startswith("npm:"):
-        assert re.fullmatch(r"npm:(?:@[^/@]+/)?[^@/]+@\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", package), f"mutable npm package: {package}"
-    elif package.startswith("git:"):
-        assert re.search(r"@[0-9a-f]{40}$", package), f"mutable git package: {package}"
-    else:
-        raise AssertionError(f"unsupported executable package source: {package}")
 
-skill_names = set()
-for path in sorted((root / "pi" / "skills").glob("*/SKILL.md")):
-    text = path.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    assert lines and lines[0] == "---", f"missing skill frontmatter: {path}"
-    try:
-        frontmatter_end = lines.index("---", 1)
-    except ValueError as error:
-        raise AssertionError(f"unterminated skill frontmatter: {path}") from error
+# Catalog rows: seven fields, and every download pinned by sha256.
+awk -F '\t' '
+    /^#/ || NF == 0 { next }
+    NF != 7 { printf "catalog.tsv:%d: expected 7 fields, found %d\n", NR, NF; bad = 1 }
+    $6 ~ /^https:\/\// && $5 !~ /^[0-9a-f]{64}$/ { printf "catalog.tsv:%d: download without sha256\n", NR; bad = 1 }
+    END { exit bad }
+' catalog.tsv
+while IFS= read -r name; do
+    [[ -f "pi/skills/$name/SKILL.md" ]] || { printf 'codex/skills.txt names a missing skill: %s\n' "$name" >&2; exit 1; }
+done <codex/skills.txt
 
-    fields = {}
-    for line in lines[1:frontmatter_end]:
-        if not line or line[0].isspace() or ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        fields[key.strip()] = value.strip().strip('"\'')
-
-    name = fields.get("name", "")
-    description = fields.get("description", "")
-    assert re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name), f"invalid skill name: {path}"
-    assert len(name) <= 64, f"skill name exceeds 64 characters: {path}"
-    assert name == path.parent.name, f"skill name does not match directory: {path}"
-    assert name not in skill_names, f"duplicate skill name: {name}"
-    assert description, f"missing skill description: {path}"
-    assert len(description) <= 1024, f"skill description exceeds 1024 characters: {path}"
-    if "disable-model-invocation" in fields:
-        assert fields["disable-model-invocation"] in {"true", "false"}, f"invalid disable-model-invocation: {path}"
-
-    for reference in re.findall(r"`(references/[^`]+)`", text):
-        assert (path.parent / reference).is_file(), f"missing skill reference {reference}: {path}"
-    skill_names.add(name)
-
-codex_skills = (root / "codex/skills.txt").read_text(encoding="utf-8").splitlines()
-assert codex_skills, "empty Codex skill export manifest"
-assert len(codex_skills) == len(set(codex_skills)), "duplicate Codex skill export"
-assert set(codex_skills) <= skill_names, "Codex export names an unavailable skill"
-print("structured config and skill parsing passed")
-PY
-bash tests/shell_history_test.sh
-bash tests/bare_install_test.sh
-bash tests/pi_install_test.sh
-bash tests/languages_test.sh
-bash tests/tools_test.sh
-bash tests/language_release_test.sh
-bash tests/native_package_test.sh
-node --test tests/writer_probe_test.mjs
-bash tests/native_candidate_probe.sh
-python3 tests/native_bootstrap_test.py
-python3 tests/native_corrections_test.py
-python3 tests/selection_metadata_test.py
-bash tests/uninstall_test.sh
-bash tests/neovim_config_test.sh
-(
-    neovim_temporary="$(mktemp -d)"
-    trap 'rm -rf "$neovim_temporary"' EXIT
-    mkdir "$neovim_temporary/real"
-    ln -s "$neovim_temporary/real" "$neovim_temporary/alias"
-    TMPDIR="$neovim_temporary/alias" python3 tests/bundled_neovim_test.py
-)
-if command -v nvim >/dev/null; then
-    (
-        cd neovim/config
-        nvim --headless -u NONE -i NONE -l tests/parser-ownership.lua
-        nvim --headless -u NONE -i NONE -l tests/file-picker-keymap.lua
-        nvim --headless -u NONE -i NONE -l tests/remote-clipboard.lua
-        nvim --headless -u NONE -i NONE -l tests/profile.lua
-        NVIM_BUNDLED_RUNTIME=0 nvim --headless -u NONE -i NONE -l tests/leetcode_mode.lua
-    )
-else
-    printf 'SKIP bundled Neovim Lua checks (nvim unavailable)\n'
-fi
-if [[ "${NVIM_BUNDLED_RUNTIME:-0}" == 1 ]]; then
-    bash tests/bundled_neovim_runtime_test.sh
-fi
-python3 tests/configure_contract_test.py
-python3 tests/snapshot_upgrade_test.py
-python3 tests/migration_capacity_test.py
-python3 tests/migration_lifecycle_test.py
-bash tests/codex_link_test.sh
-bash tests/pi_package_test.sh
-python3 tests/codex_link_edges_test.py
-python3 tests/control_loop_template_test.py
-python3 tests/bootstrap_test.py
-python3 tests/release_pin_test.py
-python3 tests/herdr_install_test.py
-python3 tests/shell_open_test.py
-python3 tests/modelusage_test.py
-node --experimental-transform-types --test tests/lsp_test.mjs
-if command -v basedpyright-langserver >/dev/null && command -v nvim >/dev/null; then bash tests/real_nvim_lsp_test.sh; else printf 'SKIP real Neovim LSP gate (BasedPyright/Neovim unavailable)\n'; fi
 pi_tests=()
-while IFS= read -r -d '' pi_test; do
-    pi_tests+=("$pi_test")
-done < <(find pi/tests -maxdepth 1 -type f -name '*.test.mjs' -print0 | sort -z)
+while IFS= read -r -d '' file; do pi_tests+=("$file"); done < <(find pi/tests -maxdepth 1 -type f -name '*.test.mjs' -print0 | sort -z)
 node --test "${pi_tests[@]}"
-if [[ "${1:-}" == --runtime ]]; then
-    python3 tests/codex_runtime_test.py
-fi
-printf 'Validation passed.\n'

@@ -203,10 +203,10 @@ test("configured source resolves explicit roles and public workflow requests", {
 });
 
 test("managed gitconfig activates the stable global excludes path in unrelated repositories", () => {
-	const gitconfigPath = new URL("../../gitconfig", import.meta.url).pathname;
+	const gitconfigPath = new URL("../../config/gitconfig", import.meta.url).pathname;
 	const gitconfig = readFileSync(gitconfigPath, "utf8");
 	assert.match(gitconfig, /excludesFile\s*=\s*~\/\.config\/git\/ignore/);
-	const excludes = readFileSync(new URL("../../gitignore_global", import.meta.url), "utf8");
+	const excludes = readFileSync(new URL("../../config/gitignore", import.meta.url), "utf8");
 	assert.match(excludes, /^\.pi-subagents\/$/m);
 
 	const sandbox = mkdtempSync(join(tmpdir(), "dotfiles-git-excludes-"));

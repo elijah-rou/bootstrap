@@ -36,6 +36,11 @@ cp -R "$source_dir" "$checkout"
 "$checkout/install.sh" doctor
 bash -ic 'set -e; for command in pi hx herdr rg fd fzf bat jq delta gh zoxide node; do command -v "$command" >/dev/null; done; pi --version; hx --version; node -e "console.log(process.versions.bun)"'
 
+# A signed-in gh (file storage) must be signed out without stalling uninstall.
+bash -c '. "$HOME/.local/share/bootstrap/repo/shell/env.sh"
+printf "github.com:\n    oauth_token: gho_roundtrip\n    user: roundtrip\n    git_protocol: https\n" >"$GH_CONFIG_DIR/hosts.yml"
+gh auth status --hostname github.com >/dev/null 2>&1 || true'
+
 "$checkout/install.sh" uninstall --yes
 rm -rf "$checkout"
 snapshot >"$work/after"
