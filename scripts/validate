@@ -8,7 +8,7 @@ python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
 
 shell_files=(install.sh bin/pi bin/codex bin/node bin/pi-workspace shell/env.sh shell/bashrc shell/common.sh
-    shell/open.sh tests/roundtrip.sh tests/container.sh scripts/pin scripts/validate)
+    shell/open.sh tests/roundtrip.sh tests/container.sh tests/uninstall_edges.sh scripts/pin scripts/validate)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
 if command -v zsh >/dev/null; then zsh -n shell/zshrc; fi
 shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"
@@ -23,6 +23,8 @@ awk -F '\t' '
 while IFS= read -r name; do
     [[ -f "pi/skills/$name/SKILL.md" ]] || { printf 'codex/skills.txt names a missing skill: %s\n' "$name" >&2; exit 1; }
 done <codex/skills.txt
+
+bash tests/uninstall_edges.sh
 
 pi_tests=()
 while IFS= read -r -d '' file; do pi_tests+=("$file"); done < <(find pi/tests -maxdepth 1 -type f -name '*.test.mjs' -print0 | sort -z)

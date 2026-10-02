@@ -43,15 +43,20 @@ Language servers are found on `PATH` by Helix; `config/helix/languages.toml` hol
 
 ## Uninstall
 
-`./install.sh uninstall` signs gh out of each host (removing keyring tokens), stops Herdr and
-tmux servers it started, deletes the bootstrap root, removes its blocks and links, restores
-backups, deletes directories and caches it created, and purges system packages it installed.
-Packages and files that existed before install are left alone. Use `--yes` when not on a
-terminal.
+`./install.sh uninstall` signs gh out of every account (removing keyring tokens), stops Herdr
+and tmux servers it started, and purges the system packages it installed. Then it removes its
+blocks and links, restores backups, deletes caches and directories it created, and deletes the
+bootstrap root. Packages and files that existed before install are left alone, and so is a file
+you put in place of one of its links. Use `--yes` when not on a terminal.
+
+Package removal comes first and never cascades: if something installed since depends on a
+package, or the account can no longer run sudo, uninstall stops before changing anything else.
+Any failure keeps `state.tsv`, so fixing the cause and rerunning finishes the job.
 
 Uninstall cannot reach copies made by others with access to the machine, provider-side sessions,
 or machine snapshots. On a machine you do not control, prefer short-lived or narrowly scoped
-credentials.
+credentials. A `CODEX_HOME` set before install is used as is, so Codex credentials there are not
+purged. Worktrees made with `piw` (under `~/piw-worktrees`) are your work and are kept.
 
 ## Local customization
 
@@ -62,8 +67,8 @@ Install reads optional files from `~/.config/bootstrap/`: `env.sh`, `bashrc`, `z
 ## Maintenance
 
 - `scripts/pin NAME VERSION` moves a catalog entry to a new version and records its checksums.
-- `scripts/validate` runs static checks and the Pi configuration tests (needs Node, shellcheck,
-  and Python).
+- `scripts/validate` runs static checks, the offline link and uninstall edge cases, and the Pi
+  configuration tests (needs Node, shellcheck, and Python).
 - `tests/container.sh IMAGE root|user [install arguments...]` runs the install, rerun, doctor,
   and uninstall round-trip in a container and fails if HOME or the package list changed.
   `tests/roundtrip.sh` does the same on the current machine for a disposable account.

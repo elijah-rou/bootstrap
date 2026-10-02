@@ -1,4 +1,5 @@
-# shellcheck shell=sh
+# shellcheck shell=bash
+# Sourced by Bash and Zsh; both support the ${var//pattern/replacement} expansion used below.
 # Environment for every shell and launcher. Everything bootstrap writes lives under
 # BOOTSTRAP_ROOT so uninstall can delete it; tools/ holds programs, private/ holds
 # credentials, sessions, history, and caches.
@@ -16,19 +17,25 @@ export UV_PYTHON_BIN_DIR="$_tools/bin" UV_TOOL_DIR="$_tools/uv-tools" UV_TOOL_BI
 export MIX_HOME="$_private/mix" HEX_HOME="$_private/hex" MIX_INSTALL_DIR="$_tools/mix-install"
 
 export PI_CODING_AGENT_DIR="$_private/pi/agent" PI_CODING_AGENT_SESSION_DIR="$_private/pi/sessions"
-# An explicit CODEX_HOME (for example a workstation's existing ~/.codex) is kept; uninstall then
-# removes only the links bootstrap placed there.
-export CODEX_HOME="${CODEX_HOME:-$_private/codex}" GH_CONFIG_DIR="$_private/gh"
+export GH_CONFIG_DIR="$_private/gh"
 export TMUX_TMPDIR="$_private/tmux" LESSHISTFILE="$_private/less/history" _ZO_DATA_DIR="$_private/zoxide"
 export STARSHIP_CONFIG="$BOOTSTRAP_ROOT/repo/config/starship.toml" STARSHIP_CACHE="$_private/cache/starship"
 export RIPGREP_CONFIG_PATH="$BOOTSTRAP_ROOT/repo/config/ripgrep"
 export EDITOR=hx VISUAL=hx PAGER=less BAT_PAGER='less -RF' MANPAGER=less
 
-for _dir in "$CARGO_HOME/bin" "$BUN_INSTALL/bin" "$_tools/bin"; do
-    case ":$PATH:" in *":$_dir:"*) ;; *) PATH="$_dir:$PATH" ;; esac
-done
-export PATH
-unset _tools _private _dir
-
 # Machine-specific environment, for example from the private dotfiles repository.
 if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap/env.sh" ]; then . "${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap/env.sh"; fi
+
+# Defaults that the machine-specific file may set first. An existing CODEX_HOME, such as a
+# workstation's ~/.codex, is kept; uninstall then removes only the links bootstrap put there.
+export CODEX_HOME="${CODEX_HOME:-$_private/codex}"
+
+# Bootstrap's tools go first even when macOS path_helper or other profile files reordered PATH,
+# so every re-source moves them to the front rather than skipping ones already present.
+_path=":$PATH:"
+for _dir in "$CARGO_HOME/bin" "$BUN_INSTALL/bin" "$_tools/bin"; do
+    _path=":$_dir${_path//":$_dir:"/:}"
+done
+_path="${_path#:}"
+export PATH="${_path%:}"
+unset _tools _private _dir _path

@@ -64,34 +64,59 @@ as_admin() {
     if [[ "$BACKEND" == brew || "$(id -u)" == 0 ]]; then "$@"; else sudo -- "$@"; fi
 }
 
+# Homebrew otherwise autoremoves, cleans up, and upgrades formulae it did not install for us.
+export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_AUTOREMOVE=1 HOMEBREW_NO_INSTALL_CLEANUP=1
+export HOMEBREW_NO_INSTALL_UPGRADE=1 HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+
+# Packages dpkg knows in any state count as present, so a removed-but-configured package that
+# install brings back is never purged later.
 package_list() {
     case "$BACKEND" in
-        apt) dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' | awk '$1 == "ii" { print $2 }' ;;
+        apt) dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' | awk '$1 != "un" { print $2 }' ;;
         dnf) rpm -qa --qf '%{NAME}\n' ;;
         pacman) pacman -Qq ;;
         brew) brew list --formula -1 ;;
     esac | LC_ALL=C sort -u
 }
 
+# Installs packages and records the ones that appeared. The baseline is written first so an
+# interrupted or failed transaction is still recorded by the next run (record_package_changes).
 package_install() {
+    local status=0
+    if [[ "$BACKEND" == apt && "$PACKAGE_INDEX_FRESH" == 0 ]]; then as_admin apt-get update || return 1; PACKAGE_INDEX_FRESH=1; fi
+    package_list >"$ROOT/package-baseline" || return 1
     case "$BACKEND" in
         apt)
-            if [[ "$PACKAGE_INDEX_FRESH" == 0 ]]; then as_admin apt-get update; PACKAGE_INDEX_FRESH=1; fi
-            as_admin env DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends "$@" ;;
-        dnf) as_admin dnf install --assumeyes --setopt=install_weak_deps=False "$@" ;;
-        pacman) as_admin pacman -S --needed --noconfirm -- "$@" ;;
-        brew) HOMEBREW_NO_AUTO_UPDATE=1 brew install "$@" ;;
+            # Only names in this transaction count, not packages another process adds meanwhile.
+            as_admin apt-get --simulate install --no-install-recommends "$@" | awk '$1 == "Inst" { print $2 }' >"$ROOT/package-plan" || return 1
+            as_admin env DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends "$@" || status=$? ;;
+        dnf) as_admin dnf install --assumeyes --setopt=install_weak_deps=False "$@" || status=$? ;;
+        pacman) as_admin pacman -S --needed --noconfirm -- "$@" || status=$? ;;
+        brew) brew install "$@" || status=$? ;;
     esac
+    record_package_changes
+    return "$status"
 }
 
-# Removes exactly the recorded names, including their configuration files; no autoremove,
-# so pre-existing packages stay.
+record_package_changes() {
+    local name
+    [[ -f "$ROOT/package-baseline" ]] || return 0
+    while IFS= read -r name; do
+        if [[ -z "$name" ]]; then continue; fi
+        if [[ -f "$ROOT/package-plan" ]] && ! grep -qxF -- "$name" "$ROOT/package-plan"; then continue; fi
+        record package "$BACKEND" "$name"
+    done < <(LC_ALL=C comm -13 "$ROOT/package-baseline" <(package_list))
+    rm -f "$ROOT/package-baseline" "$ROOT/package-plan"
+}
+
+# Removes exactly the recorded names. Each tool refuses rather than cascading when something
+# installed since depends on them, so nothing beyond the recorded set is removed.
 package_remove() {
     case "$BACKEND" in
-        apt) as_admin env DEBIAN_FRONTEND=noninteractive apt-get purge --yes "$@" ;;
-        dnf) as_admin dnf remove --assumeyes --setopt=clean_requirements_on_remove=False "$@" ;;
+        apt) as_admin dpkg --purge -- "$@" ;;
+        dnf) as_admin rpm -e -- "$@" ;;
         pacman) as_admin pacman -R --noconfirm -- "$@" ;;
-        brew) brew uninstall --ignore-dependencies "$@" ;;
+        brew) brew uninstall "$@" ;;
     esac
 }
 
@@ -163,11 +188,13 @@ acquire_lock() {
 block_text() { printf '# >>> bootstrap %s >>>\n%s\n# <<< bootstrap %s <<<\n' "$1" "$2" "$1"; }
 
 # Prints stdin without bootstrap blocks; with an id, only that block is removed.
+# Fails without output change if a start marker has no end marker, rather than dropping the rest.
 strip_blocks() {
     awk -v id="${1:-}" '
         index($0, "# >>> bootstrap ") == 1 && (id == "" || $4 == id) { skip = 1; next }
         skip && index($0, "# <<< bootstrap ") == 1 { skip = 0; next }
         !skip { print }
+        END { exit skip ? 3 : 0 }
     '
 }
 
@@ -178,28 +205,38 @@ add_block() {
     [[ ! -L "$file" ]] || die "refusing to edit symlinked $file; replace it with a regular file first"
     make_dirs "$(dirname "$file")"
     recorded block "$file" || record block "$file" "$existed"
+    if [[ -f "$file" ]]; then
+        strip_blocks "$id" <"$file" >"$rendered.rest" || die "$file has an unterminated bootstrap block; fix it by hand"
+    else
+        : >"$rendered.rest"
+    fi
     {
         if [[ "$position" == top ]]; then block_text "$id" "$content"; fi
-        if [[ -f "$file" ]]; then strip_blocks "$id" <"$file"; fi
+        cat "$rendered.rest"
         if [[ "$position" == bottom ]]; then block_text "$id" "$content"; fi
     } >"$rendered"
     cat "$rendered" >"$file"
 }
 
-# Points TARGET at SOURCE, moving anything else aside first.
+# Points TARGET at SOURCE, moving anything else aside first. A file the user put in place of
+# an earlier bootstrap link is left alone.
 link() {
     local source="$1" target="$2" backup='-'
-    if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then return 0; fi
+    if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then
+        recorded link "$target" || record link "$target" -
+        return 0
+    fi
     make_dirs "$(dirname "$target")"
-    if [[ -e "$target" || -L "$target" ]]; then
-        if recorded link "$target"; then
-            rm -rf "$target"
-        else
-            backup="$target.bootstrap-backup"
-            [[ ! -e "$backup" && ! -L "$backup" ]] || die "$backup already exists; resolve it before installing"
-            mv "$target" "$backup"
-            info "moved existing $target to $backup"
-        fi
+    if recorded link "$target"; then
+        if [[ -L "$target" && "$(readlink "$target")" == "$ROOT/"* ]]; then rm -f "$target"
+        elif [[ -e "$target" || -L "$target" ]]; then warn "keeping $target, which replaced the bootstrap link"; return 0; fi
+    elif [[ -e "$target" || -L "$target" ]]; then
+        backup="$target.bootstrap-backup"
+        [[ ! -e "$backup" && ! -L "$backup" ]] || die "$backup already exists; resolve it before installing"
+        # Recorded first: if interrupted before the move, uninstall finds no backup and leaves the original.
+        record link "$target" "$backup"
+        mv "$target" "$backup"
+        info "moved existing $target to $backup"
     fi
     recorded link "$target" || record link "$target" "$backup"
     ln -s "$source" "$target"
@@ -285,7 +322,7 @@ applicable_rows() {
 
 # Returns 2 when nothing can provide NAME on this host, 1 when installation fails.
 install_name() {
-    local name="$1" rows version sha source bins packages='' bin missing before after added
+    local name="$1" rows version sha source bins packages='' bin missing
     rows="$(applicable_rows "$name")"
     [[ -n "$rows" ]] || { warn "$name has no source for $PLATFORM${BACKEND:+/$BACKEND}"; return 2; }
 
@@ -298,14 +335,8 @@ install_name() {
     done <<<"$rows"
     if [[ -n "$packages" ]]; then
         can_manage_packages || { warn "$name needs system packages ($packages ) and this account cannot install them"; return 2; }
-        before="$(package_list)" || return 1
         # shellcheck disable=SC2086 # package names are single catalog words
         package_install $packages || return 1
-        after="$(package_list)" || return 1
-        added="$(LC_ALL=C comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))"
-        while IFS= read -r bin; do
-            if [[ -n "$bin" ]]; then record package "$BACKEND" "$bin"; fi
-        done <<<"$added"
         hash -r
     fi
 
@@ -359,7 +390,6 @@ step_codex() {
         cp "$REPO/codex/config.toml" "$CODEX_HOME/config.toml" || return 1
     fi
     # Codex discovers skills in the shared agents directory, outside the private root.
-    own "$HOME/.agents"
     while IFS= read -r name; do
         skill="$HOME/.agents/skills/$name"
         if [[ -e "$skill" && ! -L "$skill" ]]; then warn "keeping existing skill $skill"; continue; fi
@@ -369,8 +399,8 @@ step_codex() {
 
 step_zsh() {
     mkdir -p "$PRIVATE/zsh" &&
-        add_block "$HOME/.zshenv" env bottom ". \"$ROOT/repo/shell/env.sh\"" &&
-        add_block "$HOME/.zshrc" interactive bottom ". \"$ROOT/repo/shell/zshrc\""
+        add_block "$HOME/.zshenv" env bottom "if [ -r \"$ROOT/repo/shell/env.sh\" ]; then . \"$ROOT/repo/shell/env.sh\"; fi" &&
+        add_block "$HOME/.zshrc" interactive bottom "if [ -r \"$ROOT/repo/shell/zshrc\" ]; then . \"$ROOT/repo/shell/zshrc\"; fi"
 }
 
 step_tmux() {
@@ -387,17 +417,18 @@ configure_shell() {
     mkdir -p "$PRIVATE/bash" "$PRIVATE/less" "$PRIVATE/zoxide"
     # The environment block goes first so it survives rc files that return early for
     # non-interactive shells; the interactive block goes last so its aliases win.
-    add_block "$HOME/.bashrc" env top ". \"$ROOT/repo/shell/env.sh\""
-    add_block "$HOME/.bashrc" interactive bottom ". \"$ROOT/repo/shell/bashrc\""
-    add_block "$login" login bottom ". \"$ROOT/repo/shell/env.sh\"
-case \$- in *i*) . \"$ROOT/repo/shell/bashrc\" ;; esac"
+    # Guarded so a leftover block cannot break a shell once the root is gone.
+    add_block "$HOME/.bashrc" env top "if [ -r \"$ROOT/repo/shell/env.sh\" ]; then . \"$ROOT/repo/shell/env.sh\"; fi"
+    add_block "$HOME/.bashrc" interactive bottom "if [ -r \"$ROOT/repo/shell/bashrc\" ]; then . \"$ROOT/repo/shell/bashrc\"; fi"
+    add_block "$login" login bottom "if [ -r \"$ROOT/repo/shell/env.sh\" ]; then . \"$ROOT/repo/shell/env.sh\"; fi
+case \$- in *i*) if [ -r \"$ROOT/repo/shell/bashrc\" ]; then . \"$ROOT/repo/shell/bashrc\"; fi ;; esac"
     add_block "$HOME/.gitconfig" git bottom "[include]
 	path = $ROOT/repo/config/gitconfig"
 }
 
 configure_apps() {
     # Go's telemetry directory cannot be relocated; it is claimed only when it does not exist yet.
-    own "$CONFIG_HOME/git" "$CONFIG_HOME/herdr" "$CONFIG_HOME/pi" "$CACHE_HOME/helix" \
+    own "$CONFIG_HOME/herdr" "$CONFIG_HOME/pi" "$CACHE_HOME/helix" \
         "$STATE_HOME/gh" "$CACHE_HOME/gh" "$CONFIG_HOME/go/telemetry" "$HOME/Library/Application Support/go/telemetry"
     mkdir -p "$PRIVATE/gh"
     link "$ROOT/repo/config/gitignore" "$CONFIG_HOME/git/ignore"
@@ -440,14 +471,16 @@ skills *
 themes *.json
 LINKS
 
-    # Pi rewrites settings at runtime, so they are rendered copies merged with optional overlays.
+    # Pi rewrites settings at runtime (model choice, packages), so they are copies rendered from the
+    # repository plus optional overlays. A copy is replaced only when that rendering changes, which
+    # keeps runtime edits between updates; the replaced copy is kept as .bak.
     for file in settings models; do
         overlay="$CONFIG_HOME/bootstrap/pi-$file.json"
         node "$REPO/bin/merge-json.mjs" "$REPO/pi/$file.json" "$overlay" >"$ROOT/tmp/pi-$file.json" ||
             die "could not render Pi $file.json; a Node-compatible runtime is required"
-        if ! cmp -s "$ROOT/tmp/pi-$file.json" "$agent/$file.json"; then
+        if [[ ! -f "$agent/$file.json" ]] || ! cmp -s "$ROOT/tmp/pi-$file.json" "$agent/.$file.json.rendered"; then
             if [[ -f "$agent/$file.json" ]]; then cp "$agent/$file.json" "$agent/$file.json.bak"; fi
-            (umask 077 && cp "$ROOT/tmp/pi-$file.json" "$agent/$file.json")
+            (umask 077 && cp "$ROOT/tmp/pi-$file.json" "$agent/$file.json" && cp "$ROOT/tmp/pi-$file.json" "$agent/.$file.json.rendered")
         fi
     done
 
@@ -473,6 +506,11 @@ preflight() {
     BACKEND="$(backend)"
     [[ "$HOME" == /* && -d "$HOME" && -w "$HOME" ]] || die "HOME must be an absolute writable directory"
     [[ "$ROOT" == /* && "$ROOT" != / ]] || die "BOOTSTRAP_ROOT must be an absolute directory"
+    # Uninstall deletes the root, so it must never be HOME, above it, or someone else's directory.
+    [[ "${HOME%/}/" != "${ROOT%/}/"* ]] || die "BOOTSTRAP_ROOT cannot be HOME or a directory containing it"
+    if [[ -d "$ROOT" && ! -f "$STATE" && ! -d "$TOOLS" && ! -d "$PRIVATE" ]] && [[ -n "$(ls -A "$ROOT")" ]]; then
+        die "$ROOT already holds other files; choose an empty or new BOOTSTRAP_ROOT"
+    fi
     for command in git curl tar gzip awk; do command -v "$command" >/dev/null || die "missing prerequisite: $command"; done
     command -v sha256sum >/dev/null || command -v shasum >/dev/null || die "missing prerequisite: sha256sum or shasum"
     if [[ "$PLATFORM" == linux-* ]] && ! getconf GNU_LIBC_VERSION >/dev/null 2>&1; then die "Linux hosts need glibc"; fi
@@ -493,6 +531,7 @@ prepare_root() {
     done <<<"$root_parents"
     ln -sfn "$REPO" "$ROOT/repo"
     load_environment
+    record_package_changes
 }
 
 # Relinks configuration without downloading or installing anything.
@@ -562,8 +601,10 @@ cmd_doctor() {
     return "$failed"
 }
 
+# Removes packages first, then undoes recorded changes, then deletes the root. State is kept until
+# every step succeeds, so a failed or interrupted uninstall can simply be run again.
 cmd_uninstall() {
-    local confirmed="${1:-}" kind path value packages='' records
+    local confirmed="${1:-}" kind path value packages='' installed host user failed=0
     [[ $# -le 1 && ( -z "$confirmed" || "$confirmed" == --yes ) ]] || die "usage: ./install.sh uninstall [--yes]"
     BACKEND="$(backend)"
     [[ -f "$STATE" ]] || { info "nothing to uninstall at $ROOT"; return 0; }
@@ -577,48 +618,70 @@ cmd_uninstall() {
         read -r confirmed
         [[ "$confirmed" == y || "$confirmed" == Y ]] || die "cancelled"
     fi
+    acquire_lock
     load_environment
+    record_package_changes
 
-    # Sign out first so tokens kept in an OS keyring are deleted, not orphaned.
-    if command -v gh >/dev/null && [[ -f "$GH_CONFIG_DIR/hosts.yml" ]]; then
-        for value in $(awk '/^[^ #][^:]*:/ { sub(/:.*/, ""); print }' "$GH_CONFIG_DIR/hosts.yml"); do
-            while gh auth logout --hostname "$value" >/dev/null 2>&1; do :; done
-        done
+    # Sign every account out first so tokens kept in an OS keyring are deleted, not orphaned.
+    if command -v gh >/dev/null && [[ -d "$GH_CONFIG_DIR" ]]; then
+        while IFS=$'\t' read -r host user; do
+            [[ -n "$host" && -n "$user" ]] || continue
+            gh auth logout --hostname "$host" --user "$user" </dev/null >/dev/null 2>&1 || warn "could not sign gh out of $user on $host"
+        done < <(gh auth status --json hosts --jq '.hosts | to_entries[] | .key as $host | .value[] | [$host, .login] | @tsv' </dev/null 2>/dev/null)
     fi
     if command -v herdr >/dev/null && [[ -S "$CONFIG_HOME/herdr/herdr.sock" ]]; then herdr server stop || true; fi
     for path in "$TMUX_TMPDIR"/tmux-*/*; do
         if [[ -S "$path" ]] && command -v tmux >/dev/null; then tmux -S "$path" kill-server 2>/dev/null || true; fi
     done
 
-    # The root goes first so the directories that held it can be removed while replaying.
-    records="$(awk '{ lines[NR] = $0 } END { for (i = NR; i > 0; i--) print lines[i] }' "$STATE")"
-    chmod -R u+w "$ROOT" 2>/dev/null || true
-    rm -rf "$ROOT"
+    if grep -q '^package' "$STATE"; then
+        installed="$(package_list)"
+        while IFS=$'\t' read -r kind value path; do
+            if [[ "$kind" == package ]] && grep -qxF -- "$path" <<<"$installed"; then packages="$packages $path"; fi
+        done <"$STATE"
+    fi
+    if [[ -n "$packages" ]]; then
+        info "removing system packages:$packages"
+        # shellcheck disable=SC2086 # package names are single catalog words
+        { can_manage_packages && package_remove $packages; } ||
+            die "could not remove:$packages. Nothing else was changed; rerun uninstall where these can be removed"
+    fi
+
     while IFS=$'\t' read -r kind path value; do
         case "$kind" in
             block)
                 if [[ -f "$path" ]]; then
-                    strip_blocks <"$path" >"$path.bootstrap-tmp"
-                    cat "$path.bootstrap-tmp" >"$path"
-                    rm -f "$path.bootstrap-tmp"
-                    if [[ "$value" == created && ! -s "$path" ]]; then rm -f "$path"; fi
+                    if strip_blocks <"$path" >"$ROOT/tmp-block"; then
+                        cat "$ROOT/tmp-block" >"$path" || failed=1
+                        if [[ "$value" == created && ! -s "$path" ]]; then rm -f "$path" || failed=1; fi
+                    else
+                        warn "$path has an unterminated bootstrap block; remove it by hand"; failed=1
+                    fi
                 fi ;;
             link)
-                if [[ -L "$path" && "$(readlink "$path")" == "$ROOT/"* ]]; then rm -f "$path"; fi
-                if [[ "$value" != - && ( -e "$value" || -L "$value" ) && ! -e "$path" && ! -L "$path" ]]; then mv "$value" "$path"; fi ;;
-            own) rm -rf "$path" ;;
-            dir) rmdir "$path" 2>/dev/null || true ;;
-            package) packages="$packages $value" ;;
-            select) ;;
+                if [[ -L "$path" && "$(readlink "$path")" == "$ROOT/"* ]]; then rm -f "$path" || failed=1; fi
+                if [[ "$value" != - && ( -e "$value" || -L "$value" ) && ! -e "$path" && ! -L "$path" ]]; then mv "$value" "$path" || failed=1; fi ;;
+            own) rm -rf "$path" || failed=1 ;;
+            dir|package|select) ;;
             *) warn "ignoring unknown state record: $kind" ;;
         esac
-    done <<<"$records"
+    done < <(awk '{ lines[NR] = $0 } END { for (i = NR; i > 0; i--) print lines[i] }' "$STATE")
+    [[ "$failed" == 0 ]] || die "some changes could not be undone; $STATE is kept, so fix the cause and rerun uninstall"
 
-    if [[ -n "$packages" ]]; then
-        info "removing system packages:$packages"
-        # shellcheck disable=SC2086 # package names are single catalog words
-        if ! { can_manage_packages && package_remove $packages; }; then warn "remove these packages manually:$packages"; fi
-    fi
+    # Everything but the state file goes first; the state file goes last so a failure here
+    # still leaves a rerunnable uninstall.
+    chmod -R u+w "$ROOT" 2>/dev/null || true
+    for path in "$ROOT"/* "$ROOT"/.[!.]*; do
+        if [[ ( -e "$path" || -L "$path" ) && "$path" != "$STATE" ]]; then rm -rf "$path" || failed=1; fi
+    done
+    [[ "$failed" == 0 ]] || die "could not delete everything in $ROOT; rerun uninstall"
+    installed="$(awk -F '\t' '$1 == "dir" { print $2 }' "$STATE" | awk '{ lines[NR] = $0 } END { for (i = NR; i > 0; i--) print lines[i] }')"
+    trap - EXIT
+    rm -f "$STATE"
+    rmdir "$ROOT"
+    while IFS= read -r path; do
+        if [[ -n "$path" ]]; then rmdir "$path" 2>/dev/null || true; fi
+    done <<<"$installed"
     info "uninstalled. Remove this checkout with: rm -rf \"$REPO\""
 }
 
