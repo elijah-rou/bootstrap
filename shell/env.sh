@@ -13,7 +13,7 @@ export GOPATH="$_tools/go" GOBIN="$_tools/bin" GOMODCACHE="$_tools/go/pkg/mod"
 export GOCACHE="$_private/cache/go-build" GOENV="$_private/go/env"
 export UV_CACHE_DIR="$_private/cache/uv" UV_PYTHON_INSTALL_DIR="$_tools/python"
 export UV_PYTHON_BIN_DIR="$_tools/bin" UV_TOOL_DIR="$_tools/uv-tools" UV_TOOL_BIN_DIR="$_tools/bin"
-export MIX_HOME="$_private/mix" HEX_HOME="$_private/hex"
+export MIX_HOME="$_private/mix" HEX_HOME="$_private/hex" MIX_INSTALL_DIR="$_tools/mix-install"
 
 export PI_CODING_AGENT_DIR="$_private/pi/agent" PI_CODING_AGENT_SESSION_DIR="$_private/pi/sessions"
 export CODEX_HOME="$_private/codex" GH_CONFIG_DIR="$_private/gh"

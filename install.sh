@@ -83,10 +83,11 @@ package_install() {
     esac
 }
 
-# Removes exactly the recorded names; no autoremove, so pre-existing packages stay.
+# Removes exactly the recorded names, including their configuration files; no autoremove,
+# so pre-existing packages stay.
 package_remove() {
     case "$BACKEND" in
-        apt) as_admin env DEBIAN_FRONTEND=noninteractive apt-get remove --yes "$@" ;;
+        apt) as_admin env DEBIAN_FRONTEND=noninteractive apt-get purge --yes "$@" ;;
         dnf) as_admin dnf remove --assumeyes --setopt=clean_requirements_on_remove=False "$@" ;;
         pacman) as_admin pacman -R --noconfirm -- "$@" ;;
         brew) brew uninstall --ignore-dependencies "$@" ;;
@@ -219,7 +220,7 @@ fetch() {
     local url="$1" sha="$2" destination="$3"
     [[ "$url" == https://* && "$sha" =~ ^[0-9a-f]{64}$ ]] || die "catalog row for $url needs an https URL and sha256"
     curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
-        --retry 3 --connect-timeout 15 --max-time 600 --output "$destination" "$url"
+        --retry 3 --connect-timeout 15 --max-time 600 --output "$destination" "$url" || return 1
     [[ "$(sha256 "$destination")" == "$sha" ]] || die "checksum mismatch for $url"
 }
 
@@ -245,9 +246,9 @@ install_download() {
         info "downloading $name $version"
         mkdir -p "$ROOT/tmp" "$TOOLS/pkgs"
         rm -rf "$ROOT/tmp/$name" "$ROOT/tmp/$name.extract"
-        fetch "$url" "$sha" "$ROOT/tmp/$name"
-        extract "$ROOT/tmp/$name" "$url" "$ROOT/tmp/$name.extract" "${bins%%,*}"
-        mv "$ROOT/tmp/$name.extract" "$package"
+        fetch "$url" "$sha" "$ROOT/tmp/$name" || return 1
+        extract "$ROOT/tmp/$name" "$url" "$ROOT/tmp/$name.extract" "${bins%%,*}" || return 1
+        mv "$ROOT/tmp/$name.extract" "$package" || return 1
     fi
     for old in "$TOOLS/pkgs/$name"-[0-9v]*; do
         if [[ "$old" != "$package" && -d "$old" ]]; then rm -rf "$old"; fi
@@ -256,7 +257,7 @@ install_download() {
     for bin in ${bins//,/ }; do
         path="$(find "$package" -name "$bin" -type f -perm -u+x | awk 'NR == 1')"
         [[ -n "$path" ]] || die "$name archive has no executable named $bin"
-        link_private "$path" "$TOOLS/bin/$bin"
+        link_private "$path" "$TOOLS/bin/$bin" || return 1
     done
 }
 
@@ -281,10 +282,11 @@ applicable_rows() {
     ' "$CATALOG"
 }
 
+# Returns 2 when nothing can provide NAME on this host, 1 when installation fails.
 install_name() {
     local name="$1" rows version sha source bins packages='' bin missing before after added
     rows="$(applicable_rows "$name")"
-    [[ -n "$rows" ]] || { warn "$name has no source for $PLATFORM${BACKEND:+/$BACKEND}"; return 1; }
+    [[ -n "$rows" ]] || { warn "$name has no source for $PLATFORM${BACKEND:+/$BACKEND}"; return 2; }
 
     # System packages go first, in one transaction, and only for missing executables.
     while IFS=$'\t' read -r _ _ _ _ _ source bins; do
@@ -294,11 +296,11 @@ install_name() {
         [[ "$missing" == 0 ]] || packages="$packages ${source#pkg:}"
     done <<<"$rows"
     if [[ -n "$packages" ]]; then
-        can_manage_packages || { warn "$name needs system packages ($packages ) and this account cannot install them"; return 1; }
-        before="$(package_list)"
+        can_manage_packages || { warn "$name needs system packages ($packages ) and this account cannot install them"; return 2; }
+        before="$(package_list)" || return 1
         # shellcheck disable=SC2086 # package names are single catalog words
         package_install $packages || return 1
-        after="$(package_list)"
+        after="$(package_list)" || return 1
         added="$(LC_ALL=C comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after"))"
         while IFS= read -r bin; do
             if [[ -n "$bin" ]]; then record package "$BACKEND" "$bin"; fi
@@ -316,60 +318,57 @@ install_name() {
                 GOBIN="$TOOLS/bin" go install "${source#go:}@$version" ;;
             step:*) "step_${source#step:}" "$version" ;;
             *) die "unsupported catalog source for $name: $source" ;;
-        esac
+        esac || { warn "$name failed at $source"; return 1; }
     done <<<"$rows"
     hash -r
 }
 
 # ---------------------------------------------------------------- steps
 
+# Steps run where `set -e` is suspended (callers test their status), so each command chains.
 step_rust() {
-    [[ -x "$CARGO_HOME/bin/rustup" ]] || "$TOOLS/bin/rustup-init" -y --no-modify-path --profile minimal --default-toolchain none
-    "$CARGO_HOME/bin/rustup" toolchain install "$1" --profile minimal
-    "$CARGO_HOME/bin/rustup" default "$1"
+    { [[ -x "$CARGO_HOME/bin/rustup" ]] || "$TOOLS/bin/rustup-init" -y --no-modify-path --profile minimal --default-toolchain none; } &&
+        "$CARGO_HOME/bin/rustup" toolchain install "$1" --profile minimal &&
+        "$CARGO_HOME/bin/rustup" default "$1"
 }
 
 step_python() {
     local python
-    uv python install "$1"
-    python="$(uv python find --managed-python "$1")"
-    link_private "$python" "$TOOLS/bin/python3"
-    link_private "$python" "$TOOLS/bin/python"
+    uv python install "$1" && python="$(uv python find --managed-python "$1")" || return 1
+    link_private "$python" "$TOOLS/bin/python3" && link_private "$python" "$TOOLS/bin/python"
 }
 
 step_elixirls() {
     local package="$TOOLS/pkgs/elixirls-$1"
     [[ -f "$package/language_server.sh" ]] || die "ElixirLS archive is missing language_server.sh"
-    chmod 0755 "$package/language_server.sh"
-    MIX_ENV=prod elixir "$package/quiet_install.exs" </dev/null
-    link_private "$package/language_server.sh" "$TOOLS/bin/elixir-ls"
+    chmod 0755 "$package/language_server.sh" &&
+        MIX_ENV=prod elixir "$package/quiet_install.exs" </dev/null &&
+        link_private "$package/language_server.sh" "$TOOLS/bin/elixir-ls"
 }
 
 step_codex() {
     local name skill
-    link_private "$ROOT/repo/bin/codex" "$TOOLS/bin/codex"
-    mkdir -p "$PRIVATE/codex"
-    link_private "$ROOT/repo/codex/AGENTS.md" "$PRIVATE/codex/AGENTS.md"
-    link_private "$ROOT/repo/codex/native-tools.md" "$PRIVATE/codex/native-tools.md"
-    [[ -e "$PRIVATE/codex/config.toml" ]] || cp "$REPO/codex/config.toml" "$PRIVATE/codex/config.toml"
+    link_private "$ROOT/repo/bin/codex" "$TOOLS/bin/codex" &&
+        link_private "$ROOT/repo/codex/AGENTS.md" "$PRIVATE/codex/AGENTS.md" &&
+        link_private "$ROOT/repo/codex/native-tools.md" "$PRIVATE/codex/native-tools.md" || return 1
+    [[ -e "$PRIVATE/codex/config.toml" ]] || cp "$REPO/codex/config.toml" "$PRIVATE/codex/config.toml" || return 1
     # Codex discovers skills in the shared agents directory, outside the private root.
     own "$HOME/.agents"
     while IFS= read -r name; do
         skill="$HOME/.agents/skills/$name"
         if [[ -e "$skill" && ! -L "$skill" ]]; then warn "keeping existing skill $skill"; continue; fi
-        link "$ROOT/repo/pi/skills/$name" "$skill"
+        link "$ROOT/repo/pi/skills/$name" "$skill" || return 1
     done <"$REPO/codex/skills.txt"
 }
 
 step_zsh() {
-    mkdir -p "$PRIVATE/zsh"
-    add_block "$HOME/.zshenv" env bottom ". \"$ROOT/repo/shell/env.sh\""
-    add_block "$HOME/.zshrc" interactive bottom ". \"$ROOT/repo/shell/zshrc\""
+    mkdir -p "$PRIVATE/zsh" &&
+        add_block "$HOME/.zshenv" env bottom ". \"$ROOT/repo/shell/env.sh\"" &&
+        add_block "$HOME/.zshrc" interactive bottom ". \"$ROOT/repo/shell/zshrc\""
 }
 
 step_tmux() {
-    mkdir -p "$PRIVATE/tmux"
-    link "$ROOT/repo/config/tmux.conf" "$HOME/.tmux.conf"
+    mkdir -p "$PRIVATE/tmux" && link "$ROOT/repo/config/tmux.conf" "$HOME/.tmux.conf"
 }
 
 # ---------------------------------------------------------------- configuration
@@ -391,8 +390,9 @@ case \$- in *i*) . \"$ROOT/repo/shell/bashrc\" ;; esac"
 }
 
 configure_apps() {
+    # Go's telemetry directory cannot be relocated; it is claimed only when it does not exist yet.
     own "$CONFIG_HOME/git" "$CONFIG_HOME/herdr" "$CONFIG_HOME/pi" "$CACHE_HOME/helix" \
-        "$STATE_HOME/gh" "$CACHE_HOME/gh"
+        "$STATE_HOME/gh" "$CACHE_HOME/gh" "$CONFIG_HOME/go/telemetry" "$HOME/Library/Application Support/go/telemetry"
     mkdir -p "$PRIVATE/gh"
     link "$ROOT/repo/config/gitignore" "$CONFIG_HOME/git/ignore"
     link "$ROOT/repo/config/helix" "$CONFIG_HOME/helix"
@@ -501,11 +501,12 @@ cmd_install() {
     ln -sfn "$REPO" "$ROOT/repo"
     load_environment
     # Bun is the only JavaScript runtime; this covers `#!/usr/bin/env node` entrypoints.
-    link_private "$TOOLS/bin/bun" "$TOOLS/bin/node"
+    link_private "$ROOT/repo/bin/node" "$TOOLS/bin/node"
 
     for name in $(core_names); do
-        install_name "$name" || FAILURES="$FAILURES $name"
+        if install_name "$name"; then :; elif [[ $? == 2 ]]; then warn "continuing without $name"; else FAILURES="$FAILURES $name"; fi
     done
+    [[ -z "$FAILURES" ]] || die "core tools failed:$FAILURES"
     configure_shell
     configure_apps
     configure_pi
@@ -527,7 +528,7 @@ cmd_doctor() {
     [[ -f "$STATE" ]] || die "not installed at $ROOT"
     load_environment
     for name in $(core_names) $(awk -F '\t' '$1 == "select" { print $3 }' "$STATE"); do
-        for bin in $(applicable_rows "$name" | awk -F '\t' '$7 != "-" { gsub(",", " ", $7); print $7 }'); do
+        for bin in $(applicable_rows "$name" | awk -F '\t' '$7 != "-" { n = split($7, bins, ","); for (i = 1; i <= n; i++) if (!seen[bins[i]]++) print bins[i] }'); do
             if command -v "$bin" >/dev/null; then printf 'ok       %-28s %s\n' "$name" "$bin"
             else printf 'missing  %-28s %s\n' "$name" "$bin"; failed=1; fi
         done

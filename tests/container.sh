@@ -12,7 +12,11 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 prepare='
 if command -v apt-get >/dev/null; then apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git curl ca-certificates xz-utils >/dev/null
 elif command -v dnf >/dev/null; then dnf install -y -q git curl tar gzip xz findutils diffutils >/dev/null
-elif command -v pacman >/dev/null; then pacman -Sy --noconfirm --needed git curl tar gzip xz diffutils >/dev/null
+elif command -v pacman >/dev/null
+then
+    # The pacman syscall sandbox fails under emulated containers; real hosts keep it.
+    sed -i "s/^\[options\]/[options]\nDisableSandbox/" /etc/pacman.conf
+    pacman -Sy --noconfirm --needed git curl tar gzip xz diffutils >/dev/null
 fi'
 
 case "$account" in
