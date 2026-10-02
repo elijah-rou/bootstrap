@@ -119,6 +119,14 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
       `tools/bin`, `~/.local/state/bootstrap/`, and the moved-aside files from step 4.
    Known gap: the Meridian LaunchAgent PATH has no `tools/bin`; check whether it starts `pi`.
 
+7. [ ] agent-kit split (2026-10-02): instructions, skills, Pi extensions, and Claude mods moved to
+   the public `elijah-rou/agent-kit` (Claude mods ported to Bun TypeScript). Pi, Claude, Codex, and
+   Herdr became opt-in tools. Remaining: promote branch `agent-kit-split`; dotfiles selects
+   `pi claude herdr`, sets `CLAUDE_CONFIG_DIR=~/.claude`, adds a `claude-settings.json` overlay, and
+   points its checks at `tools/agent-kit`; the cutover also removes old links in
+   `private/pi/agent/{extensions,skills,prompts,themes}`, `~/.claude`, and `~/.agents/skills` that
+   point into the `claude-port` worktree or old snapshots, then retires that worktree.
+
 ## Evidence (2026-10-02, branch `simplify`)
 
 - Round-trip (install, rerun, doctor, signed-in gh, uninstall, HOME and package diff) passed on

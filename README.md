@@ -16,13 +16,13 @@ curl, tar, gzip, and sha256sum or shasum. No sudo is needed for the core install
 ## What install does
 
 - Downloads pinned, checksum-verified binaries into `~/.local/share/bootstrap/tools`:
-  Bun, Pi, Herdr, evil-helix (`hx`), ripgrep, fd, fzf, bat, eza, zoxide, jq, delta, and gh
+  Bun, evil-helix (`hx`), ripgrep, fd, fzf, bat, eza, zoxide, jq, delta, and gh
   (eza comes from Homebrew on macOS, where no release binary exists).
   Bun is the only JavaScript runtime; `node` runs Bun.
 - Keeps credentials, sessions, history, and caches in `~/.local/share/bootstrap/private`.
-  Pi, Codex, gh, shell history, tmux sockets, and tool caches all point there.
-- Adds marked blocks to `~/.bashrc`, the Bash login profile, and `~/.gitconfig`, and links Helix,
-  Herdr, Pi router, and git-ignore configuration. Existing files it would replace are moved to
+  Agents, gh, shell history, tmux sockets, and tool caches all point there.
+- Adds marked blocks to `~/.bashrc`, the Bash login profile, and `~/.gitconfig`, and links Helix
+  and git-ignore configuration. Existing files it would replace are moved to
   `*.bootstrap-backup`.
 - Records each change in `~/.local/share/bootstrap/state.tsv`.
 
@@ -35,7 +35,16 @@ reinstalls recorded selections. `install.sh link` reapplies only the configurati
 ./install.sh --languages rust go python --lsp rust-analyzer gopls basedpyright --tools zsh tmux
 ```
 
-`./install.sh --help` lists every name. Selections are remembered. Most come from user-space
+`./install.sh --help` lists every name. Selections are remembered.
+
+Agents and Herdr are selections too: `--tools pi claude codex herdr`. Their instructions, skills, Pi
+extensions, and Claude mods come from [agent-kit](https://github.com/elijah-rou/agent-kit), pinned
+by commit in `catalog.tsv` and checked out once under `tools/agent-kit`. Pi loads it as a package;
+Codex and Claude link from it. This repository keeps their configuration: `pi/` (settings, models,
+routers, subagent definitions), `codex/config.toml`, and `claude/settings.json`. Claude Code's
+configuration directory defaults to the private root, so uninstall also deletes its macOS keychain
+login for that directory. Set `BOOTSTRAP_AGENT_KIT` to a local agent-kit checkout to develop both
+together. Most come from user-space
 downloads; a few (C/C++ compilers, Elixir, clangd on Linux, tmux, zsh) need the system package
 manager and therefore root, sudo, or Homebrew. Without those they are reported as unavailable.
 
@@ -61,8 +70,8 @@ purged. Worktrees made with `piw` (under `~/piw-worktrees`) are your work and ar
 ## Local customization
 
 Install reads optional files from `~/.config/bootstrap/`: `env.sh`, `bashrc`, `zshrc`,
-`gitconfig`, `pi-settings.json`, and `pi-models.json` (merged over `pi/settings.json` and
-`pi/models.json`). The private dotfiles repository links its workstation additions there.
+`gitconfig`, `pi-settings.json`, `pi-models.json`, and `claude-settings.json` (merged over
+`pi/settings.json`, `pi/models.json`, and `claude/settings.json`). The private dotfiles repository links its workstation additions there.
 
 ## Maintenance
 
