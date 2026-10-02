@@ -1,10 +1,10 @@
 name: Validate
 on:
+  # Every pushed branch is verified before it is promoted to main.
   push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 concurrency:
-  group: validate-${{ github.event.pull_request.number || github.ref }}
+  group: validate-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
