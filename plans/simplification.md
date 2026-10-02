@@ -93,9 +93,7 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
 6. [ ] Workstation cutover with the owner present. Publishing the bootstrap branch comes first,
    because `bootstrap.lock` must name a commit GitHub serves.
    1. Before changing anything: run dotfiles `scripts/bootstrap fetch`; keep `snapshots/` until
-      step 7 passes (it is the rollback path); note whether Firecrawl is still used, because
-      `~/.config/pi/web-search.json` holds a `firecrawlApiKey` that the link step moves to
-      `web-search.json.bootstrap-backup`.
+      step 7 passes (it is the rollback path). The Firecrawl key was purged on 2026-10-02.
    2. Quit every terminal, tmux server, Herdr, Pi, and Neovim. Running shells keep
       `NVIM_APPNAME=bootstrap-nvim` and old PATHs.
    3. Optionally `snapshots/6ee84fb…/install.sh migration retire --yes` to delete the legacy
@@ -126,16 +124,18 @@ Size budget: `install.sh` at most about 600 lines; `tests/` at most about 300 li
 - Round-trip (install, rerun, doctor, signed-in gh, uninstall, HOME and package diff) passed on
   ubuntu:24.04 and debian:13 without sudo, ubuntu:24.04 as root with every selection, fedora:42 as
   root, and macOS with a disposable HOME. Elixir and ElixirLS passed in an earlier Ubuntu run.
-- Arch could not run locally: Bun `install` segfaults under amd64 emulation on Apple Silicon. CI
-  runs it natively.
+- CI (run 37045320285, commit 48ba133) passed the round-trip natively on ubuntu:24.04 (root with
+  every selection, and without sudo), debian:13, fedora:42, archlinux, and macOS, plus static
+  checks. CI found and fixed three leftovers local runs missed: Homebrew's download cache,
+  `~/.homebrew`, and the `/root/.ssh` that Arch's systemd-tmpfiles creates.
 - Bun gate: Pi 1.0.0 with all extensions and packages reached a provider request under Bun;
   basedpyright, typescript-language-server, and bash-language-server run through the `node`
   wrapper. Interactive Pi TUI was not exercised.
 - Dotfiles: its validator passes against this branch; a disposable macOS HOME ran dotfiles
   `bare`, `link --offline`, `bare-doctor`, and `uninstall`; bootstrap removed everything it
   owned and only dotfiles-owned links remained.
-- `pi/tests/lsp-diagnostics.test.mjs` "fake LSP clean result settles before timeout" misses its
-  1900 ms bound intermittently when the whole suite runs; it passes alone on this branch and `main`.
+- `pi/tests/lsp-diagnostics.test.mjs` settle test: failed 6 of 6 concurrent full-suite runs on
+  `main` and 0 of 6 after giving it a load-independent timeout.
 - Review: two independent reviews (install/purge safety; dotfiles contract and cutover). Their P0/P1
   findings were fixed in `36361bf` and dotfiles; `tests/uninstall_edges.sh` fails on the pre-fix
   commit and passes after. Round-trips reran green on Ubuntu (root and user), Fedora, and macOS.
