@@ -18,6 +18,7 @@
   "packages": [
     "git:github.com/elijah-rou/pi-subagents@38ddf4c694c3cc3d2b453bd44ca3071b104873ee",
     "npm:pi-web-access@0.35.0",
+    "npm:@lolipopshock/pi-clm@1.0.0",
     "git:github.com/elijah-rou/pi-privileged-operations@8728b268bc8d1cc31d7e0f4b51a74974fc72216d",
     "git:github.com/elijah-rou/pi-sub-limits@b968a179c05d323f8fea126ba3ad3e5fdf1cfc09",
     "git:github.com/elijah-rou/pi-effort@9400dcea4a591b90c994187432e3bdcd0f3fa4ff",
