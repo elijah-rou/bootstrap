@@ -45,9 +45,9 @@ zoxide	core	0.10.0	darwin-arm64	b55ae6f2f5f23d0a6ccb3bd4eeb2af9c7e0a6556e5255c82
 jq	core	1.8.2	linux-x86_64	b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f	https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-linux-amd64	jq
 jq	core	1.8.2	linux-aarch64	8b85c817833814ddca00a144c33705546355afccf0cf39b188f3cdb48b852309	https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-linux-arm64	jq
 jq	core	1.8.2	darwin-arm64	2d75340ba57a4b4b4c8708a21c2dc8e958a48aaa8bba13b27f77f6e4c0eca07e	https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-macos-arm64	jq
-delta	core	0.19.2	linux-x86_64	f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b	https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz	delta
-delta	core	0.19.2	linux-aarch64	0bfce159a5cddd5feb3d6db4a616d883ff51253ce08ac7ec11cb1d208cfaab9e	https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-aarch64-unknown-linux-gnu.tar.gz	delta
-delta	core	0.19.2	darwin-arm64	9be36612a5a13e9e386dc498fb8e50dc87c72ee42b63db0ea05b32f99a72a69a	https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-aarch64-apple-darwin.tar.gz	delta
+delta	core	0.20.1	linux-x86_64	69dcb4043f55c29118f408c6efd30115e0a4e0a6709253343b8c8fa814ab4a31	https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-x86_64-unknown-linux-musl.tar.gz	delta
+delta	core	0.20.1	linux-aarch64	da7f4338f593572ff426ae153e0870e2fdc72729416eff551b40cdeb67940db8	https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-aarch64-unknown-linux-gnu.tar.gz	delta
+delta	core	0.20.1	darwin-arm64	bc1839cea69288d4673a24faffbb825d408ca907e0f7d33b1678c9e6cdd5e58e	https://github.com/dandavison/delta/releases/download/0.20.1/delta-0.20.1-aarch64-apple-darwin.tar.gz	delta
 gh	core	2.102.0	linux-x86_64	bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386	https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz	gh
 gh	core	2.102.0	linux-aarch64	7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484	https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_arm64.tar.gz	gh
 gh	core	2.102.0	darwin-arm64	da922c20d1792e5b2cbf375593d7a658acf034c12c84e007e71c76ef959c337e	https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_macOS_arm64.zip	gh
