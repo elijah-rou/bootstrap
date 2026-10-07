@@ -31,6 +31,7 @@ pi -p "Run the catalog-bumps automation in .agents/automations/catalog-bumps/AUT
 ## Boundaries
 
 - A catalog bump is low-risk work fully decided by the checks above: launch no reviewer. The pull request is where the user reviews it.
+- When the repository's ruleset is `merge-gate` (autonomy A3 and above), the pull request also needs an `agentic/verdict` from a fresh verifier: a separate session, not this run, re-runs the container check on the pull request's head and records it with `agentic verify record`.
 - One name per run. Never merge, deploy, or release; landing follows the repository's autonomy level.
 - Subagents may run checks, but they hold no publish credentials and never push, comment, or open pull requests. The policy gate enforces this.
 - Fail closed: if a gate or check cannot be evaluated, stop and report.
