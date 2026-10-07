@@ -23,7 +23,7 @@ pi -p "Run the catalog-bumps automation in .agents/automations/catalog-bumps/AUT
 3. Run `scripts/pin NAME LATEST`. A failure (no digest for an asset, a renamed artifact) ends the run with a report; do not edit the catalog by hand.
 4. Prove the install, keeping every output in a run directory under `local/`:
    - `bash -n install.sh` and `scripts/validate`;
-   - `tests/container.sh debian:13 user <selection>`, where the selection installs NAME: `--tools NAME`, or for a language or LSP row its group flag, for example `--languages python` for uv.
+   - `tests/container.sh debian:13 user <selection>`, where the selection installs NAME: nothing for a `core` row (core installs on every run), `--tools NAME` for a tools row, or the group flag for a language or LSP row, for example `--languages python` for uv. The row's groups column says which.
    - When the repository carries `.agents/skills/verify-bootstrap`, also run its download round trip with the same selection.
 5. If every check passes, commit with the subject `Pin NAME LATEST` and a body naming the upstream release and the checks that passed. Push `agent/bump-NAME-LATEST` and open a pull request whose body has these sections: Why (the release), What changed (the catalog rows), Verification (each command and its result), Revert (revert the commit). Allowed from autonomy A2.
 6. If any check fails, open no pull request. Report the failing command, its last lines of output, and the run directory; leave the branch local.
