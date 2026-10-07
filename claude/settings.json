@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun @AGENT_KIT@/agentic/tools/jev/cli.ts task-class --claude-hook",
+            "command": "test ! -f @AGENT_KIT@/agentic/tools/jev/cli.ts || bun @AGENT_KIT@/agentic/tools/jev/cli.ts task-class --claude-hook",
             "timeout": 5
           }
         ]
