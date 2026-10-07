@@ -437,7 +437,16 @@ render_config() {
     fi
 }
 
-ensure_agent_kit() { install_name agent-kit; }
+# Puts agent-kit's agentic CLI on PATH; a checkout without it (an older pin) loses a stale link.
+ensure_agent_kit() {
+    local kit="$TOOLS/agent-kit"
+    install_name agent-kit || return
+    if [[ -x "$kit/agentic/bin/agentic" ]]; then
+        link_private "$kit/agentic/bin/agentic" "$TOOLS/bin/agentic"
+    elif [[ -L "$TOOLS/bin/agentic" ]]; then
+        rm -f "$TOOLS/bin/agentic"
+    fi
+}
 
 # Pi state lives in the private root; only its router configuration sits in XDG config. Extensions,
 # skills, the prompt, and the theme load from agent-kit as a local Pi package.
