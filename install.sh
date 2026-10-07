@@ -437,10 +437,16 @@ render_config() {
     fi
 }
 
-# Puts agent-kit's agentic CLI on PATH; a checkout without it (an older pin) loses a stale link.
+# Installs agent-kit's locked dependencies (watch-pr and orch need them) and puts its agentic CLI
+# on PATH. A checkout without a lockfile or the CLI (an older pin) skips the install and loses a
+# stale link.
 ensure_agent_kit() {
     local kit="$TOOLS/agent-kit"
     install_name agent-kit || return
+    if [[ -f "$kit/bun.lock" ]]; then
+        (cd "$kit" && bun install --frozen-lockfile --production >/dev/null) ||
+            { warn "agent-kit dependencies failed to install; run install.sh with network access"; return 1; }
+    fi
     if [[ -x "$kit/agentic/bin/agentic" ]]; then
         link_private "$kit/agentic/bin/agentic" "$TOOLS/bin/agentic"
     elif [[ -L "$TOOLS/bin/agentic" ]]; then
