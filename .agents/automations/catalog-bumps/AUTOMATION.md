@@ -25,14 +25,14 @@ pi -p "Run the catalog-bumps automation in .agents/automations/catalog-bumps/AUT
    - `bash -n install.sh` and `scripts/validate`;
    - `tests/container.sh debian:13 user <selection>`, where the selection installs NAME: nothing for a `core` row (core installs on every run), `--tools NAME` for a tools row, or the group flag for a language or LSP row, for example `--languages python` for uv. The row's groups column says which.
    - When the repository carries `.agents/skills/verify-bootstrap`, also run its download round trip with the same selection.
-5. If every check passes, commit with the subject `Pin NAME LATEST` and a body naming the upstream release and the checks that passed. Push `agent/bump-NAME-LATEST` and open a pull request whose body has these sections: Why (the release), What changed (the catalog rows), Verification (each command and its result), Revert (revert the commit). Allowed from autonomy A2.
+5. If every check passes, commit with the subject `Pin NAME LATEST` and a body naming the upstream release and the checks that passed. Push `agent/bump-NAME-LATEST` and open a pull request whose body has these sections: Why (the release), What changed (the catalog rows), Verification (each command and its result), Revert (revert the commit). This repository is the user's own, so the standing default allows it.
 6. If any check fails, open no pull request. Report the failing command, its last lines of output, and the run directory; leave the branch local.
 
 ## Boundaries
 
 - A catalog bump is low-risk work fully decided by the checks above: launch no reviewer. The pull request is where the user reviews it.
-- One name per run. Never merge, deploy, or release; landing follows the repository's autonomy level.
-- Subagents may run checks, but they hold no publish credentials and never push, comment, or open pull requests. The policy gate enforces this.
+- One name per run. Never merge, deploy, or release; the user lands, or a run the user invoked in the ship mode.
+- Subagents may run checks, but they hold no publish credentials and never push, comment, or open pull requests.
 - Fail closed: if a gate or check cannot be evaluated, stop and report.
 - Do not post anywhere but the pull request. Messages to people go through the user.
 
