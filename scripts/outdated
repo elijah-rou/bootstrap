@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Lists catalog names pinned to a GitHub release older than the project's latest release, as
+# NAME<TAB>PINNED<TAB>LATEST. Read-only: it changes nothing. scripts/pin NAME LATEST moves a pin.
+# Usage: scripts/outdated [NAME...]
+set -euo pipefail
+catalog="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/catalog.tsv"
+
+seen=" "
+while IFS=$'\t' read -r name _ version _ _ source _; do
+    [[ "$name" == \#* || "$seen" == *" $name "* ]] && continue
+    [[ "$source" =~ ^https://github\.com/([^/]+/[^/]+)/releases/download/([^/]+)/ ]] || continue
+    repository="${BASH_REMATCH[1]}" tag="${BASH_REMATCH[2]}"
+    seen="$seen$name "
+    if [[ $# -gt 0 && " $* " != *" $name "* ]]; then continue; fi
+    # The pinned tag is PREFIX + VERSION (v0.26.1, jq-1.8.2, release-20250915); the latest tag keeps the prefix.
+    prefix="${tag%"$version"}"
+    [[ "$prefix$version" == "$tag" ]] || { printf 'warning: %s tag %s does not end in %s\n' "$name" "$tag" "$version" >&2; continue; }
+    latest_tag="$(gh api "repos/$repository/releases/latest" --jq .tag_name 2>/dev/null)" || { printf 'warning: no latest release for %s (%s)\n' "$name" "$repository" >&2; continue; }
+    [[ "$latest_tag" == "$prefix"* ]] || { printf 'warning: %s latest tag %s does not start with %s\n' "$name" "$latest_tag" "$prefix" >&2; continue; }
+    latest="${latest_tag#"$prefix"}"
+    if [[ "$latest" != "$version" ]]; then printf '%s\t%s\t%s\n' "$name" "$version" "$latest"; fi
+done < <(grep -v '^#' "$catalog")
