@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun @AGENT_KIT@/agentic/bin/agentic claude-hook",
+            "command": "/bin/sh @AGENT_KIT@/agentic/bin/claude-hook",
             "timeout": 15
           }
         ]
