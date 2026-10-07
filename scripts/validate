@@ -22,6 +22,10 @@ awk -F '\t' '
     END { exit bad }
 ' catalog.tsv
 
+# Node keeps the arguments after `-e` and `-p` code; install.sh and pi-workspace rely on it.
+[[ "$(bin/node -e 'console.log(process.argv.slice(1).join(","))' a b)" == a,b ]] || { echo "bin/node -e drops arguments" >&2; exit 1; }
+[[ "$(bin/node -p 'process.argv.slice(1).join(",")' a b)" == a,b ]] || { echo "bin/node -p drops arguments" >&2; exit 1; }
+
 bash tests/uninstall_edges.sh
 
 # Pi configuration contract tests; Bun runs their node:test suites.
