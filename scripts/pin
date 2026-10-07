@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Moves every catalog row for NAME to VERSION: rewrites the version in each URL and records
-# the new sha256 (from the GitHub release API when available, otherwise by downloading).
+# Moves the catalog rows for NAME that carry its pinned version to VERSION: rewrites the version
+# in each URL and records the new sha256 (from the GitHub release API when available, otherwise
+# by downloading).
 # Usage: scripts/pin NAME VERSION
 set -euo pipefail
 name="${1:?usage: scripts/pin NAME VERSION}"
@@ -20,10 +21,13 @@ digest() {
     fi
 }
 
+# The pinned version is the one the name's download rows carry. Other rows of the same name keep
+# their own versions: python pins uv downloads and, separately, the CPython that uv installs.
+pinned="$(awk -F '\t' -v name="$name" '$0 !~ /^#/ && $1 == name && $6 ~ /^https:/ { print $3; exit }' "$catalog")"
 found=0
 while IFS= read -r line; do
     IFS=$'\t' read -r row_name groups old platform sha source bins <<<"$line"
-    if [[ "$line" == \#* || "$row_name" != "$name" || "$old" == - ]]; then printf '%s\n' "$line"; continue; fi
+    if [[ "$line" == \#* || "$row_name" != "$name" || "$old" == - || ( -n "$pinned" && "$old" != "$pinned" ) ]]; then printf '%s\n' "$line"; continue; fi
     found=1
     source="${source//"$old"/$version}"
     if [[ "$source" == https://* ]]; then
