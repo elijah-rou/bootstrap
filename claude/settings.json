@@ -9,5 +9,19 @@
   },
   "env": {
     "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun @AGENT_KIT@/agentic/bin/agentic claude-hook",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
   }
 }

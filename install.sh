@@ -437,7 +437,21 @@ render_config() {
     fi
 }
 
-ensure_agent_kit() { install_name agent-kit; }
+# agent-kit's policy layer needs its locked dependencies and puts the agentic CLI on PATH. A
+# checkout without a lockfile (an older pin) has neither, so a stale CLI link is removed.
+ensure_agent_kit() {
+    local kit="$TOOLS/agent-kit"
+    install_name agent-kit || return
+    if [[ -f "$kit/bun.lock" ]]; then
+        (cd "$kit" && bun install --frozen-lockfile --production >/dev/null) ||
+            { warn "agent-kit dependencies failed to install; run install.sh with network access"; return 1; }
+    fi
+    if [[ -x "$kit/agentic/bin/agentic" ]]; then
+        link_private "$kit/agentic/bin/agentic" "$TOOLS/bin/agentic"
+    elif [[ -L "$TOOLS/bin/agentic" ]]; then
+        rm -f "$TOOLS/bin/agentic"
+    fi
+}
 
 # Pi state lives in the private root; only its router configuration sits in XDG config. Extensions,
 # skills, the prompt, and the theme load from agent-kit as a local Pi package.

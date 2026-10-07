@@ -43,7 +43,9 @@ by commit in `catalog.tsv` and checked out once under `tools/agent-kit`. Pi load
 Codex and Claude link from it. This repository keeps their configuration: `pi/` (settings, models,
 routers, subagent definitions), `codex/config.toml`, and `claude/settings.json`. Claude Code's
 configuration directory defaults to the private root, so uninstall also deletes its macOS keychain
-login for that directory. Set `BOOTSTRAP_AGENT_KIT` to a local agent-kit checkout to develop both
+login for that directory. agent-kit's policy layer gates both agents: its locked dependencies are
+installed with Bun, `agentic` goes on `PATH`, and `claude/settings.json` runs `agentic claude-hook`
+before shell and file-writing tools. Set `BOOTSTRAP_AGENT_KIT` to a local agent-kit checkout to develop both
 together. Most come from user-space
 downloads; a few (C/C++ compilers, Elixir, clangd on Linux, tmux, zsh) need the system package
 manager and therefore root, sudo, or Homebrew. Without those they are reported as unavailable.
