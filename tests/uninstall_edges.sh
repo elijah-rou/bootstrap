@@ -33,11 +33,16 @@ run link >/dev/null 2>&1
 kit="$work/agent-kit"
 mkdir -p "$kit/codex" "$kit/skills/mine" "$kit/skills/theirs" "$home/.agents/skills" "$work/custom-skill"
 printf '{}\n' >"$kit/package.json"
+# Offline link never installs agent-kit's dependencies, even with a lockfile and no node_modules.
+touch "$kit/bun.lock"
+mkdir -p "$work/stub-bin"
+printf '#!/bin/sh\ntouch "%s/bun-called"\nexit 1\n' "$work" >"$work/stub-bin/bun" && chmod +x "$work/stub-bin/bun"
 printf 'mine\ntheirs\n' >"$kit/codex/skills.txt"
 touch "$kit/codex/AGENTS.md" "$kit/codex/native-tools.md" "$kit/skills/mine/SKILL.md" "$kit/skills/theirs/SKILL.md"
 ln -s "$work/custom-skill" "$home/.agents/skills/theirs"
 printf 'select\ttools\tcodex\n' >>"$home/.local/share/bootstrap/state.tsv"
-env -i HOME="$home" PATH="$PATH" TERM=dumb USER="${USER:-tester}" BOOTSTRAP_AGENT_KIT="$kit" /bin/bash "$repo/install.sh" link >/dev/null 2>&1 || fail 'link with codex selected failed'
+env -i HOME="$home" PATH="$work/stub-bin:$PATH" TERM=dumb USER="${USER:-tester}" BOOTSTRAP_AGENT_KIT="$kit" /bin/bash "$repo/install.sh" link >/dev/null 2>&1 || fail 'link with codex selected failed'
+[[ ! -e "$work/bun-called" ]] || fail 'offline link ran bun install'
 [[ "$(readlink "$home/.agents/skills/theirs")" == "$work/custom-skill" ]] || fail 'an existing skill link was replaced'
 [[ "$(readlink "$home/.agents/skills/mine")" == "$home/.local/share/bootstrap/tools/agent-kit/skills/mine" ]] || fail 'a new skill was not linked'
 [[ -z "$(find "$home/.agents/skills" -name '*.bootstrap-backup')" ]] || fail 'a backup was left in the skill directory'
