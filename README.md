@@ -44,7 +44,8 @@ Codex and Claude link from it. This repository keeps their configuration: `pi/` 
 routers, subagent definitions), `codex/config.toml`, and `claude/settings.json`. Claude Code's
 configuration directory defaults to the private root, so uninstall also deletes its macOS keychain
 login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
-(rulesets, verdicts, the PR watcher) goes on `PATH`.
+(rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` runs agent-kit's Jev task-class
+hint on each prompt in a public repository; it never blocks a prompt.
 Set `BOOTSTRAP_AGENT_KIT` to a local agent-kit checkout to develop both
 together. Most come from user-space
 downloads; a few (C/C++ compilers, Elixir, clangd on Linux, tmux, zsh) need the system package
