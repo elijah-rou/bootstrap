@@ -9,5 +9,18 @@
   },
   "env": {
     "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun @AGENT_KIT@/agentic/tools/jev/cli.ts task-class --claude-hook",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
   }
 }
