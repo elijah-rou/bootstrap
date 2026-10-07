@@ -22,6 +22,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh @AGENT_KIT@/agentic/bin/claude-hook claude-stop",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
