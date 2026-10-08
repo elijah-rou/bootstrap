@@ -16,7 +16,7 @@ curl, tar, gzip, and sha256sum or shasum. No sudo is needed for the core install
 ## What install does
 
 - Downloads pinned, checksum-verified binaries into `~/.local/share/bootstrap/tools`:
-  Bun, evil-helix (`hx`), ripgrep, fd, fzf, bat, eza, zoxide, jq, delta, and gh
+  Bun, evil-helix (`hx`), ripgrep, fd, fzf, bat, eza, zoxide, jq, delta, gh, and hyperfine
   (eza comes from Homebrew on macOS, where no release binary exists).
   Bun is the only JavaScript runtime; `node` runs Bun.
 - Keeps credentials, sessions, history, and caches in `~/.local/share/bootstrap/private`.

@@ -35,7 +35,7 @@ cp -R "$source_dir" "$checkout"
 "$checkout/install.sh" "$@"   # a rerun must converge without errors
 "$checkout/install.sh" link   # configuration-only relink
 "$checkout/install.sh" doctor
-bash -ic 'set -e; for command in hx rg fd fzf bat jq delta gh zoxide node; do command -v "$command" >/dev/null; done; hx --version; node -e "console.log(process.versions.bun)"'
+bash -ic 'set -e; for command in hx rg fd fzf bat jq delta gh zoxide node hyperfine; do command -v "$command" >/dev/null; done; hx --version; node -e "console.log(process.versions.bun)"; hyperfine --version; hyperfine --shell=none --runs 2 "sleep 0.01"'
 # Bootstrap's tools come first on PATH in login shells too, after macOS path_helper has run.
 tools="$HOME/.local/share/bootstrap/tools/bin"
 [[ "$(bash -lc 'printf %s "${PATH%%:*}"')" == "$tools" ]] || { printf 'FAIL: bash login PATH does not start with %s\n' "$tools" >&2; exit 1; }

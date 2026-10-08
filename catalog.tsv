@@ -51,6 +51,9 @@ delta	core	0.20.1	darwin-arm64	bc1839cea69288d4673a24faffbb825d408ca907e0f7d33b1
 gh	core	2.102.0	linux-x86_64	bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386	https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz	gh
 gh	core	2.102.0	linux-aarch64	7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484	https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_arm64.tar.gz	gh
 gh	core	2.102.0	darwin-arm64	da922c20d1792e5b2cbf375593d7a658acf034c12c84e007e71c76ef959c337e	https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_macOS_arm64.zip	gh
+hyperfine	core	2.0.0	linux-x86_64	38e59087bd65520930a13cf513d8a493b7043741e8ad62349a8a9929eb61bc5c	https://github.com/sharkdp/hyperfine/releases/download/v2.0.0/hyperfine-v2.0.0-x86_64-unknown-linux-musl.tar.gz	hyperfine
+hyperfine	core	2.0.0	linux-aarch64	f0591c2cb8f66f2d2624d23979cf96dc99a67cb935f9925c82b9a4e3ffe5b2e1	https://github.com/sharkdp/hyperfine/releases/download/v2.0.0/hyperfine-v2.0.0-aarch64-unknown-linux-musl.tar.gz	hyperfine
+hyperfine	core	2.0.0	darwin-arm64	590b839cfea386b384ce0b42d16daf2910277cf30950656194bb3a5f20dea81e	https://github.com/sharkdp/hyperfine/releases/download/v2.0.0/hyperfine-v2.0.0-aarch64-apple-darwin.tar.gz	hyperfine
 
 c	languages	-	apt	-	pkg:build-essential	cc
 c	languages	-	apt	-	pkg:pkg-config	pkg-config
