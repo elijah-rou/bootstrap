@@ -7,6 +7,6 @@ cli="$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/di
 [[ -f "$cli" ]] || { printf 'Pi is not installed; run install.sh\n' >&2; exit 1; }
 # Pi handles management commands before it parses session options.
 case "${1:-}" in
-    install|remove|update|list|uninstall|config|auth) exec bun "$cli" "$@" ;;
+    install|remove|update|list|uninstall|config|auth|mcp) exec bun "$cli" "$@" ;;
     *) exec bun "$cli" --session-dir "$PI_CODING_AGENT_SESSION_DIR" "$@" ;;
 esac
