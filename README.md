@@ -46,6 +46,10 @@ configuration directory defaults to the private root, so uninstall also deletes 
 login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
 (rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` runs agent-kit's Jev task-class
 hint on each prompt in a public repository; it never blocks a prompt.
+The agent selections also set up Cloudflare as its [agent-setup guide](https://developers.cloudflare.com/agent-setup/prompt.md)
+directs: Claude Code installs the `cloudflare@cloudflare` plugin, while Codex and Pi get the Cloudflare MCP server
+(`codex mcp add`, `pi mcp add`) and the skills from `cloudflare/skills`, pinned in `catalog.tsv` and linked into
+`~/.agents/skills`. OAuth sign-in stays manual: `codex mcp login cloudflare`, `pi mcp login cloudflare`.
 Set `BOOTSTRAP_AGENT_KIT` to a local agent-kit checkout to develop both
 together. Most come from user-space
 downloads; a few (C/C++ compilers, Elixir, clangd on Linux, tmux, zsh) need the system package
