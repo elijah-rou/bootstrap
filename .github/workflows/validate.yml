@@ -53,6 +53,9 @@ jobs:
       - name: Prepare Homebrew dependencies
         # Upgrading a preinstalled formula can make it depend on a new formula that
         # bootstrap must then preserve. Finish those upgrades before the snapshot.
+        env:
+          # Resolve current formulae, as bootstrap does with its own empty cache.
+          HOMEBREW_CACHE: ${{ runner.temp }}/homebrew-cache
         run: brew install --only-dependencies eza
       - name: Round-trip in a disposable HOME
         run: |
