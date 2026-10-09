@@ -484,25 +484,10 @@ step_pi() {
         render_config "$REPO/pi/$file.json" "$CONFIG_HOME/bootstrap/pi-$file.json" "$agent/$file.json" || return 1
     done
     [[ "$OFFLINE" == 0 ]] || return 0
-    link_cloudflare_skills && pi mcp add cloudflare --url "$CLOUDFLARE_MCP_URL" >/dev/null || return 1
     if command -v herdr >/dev/null; then herdr integration install pi >/dev/null || return 1; fi
     while IFS= read -r source; do
         if [[ "$source" != /* ]]; then pi install "$source" >/dev/null || { warn "Pi package failed: $source"; return 1; }; fi
     done < <(node -e 'for (const p of require(process.argv[1]).packages ?? []) console.log(typeof p === "string" ? p : p.source)' "$agent/settings.json")
-}
-
-# Cloudflare's skills and MCP server, set up as developers.cloudflare.com/agent-setup/prompt.md directs.
-# Online installs only; an offline link leaves the earlier setup in place.
-# Codex and Pi share the skills pinned here, linked into ~/.agents/skills; Claude Code gets both from
-# Cloudflare's plugin. OAuth sign-in is interactive and left to the user (codex/pi mcp login cloudflare).
-CLOUDFLARE_MCP_URL=https://mcp.cloudflare.com/mcp
-
-link_cloudflare_skills() {
-    local skill
-    install_name cloudflare-skills || return 1
-    for skill in "$TOOLS/cloudflare-skills/skills"/*/; do
-        link_skill "${skill%/}" "$HOME/.agents/skills/$(basename "$skill")" || return 1
-    done
 }
 
 step_codex() {
@@ -519,9 +504,6 @@ step_codex() {
     while IFS= read -r name; do
         if [[ -n "$name" ]]; then link_skill "$kit/skills/$name" "$HOME/.agents/skills/$name" || return 1; fi
     done <"$kit/codex/skills.txt"
-    [[ "$OFFLINE" == 0 ]] || return 0
-    link_cloudflare_skills || return 1
-    codex mcp get cloudflare >/dev/null 2>&1 || codex mcp add cloudflare --url "$CLOUDFLARE_MCP_URL" >/dev/null
 }
 
 # Claude Code's configuration directory defaults to the private root (see shell/env.sh).
@@ -537,9 +519,7 @@ step_claude() {
     done <"$kit/claude/skills.txt"
     # Claude Code discovers the Mod's plugin manifest under its skills directory.
     link_skill "$kit/claude/mods/trial-tools" "$home/skills/trial-tools" || return 1
-    render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$home/settings.json" || return 1
-    [[ "$OFFLINE" == 0 ]] || return 0
-    claude plugin marketplace add cloudflare/skills >/dev/null && claude plugin install cloudflare@cloudflare >/dev/null
+    render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$home/settings.json"
 }
 
 step_herdr() {
