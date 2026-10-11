@@ -1,4 +1,5 @@
 {
+  "subagentPromptCacheTtl": "1h",
   "enabledPlugins": {
     "cc-plugin-you-should-know@builtin": true
   },
