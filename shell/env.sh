@@ -32,8 +32,6 @@ export CODEX_HOME="${CODEX_HOME:-$_private/codex}" CLAUDE_CONFIG_DIR="${CLAUDE_C
 # Claude Code keys its keychain login to any explicit CLAUDE_CONFIG_DIR, so its default home stays
 # implicit; otherwise an existing ~/.claude login would no longer be found.
 if [ "$CLAUDE_CONFIG_DIR" = "$HOME/.claude" ]; then unset CLAUDE_CONFIG_DIR; fi
-# Agents are pinned in catalog.tsv; their own updaters would move them off the pin.
-export DISABLE_AUTOUPDATER=1
 
 # Bootstrap's tools go first even when macOS path_helper or other profile files reordered PATH,
 # so every re-source moves them to the front rather than skipping ones already present.

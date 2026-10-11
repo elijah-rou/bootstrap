@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the pinned Codex CLI with Bun and the private Codex home.
+# Runs the installed Codex CLI with Bun and the private Codex home.
 set -euo pipefail
 # shellcheck source=shell/env.sh
 . "$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)/shell/env.sh"

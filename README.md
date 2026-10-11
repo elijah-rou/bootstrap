@@ -27,7 +27,9 @@ curl, tar, gzip, and sha256sum or shasum. No sudo is needed for the core install
 - Records each change in `~/.local/share/bootstrap/state.tsv`.
 
 Rerunning `install.sh` converges: it updates to the pinned versions in `catalog.tsv` and
-reinstalls recorded selections. `install.sh link` reapplies only the configuration, offline.
+reinstalls recorded selections. The Pi, Claude Code, and Codex CLIs are the exception: they release
+often, so every run installs their newest version. Claude Code also updates itself between runs;
+Pi and Codex change only when `install.sh` runs. `install.sh link` reapplies only the configuration, offline.
 
 ## Selections
 

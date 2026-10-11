@@ -682,7 +682,11 @@ cmd_doctor() {
     done
     if grep -qx "select"$'\t'"tools"$'\t'"pi" "$STATE"; then
         version="$(awk -F '\t' '$1 == "pi" { print $3; exit }' "$CATALOG")"
-        if [[ "$(pi --version 2>/dev/null)" != "$version" ]]; then printf 'wrong    pi version, want %s\n' "$version"; failed=1; fi
+        # A latest row has no catalog version; the wrapper must run the package Bun installed.
+        if [[ "$version" == latest ]]; then
+            version="$(jq -r .version "$BUN_INSTALL/install/global/node_modules/@earendil-works/pi-coding-agent/package.json" 2>/dev/null)"
+        fi
+        if [[ -z "$version" || "$(pi --version 2>/dev/null)" != "$version" ]]; then printf 'wrong    pi version, want %s\n' "${version:-an installed package}"; failed=1; fi
     fi
     return "$failed"
 }
