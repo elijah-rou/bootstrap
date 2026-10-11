@@ -13,9 +13,9 @@
 # Download rows win over system rows. System rows are skipped when their bins already exist.
 
 #name	groups	version	platform	sha256	source	bins
-bun	core	1.4.2	linux-x86_64	129ae8dfaca565e8008735e3d6adae7515421c5b226d6f1f90c4bcb35803a647	https://registry.npmjs.org/@oven/bun-linux-x64-baseline/-/bun-linux-x64-baseline-1.4.2.tgz	bun
-bun	core	1.4.2	linux-aarch64	9ab3970a19660b5cd089f17fb021d900e1ca1b988dafd461d66d0a0ff4d6eac4	https://registry.npmjs.org/@oven/bun-linux-aarch64/-/bun-linux-aarch64-1.4.2.tgz	bun
-bun	core	1.4.2	darwin-arm64	a9df486eaf7e9db9bdebb1fa425e8c9809abd783b1c518d1dbc5096a53b861ed	https://registry.npmjs.org/@oven/bun-darwin-aarch64/-/bun-darwin-aarch64-1.4.2.tgz	bun
+bun	core	1.4.3	linux-x86_64	1a81395cfbd4c36573ef9b2d51da5231b63b2d0ad0e2a8ed2b075dada0de6dfb	https://registry.npmjs.org/@oven/bun-linux-x64-baseline/-/bun-linux-x64-baseline-1.4.3.tgz	bun
+bun	core	1.4.3	linux-aarch64	557e9d56871b316ccc56856995283e798839b2fcb21adeef39d6413b715633e1	https://registry.npmjs.org/@oven/bun-linux-aarch64/-/bun-linux-aarch64-1.4.3.tgz	bun
+bun	core	1.4.3	darwin-arm64	efac3433b75cbbe8478bd0a339f2bf196d2cc1bc8dd348118c689391b412bf79	https://registry.npmjs.org/@oven/bun-darwin-aarch64/-/bun-darwin-aarch64-1.4.3.tgz	bun
 pi	tools	latest	any	-	npm:@earendil-works/pi-coding-agent	pi
 pi	tools	-	any	-	step:pi	pi
 herdr	tools	0.9.3	linux-x86_64	18a8dc65f1c2fa485884344356dea1cfd911c6f06cf46fa78e193f4087f4dba7	https://github.com/herdrdev/herdr/releases/download/v0.9.3/herdr-linux-x86_64	herdr
@@ -31,9 +31,9 @@ rg	core	15.2.0	darwin-arm64	3750b2e93f37e0c692657da574d7019a101c0084da05a790c83f
 fd	core	10.5.0	linux-x86_64	761c72dc8e120d85b22292063be8a796e2eeb20eb3e4f38b8fa2343ccf3514a7	https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-x86_64-unknown-linux-musl.tar.gz	fd
 fd	core	10.5.0	linux-aarch64	d76c4317f7d5dba69f8a2a15856c90c777e7f0dd4e85f0de8c76de6992c374d4	https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-aarch64-unknown-linux-musl.tar.gz	fd
 fd	core	10.5.0	darwin-arm64	b67e1836c468e42e411984b56e52fa7abec08c2bd22c867398e7cc134aac5e12	https://github.com/sharkdp/fd/releases/download/v10.5.0/fd-v10.5.0-aarch64-apple-darwin.tar.gz	fd
-fzf	core	0.74.4	linux-x86_64	05e6813a337cc722c3ed07e54a764b75cc5d671e2e60459db0ba696ee5fa7504	https://github.com/junegunn/fzf/releases/download/v0.74.4/fzf-0.74.4-linux_amd64.tar.gz	fzf
-fzf	core	0.74.4	linux-aarch64	5d673b849f494f0d64ec471d8640b153ca8849e3846a31da17abdcfce8df6b46	https://github.com/junegunn/fzf/releases/download/v0.74.4/fzf-0.74.4-linux_arm64.tar.gz	fzf
-fzf	core	0.74.4	darwin-arm64	4f6a113bfc0c7959e0005c78d566a51afc4fcefc956f43735c62a9deb19e92ae	https://github.com/junegunn/fzf/releases/download/v0.74.4/fzf-0.74.4-darwin_arm64.tar.gz	fzf
+fzf	core	0.74.5	linux-x86_64	d47d7f882972c7d674dbbba998ffa4116e68379616ffac7695d0671e9a722c5f	https://github.com/junegunn/fzf/releases/download/v0.74.5/fzf-0.74.5-linux_amd64.tar.gz	fzf
+fzf	core	0.74.5	linux-aarch64	cf058001da21724a469b714a29cf4aab9cbe860d218a0d6c1b5b661efad7784c	https://github.com/junegunn/fzf/releases/download/v0.74.5/fzf-0.74.5-linux_arm64.tar.gz	fzf
+fzf	core	0.74.5	darwin-arm64	ada808c7401b9949ce8842274ac16a6b6193fd32dcada396884a6a9a89e5985a	https://github.com/junegunn/fzf/releases/download/v0.74.5/fzf-0.74.5-darwin_arm64.tar.gz	fzf
 bat	core	0.26.1	linux-x86_64	0dcd8ac79732c0d5b136f11f4ee00e581440e16a44eab5b3105b611bbf2cf191	https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-x86_64-unknown-linux-musl.tar.gz	bat
 bat	core	0.26.1	linux-aarch64	6369242c584065f195fb20cb36fbd7cb63ae690605bbe89868a7596b596c2c23	https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-aarch64-unknown-linux-musl.tar.gz	bat
 bat	core	0.26.1	darwin-arm64	e30beff26779c9bf60bb541e1d79046250cb74378f2757f8eb250afddb19e114	https://github.com/sharkdp/bat/releases/download/v0.26.1/bat-v0.26.1-aarch64-apple-darwin.tar.gz	bat
@@ -68,13 +68,13 @@ c	languages	-	brew	-	pkg:pkg-config	pkg-config
 cpp	languages	-	apt	-	pkg:build-essential	c++
 cpp	languages	-	dnf	-	pkg:gcc-c++	c++
 cpp	languages	-	pacman	-	pkg:gcc	c++
-rust	languages	1.28.2	linux-x86_64	20a06e644b0d9bd2fbdbfd52d42540bdde820ea7df86e92e533c073da0cdd43c	https://static.rust-lang.org/rustup/archive/1.28.2/x86_64-unknown-linux-gnu/rustup-init	rustup-init
-rust	languages	1.28.2	linux-aarch64	e3853c5a252fca15252d07cb23a1bdd9377a8c6f3efa01531109281ae47f841c	https://static.rust-lang.org/rustup/archive/1.28.2/aarch64-unknown-linux-gnu/rustup-init	rustup-init
-rust	languages	1.28.2	darwin-arm64	20ef5516c31b1ac2290084199ba77dbbcaa1406c45c1d978ca68558ef5964ef5	https://static.rust-lang.org/rustup/archive/1.28.2/aarch64-apple-darwin/rustup-init	rustup-init
+rust	languages	1.29.1	linux-x86_64	dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71	https://static.rust-lang.org/rustup/archive/1.29.1/x86_64-unknown-linux-gnu/rustup-init	rustup-init
+rust	languages	1.29.1	linux-aarch64	15f6e4ce9f583b929c996c91562bad6d4454f3281de858b02cdfdef615fac433	https://static.rust-lang.org/rustup/archive/1.29.1/aarch64-unknown-linux-gnu/rustup-init	rustup-init
+rust	languages	1.29.1	darwin-arm64	ec1b9233e7f72990ecd8e62063fa7f6c3dfc2bec8e97f88bff165f9100ac696a	https://static.rust-lang.org/rustup/archive/1.29.1/aarch64-apple-darwin/rustup-init	rustup-init
 rust	languages	stable	any	-	step:rust	cargo
-go	languages	1.27.1	linux-x86_64	63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445	https://go.dev/dl/go1.27.1.linux-amd64.tar.gz	go,gofmt
-go	languages	1.27.1	linux-aarch64	3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec	https://go.dev/dl/go1.27.1.linux-arm64.tar.gz	go,gofmt
-go	languages	1.27.1	darwin-arm64	ee215d57e0ec269c60cc9ceca68e6bda321ba9ee5afe24f4b0988703c2d87d12	https://go.dev/dl/go1.27.1.darwin-arm64.tar.gz	go,gofmt
+go	languages	1.27.2	linux-x86_64	ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5	https://go.dev/dl/go1.27.2.linux-amd64.tar.gz	go,gofmt
+go	languages	1.27.2	linux-aarch64	94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8	https://go.dev/dl/go1.27.2.linux-arm64.tar.gz	go,gofmt
+go	languages	1.27.2	darwin-arm64	76812b213b1b2302c978d28fa52fa92d541704b9e7d9d5db8002c50e4018c4c5	https://go.dev/dl/go1.27.2.darwin-arm64.tar.gz	go,gofmt
 python	languages	0.13.0	linux-x86_64	1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154	https://github.com/astral-sh/uv/releases/download/0.13.0/uv-x86_64-unknown-linux-gnu.tar.gz	uv,uvx
 python	languages	0.13.0	linux-aarch64	3ccfb6af6e242433eb552f7d9676abd5412c6595c497e990d9c8cb7b5bd4d2c3	https://github.com/astral-sh/uv/releases/download/0.13.0/uv-aarch64-unknown-linux-gnu.tar.gz	uv,uvx
 python	languages	0.13.0	darwin-arm64	a9c1b29002cf3c83f07fa9cd8a887a3be0107d90e23189721221e7257db8e3d6	https://github.com/astral-sh/uv/releases/download/0.13.0/uv-aarch64-apple-darwin.tar.gz	uv,uvx
@@ -95,12 +95,12 @@ rust-analyzer	lsp	2026-10-05	linux-x86_64	28070188df63b6f217768040781decc8db43bc
 rust-analyzer	lsp	2026-10-05	linux-aarch64	3974c863acbbd96ef2cc02a7aaa79123935b05f27ffe4fd393fc229522f75cb9	https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-05/rust-analyzer-aarch64-unknown-linux-gnu.gz	rust-analyzer
 rust-analyzer	lsp	2026-10-05	darwin-arm64	64d3f6b8aacd94a93a03298d7988dfa0c747f8a4fcc539a4e59d9c9f920ca62f	https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-05/rust-analyzer-aarch64-apple-darwin.gz	rust-analyzer
 gopls	lsp	v0.23.0	any	-	go:golang.org/x/tools/gopls	gopls
-basedpyright	lsp	1.40.1	any	-	npm:basedpyright	basedpyright-langserver
-ruff	lsp,tools	0.16.10	linux-x86_64	9567ff1201e2fb3da31ff04c35587d768c66d6cb42dfa84de474e2bfe360b608	https://github.com/astral-sh/ruff/releases/download/0.16.10/ruff-x86_64-unknown-linux-gnu.tar.gz	ruff
-ruff	lsp,tools	0.16.10	linux-aarch64	dc0d74de837ef0a7bcc62ce98c48a622b075d057161f13b958be2934becd55a6	https://github.com/astral-sh/ruff/releases/download/0.16.10/ruff-aarch64-unknown-linux-gnu.tar.gz	ruff
-ruff	lsp,tools	0.16.10	darwin-arm64	f051cd306de2691262a0574f8857cd1f4d6bfcd448084ea23d61b9c1c37df510	https://github.com/astral-sh/ruff/releases/download/0.16.10/ruff-aarch64-apple-darwin.tar.gz	ruff
+basedpyright	lsp	1.40.2	any	-	npm:basedpyright	basedpyright-langserver
+ruff	lsp,tools	0.17.0	linux-x86_64	c94fc1dc71f054d06d9f1149442dcb471516aa2b7d4b7e8124e05d082d4c91d3	https://github.com/astral-sh/ruff/releases/download/0.17.0/ruff-x86_64-unknown-linux-gnu.tar.gz	ruff
+ruff	lsp,tools	0.17.0	linux-aarch64	294e181ba6ccb0c2ffd778580e3c42b19f038bdbcb844f39fd9a6a26e8148804	https://github.com/astral-sh/ruff/releases/download/0.17.0/ruff-aarch64-unknown-linux-gnu.tar.gz	ruff
+ruff	lsp,tools	0.17.0	darwin-arm64	59afe64c227e5f9a39d85c4d6be6e2d8e9a85c55f0887baad9c9e2f775a1c119	https://github.com/astral-sh/ruff/releases/download/0.17.0/ruff-aarch64-apple-darwin.tar.gz	ruff
 typescript-language-server	lsp	6.0.3	any	-	npm:typescript	tsc
-typescript-language-server	lsp	6.0.1	any	-	npm:typescript-language-server	typescript-language-server
+typescript-language-server	lsp	6.0.2	any	-	npm:typescript-language-server	typescript-language-server
 bash-language-server	lsp	5.8.1	any	-	npm:bash-language-server	bash-language-server
 elixirls	lsp	-	apt	-	pkg:unzip	unzip
 elixirls	lsp	-	dnf	-	pkg:unzip	unzip
