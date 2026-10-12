@@ -37,7 +37,7 @@ This read-only check verifies ownership, readiness, immutable image ID, exact cu
 
 ## Drive
 
-One target per feature in `features/`. Each runs `scripts/inside.sh TARGET` as the **unprivileged** tester (root would invalidate the permission-failure uninstall test) under `bash -x`, with a 180-second deadline plus 10 seconds to terminate. Every target restores HOME and packages, so offline targets can run in any order in one container. A target runs once per run: to repeat one, launch a new run.
+One target per feature in `features/`. Each runs `scripts/inside.sh TARGET` as the **unprivileged** tester (root would invalidate the permission-failure uninstall test) under `bash -x`, with a 180-second deadline plus 10 seconds to terminate. Every target restores HOME and packages, so offline targets can run in any order in one container. Each target first re-hashes the sources against launch and refuses if they changed. A target runs once per run, counting one that was interrupted: to repeat one, launch a new run. A drive call can take up to 190 seconds per target, so give the Bash call a longer timeout or run it in the background; an interrupted host call leaves the helper running in the container.
 
 ```bash
 .agents/skills/verify-bootstrap/scripts/verify.sh drive RUN_ID help link doctor uninstall   # offline run
