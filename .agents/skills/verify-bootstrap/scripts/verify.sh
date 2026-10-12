@@ -30,7 +30,8 @@ Targets (one per feature in features/):
 
 Each target has a 180-second deadline unless --timeout says otherwise, and may run once per run.
 Evidence for a run lives in local/verification/bootstrap/RUN_ID/: drive-TARGET.command, .stdout, .stderr,
-.exit, and artifacts/TARGET/ exported from the container.
+.exit, .source.sha256, .source-after.sha256, .export.stderr, and artifacts/TARGET/ from the container.
+A drive that fails or is interrupted leaves drive.active, and the run accepts no further drives.
 
 Example:
   verify.sh launch                      # prints RUN_ID=run-...
@@ -144,31 +145,25 @@ cmd_doctor() {
     cat "$evidence/doctor.stdout"
 }
 
+same_sources() {
+    docker exec -u tester "$cid" sha256sum "${sources[@]}" >"$evidence/drive-$1.sha256"
+    cmp "$evidence/source.sha256" "$evidence/drive-$1.sha256" >&2 \
+        || die "sources differ from launch (drive-$1.sha256); run cleanup $run and launch a new run"
+}
+
 # Runs one target's helper mode, exports its /proof directory, and requires exit 0 and its PASS line.
 drive_target() {
     local target="$1" timeout="$2"; shift 2
-    local want network status
-    want="$(target_network "$target")" || fail_usage "unknown target '$target'"
-    network="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$cid")"
-    [[ "$network" == "$want" ]] || die "target $target needs a --network $want run; $run uses $network"
-    # .command is written before the helper starts and .exit after it returns. A drive without .exit is still
-    # running or was interrupted with its helper possibly alive in the container; never share HOME with it.
-    local started
-    for started in "$evidence"/drive-*.command; do
-        [[ -e "$started" ]] || continue
-        [[ -e "${started%.command}.exit" ]] || die "${started##*/} has no exit status: a drive is running or was interrupted; run cleanup $run and launch a new run"
-    done
-    [[ ! -e "$evidence/drive-$target.command" ]] || die "$target already ran for $run; launch a new run"
-    # The sources may have changed since doctor; the bytes that run must be the bytes recorded.
-    docker exec -u tester "$cid" sha256sum "${sources[@]}" >"$evidence/drive-$target.source.sha256"
-    cmp "$evidence/source.sha256" "$evidence/drive-$target.source.sha256" >&2 \
-        || die "sources changed since launch; run cleanup $run and launch a new run"
+    local status
+    # The bytes that run must be the bytes recorded at launch, before and after the helper.
+    same_sources "$target.source"
     local argv=("${as_tester[@]}" "$cid" timeout --signal=TERM --kill-after=10s "${timeout}s" bash -x "$helper" "$target" "$@")
     printf '%q ' "${argv[@]}" >"$evidence/drive-$target.command"
     printf '\n' >>"$evidence/drive-$target.command"
     printf 'DRIVE %s ...\n' "$target"
     if "${argv[@]}" >"$evidence/drive-$target.stdout" 2>"$evidence/drive-$target.stderr"; then status=0; else status=$?; fi
     printf '%s\n' "$status" >"$evidence/drive-$target.exit"
+    same_sources "$target.source-after"
     mkdir -p "$evidence/artifacts"
     docker cp "$cid:/proof/$target" "$evidence/artifacts/$target" >/dev/null 2>"$evidence/drive-$target.export.stderr" \
         || printf 'warning: could not export /proof/%s; see %s/drive-%s.export.stderr\n' "$target" "$evidence" "$target" >&2
@@ -190,9 +185,11 @@ cmd_drive() {
     [[ -e "$evidence/doctor.exit" ]] || die "doctor has not run for $run; run verify.sh doctor $run first"
     [[ "$(cat "$evidence/doctor.exit")" == 0 ]] || die "doctor failed for $run; run cleanup $run and launch a new run"
     owned_and_running
+    local targets=("$@") selection=() target arg network want
     if [[ "$1" == install ]]; then
+        targets=(install)
         shift
-        local selection=(--tools just) arg
+        selection=(--tools just)
         if [[ $# -gt 0 ]]; then
             [[ "$1" == -- ]] || fail_usage "install takes its selection after --, for example: install -- --tools just"
             shift
@@ -201,15 +198,21 @@ cmd_drive() {
                 [[ "$arg" =~ ^[-A-Za-z0-9._+]+$ ]] || fail_usage "unexpected selection argument '$arg'"
             done
         fi
-        drive_target install "$timeout" ${selection[@]+"${selection[@]}"}
-        return
     fi
-    local target
-    for target in "$@"; do
-        [[ "$target" != install ]] || fail_usage "install needs its own bridge run and drive call"
-        target_network "$target" >/dev/null || fail_usage "unknown target '$target'"
+    # Refuse mistakes before claiming the run, so they do not block it.
+    network="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$cid")"
+    for target in "${targets[@]}"; do
+        [[ "$target" != install || ${#targets[@]} == 1 ]] || fail_usage "install needs its own bridge run and drive call"
+        want="$(target_network "$target")" || fail_usage "unknown target '$target'"
+        [[ "$network" == "$want" ]] || die "target $target needs a --network $want run; $run uses $network"
+        [[ ! -e "$evidence/drive-$target.command" ]] || die "$target already ran for $run; launch a new run"
     done
-    for target in "$@"; do drive_target "$target" "$timeout"; done
+    # One drive at a time per run, claimed atomically. The claim is released only when every target passed:
+    # after a failure or interruption the helper may still be running in the container, so HOME is not reusable.
+    mkdir "$evidence/drive.active" 2>/dev/null \
+        || die "$run has a drive running, or one that did not pass; run cleanup $run and launch a new run"
+    for target in "${targets[@]}"; do drive_target "$target" "$timeout" ${selection[@]+"${selection[@]}"}; done
+    rmdir "$evidence/drive.active"
 }
 
 cmd_cleanup() {
