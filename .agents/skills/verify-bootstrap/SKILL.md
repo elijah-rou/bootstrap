@@ -37,7 +37,7 @@ This read-only check verifies ownership, readiness, immutable image ID, exact cu
 
 ## Drive
 
-One target per feature in `features/`. Each runs `scripts/inside.sh TARGET` as the **unprivileged** tester (root would invalidate the permission-failure uninstall test) under `bash -x`, with a 180-second deadline plus 10 seconds to terminate. Every target restores HOME and packages, so offline targets can run in any order in one container. Each target first re-hashes the sources against launch and refuses if they changed. A target runs once per run: to repeat one, launch a new run. A drive call can take up to 190 seconds per target, so give the Bash call a longer timeout or run it in the background and wait for it. An interrupted host call can leave the helper running in the container, so the run then refuses every further drive; clean it up and launch a new run.
+One target per feature in `features/`. Each runs `scripts/inside.sh TARGET` as the **unprivileged** tester (root would invalidate the permission-failure uninstall test) under `bash -x`, with a 180-second deadline plus 10 seconds to terminate. Every target restores HOME and packages, so offline targets can run in any order in one container. Each target re-hashes the sources against launch before and after the helper and fails if they changed. A target runs once per run: to repeat one, launch a new run. One drive call runs at a time per run, claimed atomically through `drive.active`; it is released only when every target in the call passed, because after a failure or interruption the helper may still be running in the container. A drive call can take up to 190 seconds per target, so give the Bash call a longer timeout or run it in the background and wait for it.
 
 ```bash
 .agents/skills/verify-bootstrap/scripts/verify.sh drive RUN_ID help link doctor uninstall   # offline run
@@ -58,7 +58,7 @@ A target passes only with exit 0 and its own `PASS TARGET:` line, which the CLI 
 
 ## Evidence
 
-`local/verification/bootstrap/RUN_ID/` is the single evidence directory per run, under the repository's git-ignored `local/`. Cleanup never removes it. Each target leaves `drive-TARGET.command`, `.stdout`, `.stderr` (xtrace), `.exit`, and `artifacts/TARGET/` exported from the container's temporary `/proof/TARGET`. Launch and Doctor leave image/source identity and their transcripts; Cleanup exports the whole `/proof` again to `cleanup-artifacts/`.
+`local/verification/bootstrap/RUN_ID/` is the single evidence directory per run, under the repository's git-ignored `local/`. Cleanup never removes it. Each target leaves `drive-TARGET.command`, `.stdout`, `.stderr` (xtrace), `.exit`, `.source.sha256` and `.source-after.sha256`, `.export.stderr`, and `artifacts/TARGET/` exported from the container's temporary `/proof/TARGET`. Launch and Doctor leave image/source identity and their transcripts; Cleanup exports the whole `/proof` again to `cleanup-artifacts/`.
 
 Artifacts include before/after HOME and package-version snapshots for every target, plus: `link` first state.tsv, shell block, Helix link target, linked/relinked snapshots; `doctor` product-doctor output and status; `uninstall` first state.tsv; `install` the round-trip stdout. The round-trip harness itself compares package names.
 
