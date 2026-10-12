@@ -512,7 +512,7 @@ step_claude() {
     ensure_agent_kit || return 1
     # Claude Code keeps per-project logs in the platform cache, which CLAUDE_CONFIG_DIR does not move.
     own "$CACHE_HOME/claude-cli-nodejs" "$HOME/Library/Caches/claude-cli-nodejs"
-    if [[ "$home" != "$ROOT"/* ]]; then make_dirs "$home/skills" && make_dirs "$home/agents"; else (umask 077 && mkdir -p "$home/skills" "$home/agents"); fi
+    if [[ "$home" != "$ROOT"/* ]]; then make_dirs "$home/skills"; else (umask 077 && mkdir -p "$home/skills"); fi
     place "$kit/claude/CLAUDE.md" "$home/CLAUDE.md" || return 1
     # agent-kit's subagent roles (claude/agents/*.md) fix each child's model and effort; one named
     # like a built-in, such as Explore, replaces it. Pins older than the roles have none to link.
