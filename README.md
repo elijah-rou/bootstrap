@@ -42,10 +42,11 @@ Pi and Codex change only when `install.sh` runs. `install.sh link` reapplies onl
 Agents and Herdr are selections too: `--tools pi claude codex herdr`. Their instructions, skills, Pi
 extensions, and Claude mods come from [agent-kit](https://github.com/elijah-rou/agent-kit), pinned
 by commit in `catalog.tsv` and checked out once under `tools/agent-kit`. Pi loads it as a package;
-Codex and Claude link from it, including Claude's subagent roles into its `agents/` directory.
-This repository keeps their configuration: `pi/` (settings, models, routers, subagent definitions), `codex/config.toml`, and `claude/settings.json`. Claude Code's
-configuration directory defaults to the private root, so uninstall also deletes its macOS keychain
-login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
+Codex and Claude link from it, including Claude's subagent roles (`claude/agents/*.md`, in pins
+that have them) into its `agents/` directory. This repository keeps their configuration: `pi/`
+(settings, models, routers, subagent definitions), `codex/config.toml`, and `claude/settings.json`.
+Claude Code's configuration directory defaults to the private root, so uninstall also deletes its
+macOS keychain login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
 (rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` runs agent-kit's Jev task-class
 hint on each prompt in a public repository; it never blocks a prompt.
 Set `BOOTSTRAP_AGENT_KIT` to a local agent-kit checkout to develop both
