@@ -151,8 +151,14 @@ drive_target() {
     want="$(target_network "$target")" || fail_usage "unknown target '$target'"
     network="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$cid")"
     [[ "$network" == "$want" ]] || die "target $target needs a --network $want run; $run uses $network"
-    # .command is written before the helper starts, so an interrupted drive also counts as run.
-    [[ ! -e "$evidence/drive-$target.command" ]] || die "$target already started for $run; launch a new run"
+    # .command is written before the helper starts and .exit after it returns. A drive without .exit is still
+    # running or was interrupted with its helper possibly alive in the container; never share HOME with it.
+    local started
+    for started in "$evidence"/drive-*.command; do
+        [[ -e "$started" ]] || continue
+        [[ -e "${started%.command}.exit" ]] || die "${started##*/} has no exit status: a drive is running or was interrupted; run cleanup $run and launch a new run"
+    done
+    [[ ! -e "$evidence/drive-$target.command" ]] || die "$target already ran for $run; launch a new run"
     # The sources may have changed since doctor; the bytes that run must be the bytes recorded.
     docker exec -u tester "$cid" sha256sum "${sources[@]}" >"$evidence/drive-$target.source.sha256"
     cmp "$evidence/source.sha256" "$evidence/drive-$target.source.sha256" >&2 \
