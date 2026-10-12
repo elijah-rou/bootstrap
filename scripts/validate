@@ -9,7 +9,8 @@ python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
 
 shell_files=(install.sh bin/pi bin/codex bin/node bin/pi-workspace shell/env.sh shell/bashrc shell/common.sh
-    shell/open.sh tests/roundtrip.sh tests/container.sh tests/uninstall_edges.sh scripts/pin scripts/validate)
+    shell/open.sh tests/roundtrip.sh tests/container.sh tests/uninstall_edges.sh scripts/pin scripts/validate
+    .agents/skills/verify-bootstrap/scripts/verify.sh .agents/skills/verify-bootstrap/scripts/inside.sh)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
 if command -v zsh >/dev/null; then zsh -n shell/zshrc; fi
 shellcheck -x -P SCRIPTDIR --severity=warning "${shell_files[@]}"

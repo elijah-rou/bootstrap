@@ -21,13 +21,13 @@ Users remove bootstrap's recorded changes, preserve unrelated work, refuse accid
 
 Preconditions:
 
-- Parent-skill Doctor passes. Offline modes use an unprivileged account and `NETWORK=none`.
+- `verify.sh doctor RUN_ID` passes for an offline run. The target runs as the unprivileged tester.
 
-- **Require confirmation.** Parent `offline` mode runs `./install.sh uninstall` with stdin closed. Require failure and state.tsv unchanged.
-- **Undo and repeat.** It then runs `./install.sh uninstall --yes` twice, asserts the bootstrap root is absent, and compares full HOME/package snapshots to baseline.
-- **Recover while preserving user content.** Parent `edges` mode runs `bash -x tests/uninstall_edges.sh`; the existing harness makes the shell file unwritable, requires failed uninstall to keep state, restores writability, retries, and checks original shell content and user replacement git-ignore survive.
-- **Remove a real installation.** Parent `roundtrip --tools just` invokes confirmed uninstall after installed-command checks and fake gh auth seeding. Require the final PASS and matching before/after snapshots; the fake-token signout warning does not prove live credential revocation.
-- **Proof.** Retain offline/edge/round-trip commands, stdout, stderr, and statuses; export snapshots before the parent's separate container Cleanup. Interactive acceptance/cancellation, live keyrings, tmux/Herdr shutdown, backup restoration with preexisting target files, and package-manager removal remain explicit coverage gaps.
+- **Require confirmation.** `verify.sh drive RUN_ID uninstall` links, then runs `./install.sh uninstall` with stdin closed. Require failure and state.tsv unchanged.
+- **Undo and repeat.** The same target then runs `./install.sh uninstall --yes` twice, asserts the bootstrap root is absent, and compares full HOME/package snapshots to baseline.
+- **Recover while preserving user content.** The same target then runs `bash -x tests/uninstall_edges.sh`; the existing harness makes the shell file unwritable, requires failed uninstall to keep state, restores writability, retries, and checks original shell content and user replacement git-ignore survive.
+- **Remove a real installation.** The bridge run's `install` target invokes confirmed uninstall after installed-command checks and fake gh auth seeding. Require the final PASS and matching before/after snapshots; the fake-token signout warning does not prove live credential revocation.
+- **Proof.** Keep `drive-uninstall.*`, `drive-install.*`, and their `artifacts/`; the CLI exports snapshots before `verify.sh cleanup` removes the container. Interactive acceptance/cancellation, live keyrings, tmux/Herdr shutdown, backup restoration with preexisting target files, and package-manager removal remain explicit coverage gaps.
 
 ## Gotchas
 

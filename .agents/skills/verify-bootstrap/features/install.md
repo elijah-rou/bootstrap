@@ -20,11 +20,11 @@ Users install pinned core tools, optionally select additional tools/languages/se
 
 Preconditions:
 
-- Fresh parent-skill Launch with `NETWORK=bridge`, Doctor passes, public release downloads reachable, no user credentials.
+- `verify.sh launch --network bridge`, then `verify.sh doctor RUN_ID` passes; public release downloads reachable, no user credentials.
 
-- **Install a real selection.** Run the parent's `roundtrip --tools just` Drive block. The helper calls `bash -x tests/roundtrip.sh /src --tools just`, which copies the checkout and invokes its `install.sh --tools just` twice. Require two `installed; start a new shell to use it` lines.
+- **Install a real selection.** Run `verify.sh drive RUN_ID install` (another selection goes after `--`). The helper calls `bash -x tests/roundtrip.sh /src --tools just`, which copies the checkout and invokes its `install.sh --tools just` twice. Require two `installed; start a new shell to use it` lines.
 - **Use installed commands.** The unchanged test relinks, invokes product `doctor`, starts interactive Bash for command lookup and `hx --version`, and executes Bun through `node`. Require doctor `ok` rows including `just`, real versions, and the login PATH assertion to pass.
-- **Observe side effects and undo.** Require the existing harness's final `PASS: install, rerun, doctor, and uninstall left HOME and packages unchanged`. Export `/proof/roundtrip` for independent before/after account and package-version snapshots. Stderr/xtrace shows the real action sequence.
+- **Observe side effects and undo.** Require the existing harness's final `PASS: install, rerun, doctor, and uninstall left HOME and packages unchanged`, then `PASS install:`. `artifacts/install/` holds independent before/after account and package-version snapshots. Stderr/xtrace shows the real action sequence.
 - **Report unexercised entries.** Bare install, no-option replay, short aliases, language/LSP success, root/system-package selections, and other catalog selections are skipped. This tool-selection run exercises core installation, not every entry point to it.
 
 ## Gotchas

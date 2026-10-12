@@ -19,13 +19,13 @@ Users reapply shell and application configuration without downloading tools, whi
 
 Preconditions:
 
-- Parent-skill Doctor passes; use `NETWORK=none` for the offline and edge proof.
+- `verify.sh doctor RUN_ID` passes for an offline run (`verify.sh launch` without `--network`).
 
-- **Link from clean state.** Parent `offline` mode runs `./install.sh link`, saves state.tsv and the Bash block, asserts the Helix symlink destination, and captures a complete account snapshot.
-- **Relink.** The same mode runs `./install.sh link` again. Require byte-identical state.tsv and equal linked/relinked HOME snapshots. Docker has no network, package snapshots remain equal, and no tool files were downloaded.
-- **Protect user files.** Parent `edges` mode invokes `bash -x tests/uninstall_edges.sh`. Require `PASS install link and uninstall edge cases` and exit 0; its xtrace covers malformed blocks, unsafe roots, user replacement git-ignore files, and existing skill links.
-- **Relink after installation.** The parent's online `roundtrip --tools just` also invokes real `install.sh link` after both installs; capture `configuration linked` and subsequent doctor success.
-- **Proof.** Export `/proof/offline` and retain `offline.stderr`/`edges.stderr`. Do not infer offline behavior only from the command's name.
+- **Link from clean state.** `verify.sh drive RUN_ID link` runs `./install.sh link`, saves state.tsv and the Bash block, asserts the Helix symlink destination, and captures a complete account snapshot.
+- **Relink.** The same target runs `./install.sh link` again. Require byte-identical state.tsv and equal linked/relinked HOME snapshots. Docker has no network, package snapshots remain equal, and no tool files were downloaded.
+- **Protect user files.** After restoring HOME with `uninstall --yes`, the same target invokes `bash -x tests/uninstall_edges.sh`. Require `PASS install link and uninstall edge cases`, then `PASS link:` and exit 0; its xtrace covers malformed blocks, unsafe roots, user replacement git-ignore files, and existing skill links.
+- **Relink after installation.** The bridge run's `install` target also invokes real `install.sh link` after both installs; capture `configuration linked` and subsequent doctor success.
+- **Proof.** Keep `artifacts/link/` and `drive-link.stderr`. Do not infer offline behavior only from the command's name.
 
 ## Gotchas
 
