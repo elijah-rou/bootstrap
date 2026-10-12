@@ -18,11 +18,11 @@ Users discover supported names and groups without installing, and receive errors
 
 Preconditions:
 
-- Parent-skill Launch and Doctor pass in a fresh offline container.
+- `verify.sh launch` and `verify.sh doctor RUN_ID` pass for an offline run.
 
-- **Discover names.** Use the parent's `help` Drive mode. It invokes `./install.sh --help` and `./install.sh -h`; stdout must show `Usage:` and all three groups from `catalog.tsv`.
-- **Reject invalid names.** The same mode invokes `./install.sh --tools verification-does-not-exist`, `./install.sh --languages verification-does-not-exist`, and `./install.sh --lsp verification-does-not-exist`; each must fail. Stderr identifies the unknown group selection.
-- **Prove no mutations.** Require the mode's PASS line and exit 0. Export `/proof/help`; `before.home`/`after.home` and `before.packages`/`after.packages` compare equal.
+- **Discover names.** Run `verify.sh drive RUN_ID help`. It invokes `./install.sh --help` and `./install.sh -h`; stdout must show `Usage:` and all three groups from `catalog.tsv`.
+- **Reject invalid names.** The same target invokes `./install.sh --tools verification-does-not-exist`, `./install.sh --languages verification-does-not-exist`, and `./install.sh --lsp verification-does-not-exist`; each must fail. Stderr identifies the unknown group selection.
+- **Prove no mutations.** Require `PASS help:` and exit 0. In `artifacts/help/`, `before.home`/`after.home` and `before.packages`/`after.packages` compare equal.
 - **Alias gap.** Report short selection flags as skipped, not verified by the long-option cases.
 
 ## Gotchas

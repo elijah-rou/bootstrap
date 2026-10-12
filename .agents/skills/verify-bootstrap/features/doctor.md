@@ -17,11 +17,11 @@ Users run the installer’s doctor command to see available or missing binaries 
 
 Preconditions:
 
-- Parent-skill container Doctor has passed. It checks harness readiness, not product installation health.
+- `verify.sh doctor RUN_ID` has passed. It checks harness readiness, not product installation health.
 
-- **Missing tools.** Parent `offline` mode invokes `./install.sh doctor` after two offline links. Require `/proof/offline/product-doctor.exit` to contain `1` and `product-doctor.stdout` to include `missing` rows.
-- **Installed tools.** Parent `roundtrip --tools just` invokes product doctor after install/rerun/relink. Require zero overall exit, `ok` rows for core tools and `just`, and subsequent actual executable/version checks in the harness.
-- **Proof.** Export offline doctor artifacts and retain online stdout and xtrace. These are distinct entry states, not interchangeable evidence.
+- **Missing tools.** In an offline run, `verify.sh drive RUN_ID doctor` invokes `./install.sh doctor` after an offline link, then uninstalls. Require `PASS doctor:`, `artifacts/doctor/product-doctor.exit` to contain `1`, and `product-doctor.stdout` to include `missing` rows.
+- **Installed tools.** In a bridge run, `verify.sh drive RUN_ID install` invokes product doctor after install/rerun/relink. Require zero overall exit, `ok` rows for core tools and `just`, and subsequent actual executable/version checks in the harness.
+- **Proof.** Keep `artifacts/doctor/` and `drive-install.stdout`/`.stderr`. These are distinct entry states, not interchangeable evidence.
 - **Skipped states.** Report doctor before any state exists and Pi-specific version diagnosis as not exercised.
 
 ## Gotchas
