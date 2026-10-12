@@ -143,4 +143,4 @@ claude	tools	latest	any	-	npm:@anthropic-ai/claude-code	claude
 claude	tools	-	any	-	step:claude	claude
 
 # Instructions, skills, Pi extensions, and Claude mods for the pi, codex, and claude selections.
-agent-kit	internal	a7698842cfe482d6d4f062744e47df97f3dd457d	any	-	git:https://github.com/elijah-rou/agent-kit	-
+agent-kit	internal	ce6c6a8a093256fe68416305899e107cdd2de88c	any	-	git:https://github.com/elijah-rou/agent-kit	-
