@@ -185,7 +185,7 @@ cmd_drive() {
     [[ -e "$evidence/doctor.exit" ]] || die "doctor has not run for $run; run verify.sh doctor $run first"
     [[ "$(cat "$evidence/doctor.exit")" == 0 ]] || die "doctor failed for $run; run cleanup $run and launch a new run"
     owned_and_running
-    local targets=("$@") selection=() target arg network want
+    local targets=("$@") selection=() target arg network want seen=" "
     if [[ "$1" == install ]]; then
         targets=(install)
         shift
@@ -206,11 +206,17 @@ cmd_drive() {
         want="$(target_network "$target")" || fail_usage "unknown target '$target'"
         [[ "$network" == "$want" ]] || die "target $target needs a --network $want run; $run uses $network"
         [[ ! -e "$evidence/drive-$target.command" ]] || die "$target already ran for $run; launch a new run"
+        case "$seen" in *" $target "*) fail_usage "target $target is listed twice" ;; esac
+        seen="$seen$target "
     done
     # One drive at a time per run, claimed atomically. The claim is released only when every target passed:
     # after a failure or interruption the helper may still be running in the container, so HOME is not reusable.
     mkdir "$evidence/drive.active" 2>/dev/null \
         || die "$run has a drive running, or one that did not pass; run cleanup $run and launch a new run"
+    # A concurrent call may have run a target between validation and the claim; no helper has started yet.
+    for target in "${targets[@]}"; do
+        [[ ! -e "$evidence/drive-$target.command" ]] || { rmdir "$evidence/drive.active"; die "$target already ran for $run; launch a new run"; }
+    done
     for target in "${targets[@]}"; do drive_target "$target" "$timeout" ${selection[@]+"${selection[@]}"}; done
     rmdir "$evidence/drive.active"
 }
