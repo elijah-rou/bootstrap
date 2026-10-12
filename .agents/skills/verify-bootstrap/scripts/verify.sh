@@ -151,7 +151,12 @@ drive_target() {
     want="$(target_network "$target")" || fail_usage "unknown target '$target'"
     network="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$cid")"
     [[ "$network" == "$want" ]] || die "target $target needs a --network $want run; $run uses $network"
-    [[ ! -e "$evidence/drive-$target.exit" ]] || die "$target already ran for $run; launch a new run"
+    # .command is written before the helper starts, so an interrupted drive also counts as run.
+    [[ ! -e "$evidence/drive-$target.command" ]] || die "$target already started for $run; launch a new run"
+    # The sources may have changed since doctor; the bytes that run must be the bytes recorded.
+    docker exec -u tester "$cid" sha256sum "${sources[@]}" >"$evidence/drive-$target.source.sha256"
+    cmp "$evidence/source.sha256" "$evidence/drive-$target.source.sha256" >&2 \
+        || die "sources changed since launch; run cleanup $run and launch a new run"
     local argv=("${as_tester[@]}" "$cid" timeout --signal=TERM --kill-after=10s "${timeout}s" bash -x "$helper" "$target" "$@")
     printf '%q ' "${argv[@]}" >"$evidence/drive-$target.command"
     printf '\n' >>"$evidence/drive-$target.command"
@@ -160,7 +165,7 @@ drive_target() {
     printf '%s\n' "$status" >"$evidence/drive-$target.exit"
     mkdir -p "$evidence/artifacts"
     docker cp "$cid:/proof/$target" "$evidence/artifacts/$target" >/dev/null 2>"$evidence/drive-$target.export.stderr" \
-        || printf 'warning: could not export /proof/%s; see %s/%s.export.stderr\n' "$target" "$evidence" "$target" >&2
+        || printf 'warning: could not export /proof/%s; see %s/drive-%s.export.stderr\n' "$target" "$evidence" "$target" >&2
     if [[ "$status" != 0 ]]; then
         [[ "$status" != 124 ]] || printf 'timeout: %s exceeded %s seconds; incomplete, not a pass\n' "$target" "$timeout" >&2
         die "FAIL $target (exit $status): see $evidence/drive-$target.stdout and drive-$target.stderr; run cleanup $run, fix, and launch a new run"
