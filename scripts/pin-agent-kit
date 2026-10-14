@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# Opens the pull request that moves agent-kit's pin to COMMIT (default: agent-kit's current main).
+# In a temporary worktree from origin/main it moves catalog.tsv's agent-kit row, regenerates the body
+# of pi/agents/autopilot-owner.md from agent-kit's claude/agents/autopilot-owner.md at COMMIT, runs
+# scripts/validate, commits, pushes agent/pin-agent-kit-<12-char sha>, and opens the pull request.
+# It never merges. Run it once, after a landing run's last agent-kit merge, with no COMMIT.
+# --dry-run stops before the commit, prints the diff summary, and makes no GitHub call.
+#
+# Exit status, and the last line printed:
+#   0  on stdout: the pull request's URL (opened now, or already open on that branch from this
+#      repository); "agent-kit pin is current: ..." when origin/main pins COMMIT or a descendant
+#      of it; or, with --dry-run, "Dry run: would commit ...".
+#   1  failure, nothing opened: on stderr, a "pin-agent-kit: ..." line (another open pin pull
+#      request, named; a hand-edited Pi body; scripts/validate failed; a pushed branch of that name
+#      that pins something else), or git's or gh's own error.
+#   2  on stderr: a usage error, or COMMIT is not a commit reachable from agent-kit's main.
+# Usage: scripts/pin-agent-kit [--dry-run] [COMMIT]
+set -euo pipefail
+
+usage() { printf 'usage: scripts/pin-agent-kit [--dry-run] [COMMIT]\n' >&2; exit 2; }
+die() { printf 'pin-agent-kit: %s\n' "$1" >&2; exit "${2:-1}"; }
+
+dry_run=0 commit=
+for argument in "$@"; do
+    case "$argument" in
+        --dry-run) dry_run=1 ;;
+        -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -*) usage ;;
+        *) [[ -z "$commit" ]] || usage; commit="$argument" ;;
+    esac
+done
+if [[ -n "$commit" ]]; then
+    [[ "$commit" =~ ^[0-9a-fA-F]{40}$ ]] || die "COMMIT must be a full 40-character hex commit: $commit" 2
+    commit="$(tr A-F a-f <<<"$commit")"
+fi
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The GitHub repositories the pull request lives in and links to.
+github_repo=elijah-rou/bootstrap
+kit_slug=elijah-rou/agent-kit
+role=pi/agents/autopilot-owner.md
+kit_role=claude/agents/autopilot-owner.md
+# agent-kit's Claude role reports at the end; a Pi child escalates through contact_supervisor.
+kit_escalation='escalate anything outside the brief in your report.'
+pi_escalation='escalate anything outside the brief through the supervisor.'
+
+git -C "$repo" fetch --quiet origin main
+row="$(git -C "$repo" show origin/main:catalog.tsv | awk -F '\t' '$1 == "agent-kit" { print; exit }')"
+[[ -n "$row" ]] || die "origin/main's catalog.tsv has no agent-kit row"
+IFS=$'\t' read -r _ _ pinned _ _ source _ <<<"$row"
+[[ "$pinned" =~ ^[0-9a-f]{40}$ && "$source" == git:* ]] || die "unexpected agent-kit row: $row"
+url="${source#git:}"
+
+if [[ -z "$commit" ]]; then
+    commit="$(git ls-remote "$url" refs/heads/main | awk '{ print $1 }')"
+    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "no main branch at $url"
+    if [[ "$commit" == "$pinned" ]]; then
+        printf 'agent-kit pin is current: origin/main pins %s\n' "$commit"
+        exit 0
+    fi
+fi
+
+work="$(mktemp -d)"
+worktree="$work/bootstrap"
+cleanup() {
+    if [[ -d "$worktree" ]]; then git -C "$repo" worktree remove --force "$worktree" >/dev/null 2>&1 || true; fi
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+# Reachability needs agent-kit's history; a scratch bare repository keeps it out of every checkout.
+kit="$work/agent-kit.git"
+git init --quiet --bare "$kit"
+git -C "$kit" fetch --quiet --no-tags "$url" '+refs/heads/main:refs/heads/main'
+if ! git -C "$kit" cat-file -e "$commit^{commit}" 2>/dev/null || ! git -C "$kit" merge-base --is-ancestor "$commit" main; then
+    die "$commit is not a commit reachable from agent-kit's main" 2
+fi
+if [[ "$commit" == "$pinned" ]]; then
+    printf 'agent-kit pin is current: origin/main pins %s\n' "$commit"
+    exit 0
+fi
+# Landing runs may finish out of order; never move the pin back to a commit it already contains.
+if git -C "$kit" merge-base --is-ancestor "$commit" "$pinned" 2>/dev/null; then
+    printf 'agent-kit pin is current: origin/main pins %s, which contains %s\n' "$pinned" "$commit"
+    exit 0
+fi
+
+short="${commit:0:12}"
+branch="agent/pin-agent-kit-$short"
+if [[ "$dry_run" == 0 ]]; then
+    # Open pin pull requests from this repository's own branches, one "BRANCH<TAB>URL" line each. A
+    # fork can name a branch the same way, so only same-repository heads count. (gh before 2.89
+    # omits headRepository.nameWithOwner, so match the head's owner instead.)
+    pin_prs="$(gh pr list --repo "$github_repo" --state open --limit 1000 \
+        --json headRefName,url,isCrossRepository,headRepositoryOwner \
+        --jq ".[] | select(.isCrossRepository == false and .headRepositoryOwner.login == \"${github_repo%%/*}\"
+            and (.headRefName | test(\"^agent/pin-agent-kit-[0-9a-f]{12}$\"))) | [.headRefName, .url] | @tsv")"
+    # Every pin rewrites the same catalog row, so a second open pin conflicts with the first once
+    # either lands. Pin once, after a landing run's last agent-kit merge.
+    reuse=
+    while IFS=$'\t' read -r pr_branch pr_url; do
+        [[ -n "$pr_branch" ]] || continue
+        [[ "$pr_branch" == "$branch" ]] ||
+            die "open pull request $pr_url already pins agent-kit on $pr_branch; land or close it before pinning $short"
+        reuse="$pr_url"
+    done <<<"$pin_prs"
+    if [[ -n "$reuse" ]]; then
+        printf 'An open pull request already pins agent-kit %s on %s:\n%s\n' "$short" "$branch" "$reuse"
+        exit 0
+    fi
+fi
+remote_head="$(git -C "$repo" ls-remote origin "refs/heads/$branch" | awk '{ print $1 }')"
+
+body="$work/body.md"
+write_body() {
+    local base="$1" range
+    if git -C "$kit" merge-base --is-ancestor "$pinned" "$commit" 2>/dev/null; then
+        # Qualify commits and issue references: in a bootstrap pull request, #N would link (and a
+        # closing keyword would close) bootstrap's own #N.
+        range="$(git -C "$kit" log --no-merges --format="- $kit_slug@%h %s" "$pinned..$commit" |
+            sed -E "s,(^|[^/[:alnum:]])#([0-9]+),\\1$kit_slug#\\2,g")"
+    else
+        range="- ${commit:0:12} does not descend from the old pin ${pinned:0:12}; read the agent-kit history between them."
+    fi
+    {
+        printf '## Why\n\nMoves the agent-kit pin from %s to %s (agent-kit main), so installs pick up these agent-kit commits:\n\n%s\n\n' \
+            "${pinned:0:12}" "$short" "$range"
+        printf '## What changed\n\n- `catalog.tsv`: agent-kit at %s, moved from %s.\n' "$commit" "${pinned:0:12}"
+        printf -- '- `%s`: regenerated from agent-kit'"'"'s `%s` at %s, with the Pi escalation line (through the supervisor). It is the charter of the Pi child role allowed to push and merge; read its diff in this pull request for any change to it.\n' "$role" "$kit_role" "$short"
+        printf -- '- Opened by `scripts/pin-agent-kit`. It does not detect agent-kit changes that need other bootstrap edits (paths `install.sh` links that moved or went away, new roles or extensions); check the commits above for those.\n\n'
+        printf '## Verification\n\n- `scripts/validate` in a worktree from origin/main %s with this change: exit 0.\n' "${base:0:12}"
+        printf -- '- Not run by the script: the install round trip (`tests/container.sh`, the verify-bootstrap `install` target). CI'"'"'s linux and macos jobs install agent-kit at this pin.\n\n'
+        printf '## Revert\n\nRevert the squash commit; the next `install.sh` checks agent-kit out at %s again. Anything the newer agent-kit persisted (for example its local verdict ledger) stays as written, so check the commits above for format changes before reverting.\n' "${pinned:0:12}"
+    } >"$body"
+}
+
+open_pr() {
+    local url_out
+    url_out="$(gh pr create --repo "$github_repo" --base main --head "$branch" --title "Pin agent-kit $short" --body-file "$body")"
+    printf '%s\n' "${url_out##*$'\n'}"
+}
+
+# The body of a role file: what follows its frontmatter, so not the marker line inside it.
+body_of() { awk 'NR == 1 && /^---$/ { f = 1; next } f == 1 && /^---$/ { f = 2; next } f == 2'; }
+
+validate() {
+    if ! (cd "$worktree" && scripts/validate) >"$work/validate.log" 2>&1; then
+        tail -n 40 "$work/validate.log" >&2
+        die "scripts/validate failed in the pin worktree; nothing was committed or pushed"
+    fi
+}
+
+if [[ -n "$remote_head" && "$dry_run" == 0 ]]; then
+    # A pushed branch without an open pull request: an earlier run stopped before opening it, or its
+    # pull request was closed. Reuse it only when it pins this commit and validates; never rewrite it.
+    git -C "$repo" fetch --quiet origin "refs/heads/$branch"
+    pushed="$(git -C "$repo" rev-parse --verify --quiet 'FETCH_HEAD^{commit}')" || die "cannot read $branch from origin"
+    [[ "$pushed" == "$remote_head" ]] || die "$branch moved on origin while this run read it; rerun"
+    git -C "$repo" show "$pushed:catalog.tsv" | awk -F '\t' -v c="$commit" '$1 == "agent-kit" && $3 == c { found = 1 } END { exit !found }' ||
+        die "$branch exists on origin at ${remote_head:0:12} without an open pull request and does not pin $short; inspect it"
+    base="$(git -C "$repo" merge-base "$pushed" origin/main)"
+    git -C "$repo" worktree add --quiet --detach "$worktree" "$pushed"
+    validate
+    write_body "$base"
+    printf 'Opening a pull request for %s, already pushed at %s\n' "$branch" "${remote_head:0:12}"
+    open_pr
+    exit 0
+fi
+
+base="$(git -C "$repo" rev-parse origin/main)"
+git -C "$repo" worktree add --quiet --detach "$worktree" "$base"
+# The agent-kit row has no download to digest: only its version field moves, from the old pin.
+awk -F '\t' -v OFS='\t' -v old="$pinned" -v new="$commit" '
+    $0 !~ /^#/ && $1 == "agent-kit" { if ($3 != old) exit 1; $3 = new; moved++ }
+    { print }
+    END { exit moved != 1 }
+' "$worktree/catalog.tsv" >"$work/catalog" || die "origin/main's catalog.tsv does not have exactly one agent-kit row at $pinned"
+cat "$work/catalog" >"$worktree/catalog.tsv"
+
+# The Pi role keeps bootstrap's Pi frontmatter and takes its charter from agent-kit's Claude role.
+kit_body="$(git -C "$kit" show "$commit:$kit_role" | body_of)" ||
+    die "agent-kit $short has no $kit_role; update $role by hand"
+[[ "$kit_body" == *"$kit_escalation"* ]] ||
+    die "agent-kit's $kit_role at $short no longer says '$kit_escalation'; update the Pi substitution in scripts/pin-agent-kit"
+# The body is generated: text added to it in bootstrap would be lost, so stop and name it.
+pinned_body="$(git -C "$kit" show "$pinned:$kit_role" | body_of)" ||
+    die "cannot read $kit_role at the current pin ${pinned:0:12} from agent-kit's main; update $role by hand"
+[[ "$(body_of <"$worktree/$role")" == "${pinned_body//"$kit_escalation"/$pi_escalation}" ]] ||
+    die "$role's body differs from agent-kit's $kit_role at the current pin ${pinned:0:12} (with the Pi substitution); it is generated, so move that text into agent-kit or into the substitution here before pinning"
+# The marker names the commit the body came from; scripts/check-agent-kit-role holds it to the pin.
+marker="# Body generated by scripts/pin-agent-kit from agent-kit $commit $kit_role; change it there, not here."
+{
+    awk -v marker="$marker" '
+        NR == 1 && /^---$/ { f = 1; print; next }
+        f == 1 && /^# Body generated by scripts\/pin-agent-kit / { next }
+        f == 1 && /^---$/ { print marker; print; exit }
+        f == 1 { print }
+    ' "$worktree/$role"
+    printf '%s\n' "${kit_body//"$kit_escalation"/$pi_escalation}"
+} >"$work/role"
+cat "$work/role" >"$worktree/$role"
+
+validate
+git -C "$worktree" diff --stat
+
+if [[ "$dry_run" == 1 ]]; then
+    printf 'Dry run: would commit "Pin agent-kit %s", push %s, and open its pull request.\n' "$short" "$branch"
+    exit 0
+fi
+
+git -C "$worktree" add -- catalog.tsv "$role"
+git -C "$worktree" commit --quiet -m "Pin agent-kit $short"
+git -C "$worktree" push --quiet origin "HEAD:refs/heads/$branch"
+write_body "$base"
+open_pr

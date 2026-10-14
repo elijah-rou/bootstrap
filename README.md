@@ -67,7 +67,8 @@ nonzero and sets `"onFailure": "block"`, which tells Claude Code to refuse the c
 the rendered command as Claude Code would and check its output and exit status; they do not observe
 Claude Code honoring `onFailure`. At session start,
 `bin/agent-kit-lag` warns in one line when the installed agent-kit is behind its `origin/main`; the
-fix is a bootstrap pull request that bumps agent-kit's pin in `catalog.tsv`. It reads only local refs;
+fix is a bootstrap pull request that bumps agent-kit's pin in `catalog.tsv`, which `scripts/pin-agent-kit`
+opens. The hook reads only local refs;
 at most hourly it refreshes `origin/main` in the background, so a newly merged commit shows from a
 later session. A linked `BOOTSTRAP_AGENT_KIT` is not checked.
 Set `BOOTSTRAP_AGENT_KIT` to a local agent-kit checkout to develop both
@@ -128,9 +129,24 @@ Install reads optional files from `~/.config/bootstrap/`: `env.sh`, `bashrc`, `z
 
 ## Maintenance
 
-- `scripts/pin NAME VERSION` moves a catalog entry to a new version and records its checksums.
-- `scripts/validate` runs static checks, the offline link and uninstall edge cases, the agent-kit
-  lag hook test, and the Pi configuration tests (needs Bun, shellcheck, and Python).
+- `scripts/pin NAME VERSION` moves a catalog entry to a new version and records its checksums. It
+  refuses agent-kit, whose pin moves only through `scripts/pin-agent-kit`.
+- `scripts/pin-agent-kit [--dry-run] [COMMIT]` opens the pull request that moves agent-kit's pin to
+  COMMIT, a full commit on agent-kit's main (default: its current main). From a temporary worktree of
+  `origin/main` it moves the agent-kit row of `catalog.tsv`, regenerates the body of
+  `pi/agents/autopilot-owner.md` from agent-kit's `claude/agents/autopilot-owner.md` at COMMIT (keeping
+  the Pi frontmatter and the Pi escalation line, and naming COMMIT in the file's generated-body line),
+  runs `scripts/validate`, pushes `agent/pin-agent-kit-<12-char sha>`, and prints the pull request's
+  URL last. It exits 0 without a branch when `origin/main` already pins COMMIT, prints the URL of this
+  repository's open pull request on that branch instead of opening another, exits 1 naming any other
+  open pin pull request, exits 2 for a commit main does not reach, and never merges. `--dry-run` stops
+  before the commit, prints the diff summary, and calls no GitHub API. agent-kit landing runs call it
+  once, after their last agent-kit merge (`.agents/automations/agent-kit-pin/`); `--help` lists the exit
+  statuses and the last line each prints.
+- `scripts/validate` runs static checks, the check that the Pi autopilot-owner role was generated from
+  the pinned agent-kit (`scripts/check-agent-kit-role`), the offline link and uninstall edge cases, the
+  agent-kit lag hook and pin script tests, and the Pi configuration tests (needs Bun, shellcheck,
+  Python, and jq).
 - `tests/container.sh IMAGE root|user [install arguments...]` runs the install, rerun, doctor,
   and uninstall round-trip in a container and fails if HOME or the package list changed.
   `tests/roundtrip.sh` does the same on the current machine for a disposable account.

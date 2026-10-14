@@ -6,6 +6,8 @@
 set -euo pipefail
 name="${1:?usage: scripts/pin NAME VERSION}"
 version="${2:?usage: scripts/pin NAME VERSION}"
+# agent-kit's pin moves with the Pi role generated from it; only scripts/pin-agent-kit moves both.
+[[ "$name" != agent-kit ]] || { printf 'scripts/pin: pin agent-kit with scripts/pin-agent-kit, which also syncs its Pi role\n' >&2; exit 1; }
 catalog="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/catalog.tsv"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT

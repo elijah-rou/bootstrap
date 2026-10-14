@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Static checks and Pi configuration tests (needs Bun, shellcheck, and Python). The install round-trip is
-# tests/container.sh.
+# Static checks and Pi configuration tests (needs Bun, shellcheck, Python, and jq). The install round-trip
+# is tests/container.sh.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -9,7 +9,8 @@ python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
 
 shell_files=(install.sh bin/pi bin/node bin/pi-workspace bin/agent-kit-lag bin/agent-kit-watchdog bin/claude-token-env shell/env.sh shell/bashrc shell/common.sh
-    shell/open.sh tests/roundtrip.sh tests/container.sh tests/uninstall_edges.sh tests/agent_kit_lag.sh scripts/pin scripts/validate
+    shell/open.sh tests/roundtrip.sh tests/container.sh tests/uninstall_edges.sh tests/agent_kit_lag.sh tests/pin_agent_kit.sh
+    scripts/pin scripts/pin-agent-kit scripts/check-agent-kit-role scripts/validate
     .agents/skills/verify-bootstrap/scripts/verify.sh .agents/skills/verify-bootstrap/scripts/inside.sh)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
 if command -v zsh >/dev/null; then zsh -n shell/zshrc; fi
@@ -27,8 +28,12 @@ awk -F '\t' '
 [[ "$(bin/node -e 'console.log(process.argv.slice(1).join(","))' a b)" == a,b ]] || { echo "bin/node -e drops arguments" >&2; exit 1; }
 [[ "$(bin/node -p 'process.argv.slice(1).join(",")' a b)" == a,b ]] || { echo "bin/node -p drops arguments" >&2; exit 1; }
 
+# The Pi autopilot-owner body is generated from the pinned agent-kit; its marker must name the pin.
+scripts/check-agent-kit-role
+
 bash tests/uninstall_edges.sh
 bash tests/agent_kit_lag.sh
+bash tests/pin_agent_kit.sh
 
 # Pi configuration contract tests; Bun runs their node:test suites.
 bun test pi/tests
