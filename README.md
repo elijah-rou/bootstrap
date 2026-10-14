@@ -45,9 +45,10 @@ by commit in `catalog.tsv` and checked out once under `tools/agent-kit`. Pi load
 Claude links from it, including its subagent roles (`claude/agents/*.md`, in pins
 that have them) into its `agents/` directory. This repository keeps their configuration: `pi/`
 (settings, models, routers, subagent definitions) and `claude/settings.json`.
-Codex was a selection until it was removed; `install.sh` and `install.sh link` drop a remembered
-`codex` selection with its wrapper and Bun package, and uninstall still removes the links it made
-outside the bootstrap root, such as in an existing `~/.codex`.
+Codex was a selection until it was removed. On a machine that remembers it, `install.sh` and
+`install.sh link` remove the links into agent-kit's former `codex/` directory (such as
+`~/.codex/AGENTS.md`), restore what they replaced, and drop the selection. They leave the Codex package
+installed; uninstall still removes it with everything else bootstrap recorded.
 Claude Code's configuration directory defaults to the private root, so uninstall also deletes its
 macOS keychain login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
 (rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` runs agent-kit's Jev task-class

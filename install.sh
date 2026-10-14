@@ -598,23 +598,32 @@ prepare_root() {
     ln -sfn "$REPO" "$ROOT/repo"
     load_environment
     record_package_changes
-    retire_codex || die "could not remove the retired Codex package; rerun once bun works"
+    retire_codex
 }
 
-# Codex was a tools selection until bootstrap dropped it. A machine that selected it loses the
-# selection, the codex wrapper, and the Codex package in the root. Links Codex made outside the
-# root stay recorded, so uninstall still removes them and restores what they replaced; Codex's
-# private home (login, sessions) goes when uninstall deletes the root. The selection is dropped
-# last, so an interrupted run retries.
+# Codex was a tools selection until bootstrap dropped it, and agent-kit no longer ships the codex/
+# files its links pointed at. On a machine that selected it, this undoes those links as uninstall
+# would, then drops the selection. Everything else Codex left (the tools/bin/codex link, the Codex
+# package, its skill links, and own and dir records) stays for uninstall. It never fails the run: on
+# an error it warns and keeps the selection, so the next run retries. Delete it, and the skip in
+# cmd_install, once no machine's state.tsv has the codex selection.
 retire_codex() {
-    local selection="select"$'\t'"tools"$'\t'"codex"
+    local selection="select"$'\t'"tools"$'\t'"codex" kind path backup undone='' failed=0
     grep -qxF "$selection" "$STATE" || return 0
-    info "removing the retired codex selection"
-    if [[ -L "$TOOLS/bin/codex" ]]; then rm -f "$TOOLS/bin/codex" || return 1; fi
-    if [[ -d "$BUN_INSTALL/install/global/node_modules/@openai/codex" ]]; then
-        bun remove --global @openai/codex >/dev/null || return 1
+    info "retiring the codex selection"
+    while IFS=$'\t' read -r kind path backup; do
+        [[ "$kind" == link && -L "$path" && "$(readlink "$path")" == "$TOOLS/agent-kit/codex/"* ]] || continue
+        if ! rm -f "$path"; then failed=1; continue; fi
+        if [[ "$backup" != - && ( -e "$backup" || -L "$backup" ) ]] && ! mv "$backup" "$path"; then failed=1; continue; fi
+        undone="$undone$path"$'\n'
+    done <"$STATE"
+    if [[ "$failed" == 1 ]]; then warn "could not undo every codex link; keeping the codex selection so the next run retries"; fi
+    if ! UNDONE="$undone" awk -F '\t' -v selection="$selection" -v keep="$failed" '
+        BEGIN { n = split(ENVIRON["UNDONE"], paths, "\n"); for (i = 1; i <= n; i++) if (paths[i] != "") undone[paths[i]] = 1 }
+        !($1 == "link" && ($2 in undone)) && !(keep == 0 && $0 == selection)
+    ' "$STATE" >"$ROOT/tmp/state" || ! mv "$ROOT/tmp/state" "$STATE"; then
+        warn "could not update $STATE; the next run retires codex again"
     fi
-    awk -v line="$selection" '$0 != line' "$STATE" >"$ROOT/tmp/state" && mv "$ROOT/tmp/state" "$STATE"
 }
 
 # Relinks configuration without downloading or installing anything.
@@ -665,6 +674,8 @@ cmd_install() {
     configure_apps
 
     while IFS=$'\t' read -r _ group name; do
+        # A codex selection is left only while retire_codex is retrying; it installs nothing.
+        if [[ "$group/$name" == tools/codex ]]; then continue; fi
         install_selection "$group" "$name"
     done < <(awk -F '\t' '$1 == "select"' "$STATE")
     for name in $requested; do

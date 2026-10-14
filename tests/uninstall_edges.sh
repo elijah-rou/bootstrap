@@ -65,19 +65,41 @@ rm "$home/.claude/skills/theirs"
 # Undo the test selection so the uninstall below covers only what install recorded.
 sed -i.bak '/^select\ttools\tclaude$/d' "$root/state.tsv" && rm -f "$root/state.tsv.bak"
 
-# A retired codex selection loses its wrapper and Bun package once, and the link it made outside the
-# root stays recorded, so the uninstall below removes it.
-mkdir -p "$home/.codex" "$root/tools/bun/install/global/node_modules/@openai/codex"
+# A retired codex selection undoes only the links into agent-kit's removed codex/ directory, restoring
+# what they replaced. Its skill links, wrapper link, Bun package, and owned files stay for uninstall.
+# A failure to undo them warns, keeps the selection, and does not fail link; the next run retries.
+mkdir -p "$home/.codex" "$root/tools/bun/install/global/node_modules/@openai/codex" "$home/.agents/skills"
+printf 'user agents\n' >"$home/.codex/AGENTS.md.bootstrap-backup"
+printf 'model = "mine"\n' >"$home/.codex/config.toml"
 ln -s "$root/tools/agent-kit/codex/AGENTS.md" "$home/.codex/AGENTS.md"
+ln -s "$root/tools/agent-kit/codex/native-tools.md" "$home/.codex/native-tools.md"
+ln -s "$root/tools/agent-kit/skills/mine" "$home/.agents/skills/mine"
 ln -s "$root/repo/bin/codex" "$root/tools/bin/codex"
-printf 'dir\t%s\nlink\t%s\t-\nselect\ttools\tcodex\n' "$home/.codex" "$home/.codex/AGENTS.md" >>"$root/state.tsv"
+{
+    printf 'link\t%s\t%s\n' "$home/.codex/AGENTS.md" "$home/.codex/AGENTS.md.bootstrap-backup"
+    printf 'link\t%s\t-\n' "$home/.codex/native-tools.md"
+    printf 'own\t%s\n' "$home/.codex/config.toml"
+    printf 'dir\t%s\ndir\t%s\n' "$home/.agents" "$home/.agents/skills"
+    printf 'link\t%s\t-\n' "$home/.agents/skills/mine"
+    printf 'select\ttools\tcodex\n'
+} >>"$root/state.tsv"
+codex_selected() { grep -qxF 'select'$'\t''tools'$'\t''codex' "$root/state.tsv"; }
+chmod a-w "$home/.codex"
+link_kit >/dev/null 2>"$work/retire.err" || fail 'link failed when retiring codex failed'
+chmod u+w "$home/.codex"
+grep -q 'keeping the codex selection' "$work/retire.err" || fail 'a failed codex retirement did not warn'
+codex_selected || fail 'a failed codex retirement dropped the selection'
 link_kit >/dev/null 2>&1 || fail 'link with codex selected failed'
 link_kit >/dev/null 2>&1 || fail 'relink after retiring codex failed'
-if grep -qx 'select'$'\t''tools'$'\t''codex' "$root/state.tsv"; then fail 'the codex selection was kept'; fi
-[[ ! -e "$root/tools/bin/codex" && ! -L "$root/tools/bin/codex" ]] || fail 'the codex wrapper was kept'
-[[ "$(cat "$work/bun-removed")" == 'remove --global @openai/codex' ]] || fail 'the Codex package was not removed exactly once'
-[[ -L "$home/.codex/AGENTS.md" ]] || fail 'retiring codex removed a recorded link before uninstall'
-grep -qxF "link"$'\t'"$home/.codex/AGENTS.md"$'\t'"-" "$root/state.tsv" || fail 'retiring codex dropped a link record'
+if codex_selected; then fail 'the codex selection was kept'; fi
+[[ ! -e "$home/.codex/native-tools.md" && ! -L "$home/.codex/native-tools.md" ]] || fail 'a codex agent-kit link was kept'
+[[ ! -L "$home/.codex/AGENTS.md" && "$(cat "$home/.codex/AGENTS.md")" == 'user agents' ]] || fail 'the replaced AGENTS.md was not restored'
+if grep -q "^link"$'\t'"$home/.codex/" "$root/state.tsv"; then fail 'a codex agent-kit link record was kept'; fi
+[[ -L "$root/tools/bin/codex" ]] || fail 'retiring codex removed the wrapper link'
+[[ -d "$root/tools/bun/install/global/node_modules/@openai/codex" ]] || fail 'retiring codex removed the Codex package'
+[[ ! -e "$work/bun-removed" ]] || fail 'retiring codex ran bun remove'
+[[ -L "$home/.agents/skills/mine" ]] || fail 'retiring codex removed a skill link'
+[[ -f "$home/.codex/config.toml" ]] || fail 'retiring codex removed an owned file'
 
 # A failed uninstall keeps its state, and a rerun completes it.
 chmod a-w "$home/.bashrc"
@@ -88,8 +110,11 @@ run uninstall --yes >/dev/null 2>&1 || fail 'rerun of uninstall failed'
 [[ ! -e "$home/.local/share/bootstrap" ]] || fail 'root left behind'
 [[ "$(cat "$home/.bashrc")" == 'user line' ]] || fail '.bashrc not restored'
 [[ "$(cat "$home/.config/git/ignore")" == mine ]] || fail 'uninstall removed a user file'
-[[ ! -e "$home/.codex" ]] || fail 'uninstall left the retired codex links'
-rmdir "$home/.claude/skills" "$home/.claude"  # created by this test's skill fixture, not by install
+[[ ! -e "$home/.agents" ]] || fail 'uninstall left the codex skill links'
+[[ ! -e "$home/.codex/config.toml" ]] || fail 'uninstall left the owned codex config'
+[[ "$(cat "$home/.codex/AGENTS.md")" == 'user agents' ]] || fail 'uninstall removed the restored AGENTS.md'
+# Created by this test's fixtures, not by install.
+rm "$home/.codex/AGENTS.md" && rmdir "$home/.codex" "$home/.claude/skills" "$home/.claude"
 leftover="$(cd "$home" && find . -mindepth 1 ! -path ./.bashrc ! -path ./.config ! -path ./.config/git ! -path ./.config/git/ignore)"
 [[ -z "$leftover" ]] || fail "uninstall left: $leftover"
 printf 'PASS install link and uninstall edge cases\n'
