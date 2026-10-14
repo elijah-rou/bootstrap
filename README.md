@@ -49,6 +49,9 @@ Codex was a selection until it was removed. On a machine that remembers it, `ins
 `install.sh link` remove the links into agent-kit's former `codex/` directory (such as
 `~/.codex/AGENTS.md`), restore what they replaced, and drop the selection. They leave the Codex package
 installed; uninstall still removes it with everything else bootstrap recorded.
+When a new pin drops a file that a recorded link points to (agent-kit removing a skill), a run of
+`install.sh` or `install.sh link` that otherwise succeeds removes that dangling link, restores what it
+replaced, and drops its record. Links bootstrap did not record, and links whose target exists, stay.
 Claude Code's configuration directory defaults to the private root, so uninstall also deletes its
 macOS keychain login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
 (rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` runs agent-kit's Jev task-class
