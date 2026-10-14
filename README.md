@@ -65,7 +65,10 @@ checkout without `agentic/tools/git-guard/cli.ts`, it allows the call. It fails 
 runs and errors (bootstrap's Bun missing, a crash, or a run past its 5-second timeout): the hook exits
 nonzero and sets `"onFailure": "block"`, which tells Claude Code to refuse the call. bootstrap's tests run
 the rendered command as Claude Code would and check its output and exit status; they do not observe
-Claude Code honoring `onFailure`. At session start,
+Claude Code honoring `onFailure`. Before each Edit, MultiEdit, Write, or NotebookEdit it runs agent-kit's
+skill reminder (`agentic/tools/skill-reminder`) the same way, which reminds a session, and each
+subagent, on its first file edit to load agent-kit's `code-design` skill before editing code. It only
+adds context, so it fails open: it has no `onFailure`, and an absent hook file allows the edit. At session start,
 `bin/agent-kit-lag` warns in one line when the installed agent-kit is behind its `origin/main`; the
 fix is a bootstrap pull request that bumps agent-kit's pin in `catalog.tsv`, which `scripts/pin-agent-kit`
 opens. The hook reads only local refs;
