@@ -6,9 +6,44 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'chmod -R u+w "$work" 2>/dev/null; rm -rf "$work"' EXIT
 home="$work/home with space"
-mkdir -p "$home"
-run() { env -i HOME="$home" PATH="$PATH" TERM=dumb USER="${USER:-tester}" /bin/bash "$repo/install.sh" "$@"; }
+mkdir -p "$home" "$work/stub-bin"
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
+
+# security and launchctl are always stubs, so no run reaches this machine's keychain or launchd. Each logs
+# its arguments; the keychain item exists while $work/keychain does, and launchctl tracks loaded labels.
+# uname reports STUB_KERNEL when it is set, so both platforms' paths run on either host; a stubbed Linux
+# also needs getconf to report glibc.
+real_uname="$(command -v uname)"
+real_getconf="$(command -v getconf || printf false)"
+cat >"$work/stub-bin/security" <<STUB
+#!/bin/sh
+printf '%s\\n' "\$*" >>"$work/security.log"
+case "\$1" in find-generic-password) ;; *) exit 0 ;; esac
+[ -f "$work/keychain" ] || exit 44
+case " \$* " in *" -w "*) cat "$work/keychain" ;; *) printf 'keychain: "login.keychain-db"\\n' ;; esac
+STUB
+cat >"$work/stub-bin/launchctl" <<STUB
+#!/bin/sh
+printf '%s\\n' "\$*" >>"$work/launchctl.log"
+mkdir -p "$work/loaded"
+case "\$1" in
+    print) [ -e "$work/loaded/\${2##*/}" ] || exit 113 ;;
+    bootstrap) label="\${3##*/}"; touch "$work/loaded/\${label%.plist}" ;;
+    bootout) [ -e "$work/loaded/\${2##*/}" ] || exit 3; rm "$work/loaded/\${2##*/}" ;;
+esac
+STUB
+cat >"$work/stub-bin/uname" <<STUB
+#!/bin/sh
+[ -n "\${STUB_KERNEL:-}" ] || exec "$real_uname" "\$@"
+case "\$1" in -s) echo "\$STUB_KERNEL" ;; -m) if [ "\$STUB_KERNEL" = Darwin ]; then echo arm64; else "$real_uname" -m; fi ;; *) exec "$real_uname" "\$@" ;; esac
+STUB
+cat >"$work/stub-bin/getconf" <<STUB
+#!/bin/sh
+if [ "\${STUB_KERNEL:-}" = Linux ] && [ "\$1" = GNU_LIBC_VERSION ]; then echo 'glibc 2.36'; exit 0; fi
+exec "$real_getconf" "\$@"
+STUB
+chmod +x "$work/stub-bin/security" "$work/stub-bin/launchctl" "$work/stub-bin/uname" "$work/stub-bin/getconf"
+run() { env -i HOME="$home" PATH="$work/stub-bin:$PATH" TERM=dumb USER="${USER:-tester}" STUB_KERNEL="${kernel:-}" /bin/bash "$repo/install.sh" "$@"; }
 
 # A root that is HOME (or holds other files) is refused before anything is written.
 if env -i HOME="$home" PATH="$PATH" BOOTSTRAP_ROOT="$home" /bin/bash "$repo/install.sh" link >/dev/null 2>&1; then fail 'HOME accepted as root'; fi
@@ -37,7 +72,6 @@ printf '{}\n' >"$kit/package.json"
 # Offline link never installs agent-kit's dependencies, even with a lockfile and no node_modules. Other bun
 # commands go to the real Bun, which a Bun-backed node needs to render Claude's settings.
 touch "$kit/bun.lock"
-mkdir -p "$work/stub-bin"
 real_bun="$(command -v bun || printf false)"
 cat >"$work/stub-bin/bun" <<STUB
 #!/bin/sh
@@ -50,7 +84,7 @@ STUB
 chmod +x "$work/stub-bin/bun"
 link_kit() {
     env -i HOME="$home" PATH="$work/stub-bin:$PATH" TERM=dumb USER="${USER:-tester}" BOOTSTRAP_AGENT_KIT="$kit" \
-        CLAUDE_CONFIG_DIR="$home/.claude" /bin/bash "$repo/install.sh" link
+        CLAUDE_CONFIG_DIR="$home/.claude" STUB_KERNEL="${kernel:-}" /bin/bash "$repo/install.sh" link
 }
 printf 'skills/mine\nskills/theirs\n' >"$kit/claude/skills.txt"
 touch "$kit/claude/CLAUDE.md" "$kit/skills/mine/SKILL.md" "$kit/skills/theirs/SKILL.md"
@@ -144,5 +178,120 @@ run uninstall --yes >/dev/null 2>&1 || fail 'rerun of uninstall failed'
 # Created by this test's fixtures, not by install.
 rm "$home/.codex/AGENTS.md" && rmdir "$home/.codex" "$home/.claude/skills" "$home/.claude"
 leftover="$(cd "$home" && find . -mindepth 1 ! -path ./.bashrc ! -path ./.config ! -path ./.config/git ! -path ./.config/git/ignore)"
+[[ -z "$leftover" ]] || fail "uninstall left: $leftover"
+
+# The claude selection's macOS login agents, in a fresh HOME that, like a real Mac, already has a user
+# LaunchAgent. On Linux nothing touches launchd or the keychain. On macOS the watchdog agent is always
+# installed, and the token agent only while the keychain item claude-code-oauth exists. No file
+# install writes holds the token, and install checks only that the item exists.
+home="$work/agents home"
+root="$home/.local/share/bootstrap"
+agents="$home/Library/LaunchAgents"
+watchdog="io.github.elijah-rou.bootstrap.watchdog"
+token_agent="io.github.elijah-rou.bootstrap.claude-token"
+domain="gui/$(id -u)"
+sentinel='fake-oauth-token-for-bootstrap-edge-test'
+mkdir -p "$agents"
+printf '<plist/>\n' >"$agents/com.example.mine.plist"
+kernel=Linux run link >/dev/null || fail 'link without selections failed'
+printf 'select\ttools\tclaude\n' >>"$root/state.tsv"
+printf '%s\n' "$sentinel" >"$work/keychain"
+rm -f "$work/launchctl.log" "$work/security.log"
+kernel=Linux link_kit >/dev/null 2>&1 || fail 'link with claude selected failed on Linux'
+[[ ! -e "$work/launchctl.log" && ! -e "$work/security.log" ]] || fail 'Linux link ran launchctl or security'
+[[ -z "$(find "$agents" -name 'io.github.elijah-rou.*')" && ! -e "$root/tools/libexec" ]] || fail 'Linux link wrote a login agent'
+if grep -Eq '^(agent|launchenv)'$'\t' "$root/state.tsv"; then fail 'Linux link recorded a login agent'; fi
+
+# The macOS installs run under umask 002, which would leave files group-writable; launchd refuses a
+# group- or world-writable plist, so install sets every mode itself.
+rm "$work/keychain"
+(umask 002 && kernel=Darwin link_kit >/dev/null 2>&1) || fail 'link with claude selected failed on macOS'
+[[ -f "$agents/$watchdog.plist" ]] || fail 'the watchdog agent was not written'
+[[ ! -e "$agents/$token_agent.plist" ]] || fail 'the token agent was written without the keychain item'
+grep -qxF "bootstrap $domain $agents/$watchdog.plist" "$work/launchctl.log" || fail 'the watchdog agent was not loaded'
+if grep -q setenv "$work/launchctl.log"; then fail 'launchctl setenv ran without the keychain item'; fi
+if grep -q '^launchenv' "$root/state.tsv"; then fail 'a launchenv record was written without the keychain item'; fi
+
+printf '%s\n' "$sentinel" >"$work/keychain"
+rm -f "$work/launchctl.log"
+(umask 002 && kernel=Darwin link_kit >/dev/null 2>&1) || fail 'link with the keychain item failed'
+plist="$agents/$token_agent.plist"
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+for file in "$plist" "$agents/$watchdog.plist"; do
+    [[ "$(mode "$file")" == 644 ]] || fail "plist mode is $(mode "$file"), not 644: $file"
+done
+for file in "$root/tools/libexec/claude-token-env" "$root/tools/libexec/agent-kit-watchdog"; do
+    [[ -f "$file" && ! -L "$file" && "$(mode "$file")" == 755 ]] || fail "login agent program is not a 755 file: $(ls -l "$file")"
+done
+[[ -f "$plist" ]] || fail 'the token agent was not written'
+[[ "$(cat "$work/launchctl.log")" == "print $domain/$watchdog"$'\n'"bootout $domain/$token_agent"$'\n'"bootstrap $domain $plist" ]] ||
+    fail "unexpected launchctl calls: $(tr '\n' ';' <"$work/launchctl.log")"
+if grep -q -- ' -w' "$work/security.log"; then fail 'install read the keychain item, not only its existence'; fi
+grep -qxF "find-generic-password -s claude-code-oauth" "$work/security.log" || fail 'install did not check for the keychain item'
+grep -qF "<string>$root/tools/libexec/claude-token-env</string>" "$plist" && grep -q '<key>RunAtLoad</key>' "$plist" ||
+    fail 'the token agent does not run claude-token-env at load'
+grep -qF "<string>$root/tools/libexec/agent-kit-watchdog</string>" "$agents/$watchdog.plist" &&
+    grep -qF "<string>$root</string>" "$agents/$watchdog.plist" && grep -q '<integer>900</integer>' "$agents/$watchdog.plist" ||
+    fail 'the watchdog agent does not run agent-kit-watchdog every 900 seconds'
+if command -v plutil >/dev/null; then plutil -lint -s "$plist" "$agents/$watchdog.plist" || fail 'a plist is malformed'; fi
+for record in "agent"$'\t'"$agents/$watchdog.plist" "launchenv"$'\t'"CLAUDE_CODE_OAUTH_TOKEN" "agent"$'\t'"$plist"; do
+    grep -qxF "$record" "$root/state.tsv" || fail "missing state record: $record"
+done
+# launchenv precedes the token agent, so uninstall's reverse replay boots the agent out before it unsets.
+[[ "$(grep -nxF "launchenv"$'\t'"CLAUDE_CODE_OAUTH_TOKEN" "$root/state.tsv" | cut -d: -f1)" -lt "$(grep -nxF "agent"$'\t'"$plist" "$root/state.tsv" | cut -d: -f1)" ]] ||
+    fail 'the launchenv record follows its agent'
+
+# A rerun with both agents loaded changes nothing; a changed plist is booted out and loaded again.
+cp "$root/state.tsv" "$work/state.before"
+rm -f "$work/launchctl.log"
+kernel=Darwin link_kit >/dev/null 2>&1 || fail 'relink with login agents failed'
+if grep -Eq '^(bootout|bootstrap)' "$work/launchctl.log"; then fail 'an unchanged, loaded agent was reloaded'; fi
+cmp -s "$root/state.tsv" "$work/state.before" || fail 'a rerun changed state.tsv'
+printf '<!-- edited -->\n' >>"$agents/$watchdog.plist"
+rm -f "$work/launchctl.log"
+kernel=Darwin link_kit >/dev/null 2>&1 || fail 'relink after a plist change failed'
+grep -A1 -xF "bootout $domain/$watchdog" "$work/launchctl.log" | grep -qxF "bootstrap $domain $agents/$watchdog.plist" ||
+    fail 'a changed plist was not booted out and loaded again'
+if grep -qF 'edited' "$agents/$watchdog.plist"; then fail 'a changed plist was not rewritten'; fi
+
+# The token program sets the variable from the keychain and prints nothing; without the item it only fails.
+rm -f "$work/launchctl.log"
+output="$(env -i HOME="$home" PATH="$work/stub-bin:/usr/bin:/bin:/usr/sbin:/sbin" "$root/tools/libexec/claude-token-env" 2>&1)" ||
+    fail 'claude-token-env failed with the keychain item'
+[[ -z "$output" ]] || fail 'claude-token-env printed output'
+[[ "$(cat "$work/launchctl.log")" == "setenv CLAUDE_CODE_OAUTH_TOKEN $sentinel" ]] || fail 'claude-token-env did not set the token'
+mv "$work/keychain" "$work/keychain.off"
+rm -f "$work/launchctl.log"
+if output="$(env -i HOME="$home" PATH="$work/stub-bin:/usr/bin:/bin:/usr/sbin:/sbin" "$root/tools/libexec/claude-token-env" 2>&1)"; then
+    fail 'claude-token-env succeeded without the keychain item'
+fi
+[[ -z "$output" && ! -e "$work/launchctl.log" ]] || fail 'claude-token-env acted without the keychain item'
+mv "$work/keychain.off" "$work/keychain"
+if grep -rqF "$sentinel" "$home"; then fail "the token was written to: $(grep -rlF "$sentinel" "$home" | tr '\n' ' ')"; fi
+
+# The watchdog program is a quiet no-op until agent-kit has the script, then runs it with the root's Bun
+# under launchd's minimal PATH.
+launchd_path=/usr/bin:/bin:/usr/sbin:/sbin
+output="$(env -i HOME="$home" PATH="$launchd_path" "$root/tools/libexec/agent-kit-watchdog" "$root" 2>&1)" ||
+    fail 'agent-kit-watchdog failed without the watchdog script'
+[[ -z "$output" ]] || fail "agent-kit-watchdog printed output without the watchdog script: $output"
+mkdir -p "$kit/skills/background-run/scripts"
+touch "$kit/skills/background-run/scripts/watchdog.ts"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >"%s/bun-watchdog"\n' "$work" >"$root/tools/bin/bun"
+chmod +x "$root/tools/bin/bun"
+env -i HOME="$home" PATH="$launchd_path" "$root/tools/libexec/agent-kit-watchdog" "$root" || fail 'agent-kit-watchdog failed'
+[[ "$(cat "$work/bun-watchdog" 2>/dev/null)" == "$root/tools/agent-kit/skills/background-run/scripts/watchdog.ts scan" ]] ||
+    fail 'agent-kit-watchdog did not run the watchdog scan with the root Bun'
+rm -rf "$kit/skills/background-run"
+
+# Uninstall boots both agents out, unsets the token after its agent is gone, and deletes what install wrote.
+rm -f "$work/launchctl.log"
+kernel=Darwin run uninstall --yes >/dev/null 2>&1 || fail 'uninstall with login agents failed'
+[[ "$(grep -E '^(bootout|unsetenv)' "$work/launchctl.log")" == "bootout $domain/$token_agent"$'\n'"unsetenv CLAUDE_CODE_OAUTH_TOKEN"$'\n'"bootout $domain/$watchdog" ]] ||
+    fail "unexpected uninstall launchctl calls: $(tr '\n' ';' <"$work/launchctl.log")"
+[[ ! -e "$work/loaded/$watchdog" && ! -e "$work/loaded/$token_agent" ]] || fail 'uninstall left an agent loaded'
+[[ ! -e "$root" ]] || fail 'uninstall left the root'
+[[ "$(ls -A "$agents")" == com.example.mine.plist ]] || fail "uninstall changed the user's LaunchAgents: $(ls -A "$agents" | tr '\n' ' ')"
+leftover="$(cd "$home" && find . -mindepth 1 ! -path ./Library ! -path ./Library/LaunchAgents ! -path ./Library/LaunchAgents/com.example.mine.plist)"
 [[ -z "$leftover" ]] || fail "uninstall left: $leftover"
 printf 'PASS install link and uninstall edge cases\n'

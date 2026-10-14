@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# macOS LaunchAgent program (install.sh step_claude): runs agent-kit's background-run watchdog scan.
+# launchd's PATH is minimal, so this loads bootstrap's environment first, as bin/pi does, and Bun
+# resolves to the root's own. An agent-kit pin without the watchdog script makes this a quiet no-op.
+# Usage: agent-kit-watchdog BOOTSTRAP_ROOT
+set -euo pipefail
+root="${1:?usage: agent-kit-watchdog BOOTSTRAP_ROOT}"
+script="$root/tools/agent-kit/skills/background-run/scripts/watchdog.ts"
+[[ -f "$script" ]] || exit 0
+export BOOTSTRAP_ROOT="$root"
+# shellcheck source=shell/env.sh
+. "$root/repo/shell/env.sh"
+exec bun "$script" scan

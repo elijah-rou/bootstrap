@@ -72,15 +72,41 @@ together. Most come from user-space
 downloads; a few (C/C++ compilers, Elixir, clangd on Linux, tmux, zsh) need the system package
 manager and therefore root, sudo, or Homebrew. Without those they are reported as unavailable.
 
+On macOS, the claude selection also installs per-user LaunchAgents labeled
+`io.github.elijah-rou.bootstrap.*` in `~/Library/LaunchAgents` and loads them into the login session:
+
+- `watchdog` runs agent-kit's run watchdog (`skills/background-run/scripts/watchdog.ts scan`) every
+  15 minutes through `bin/agent-kit-watchdog`, which does nothing while the pinned agent-kit lacks it.
+- `claude-token` exists only when the keychain holds an item with service `claude-code-oauth`; install
+  checks that the item exists and never reads it. At each login, `bin/claude-token-env` copies the item into
+  launchd's user environment as `CLAUDE_CODE_OAUTH_TOKEN`, meant for apps started from the Dock, such as
+  T3 Code, to pass to their Claude sessions. The value is never written to a file, but every process
+  running as your user, including every GUI app and terminal started after login and their children,
+  can read it, and any local account can see it in `launchctl setenv`'s arguments for the moment that
+  command runs. An app started before the agent ran, such as a T3 Code that macOS reopens at login and
+  that wins the race, needs one restart to see it. An item created later is picked up by the next
+  `install.sh` or `install.sh link`; a changed item, at the next login. Deleting the item leaves the agent
+  in place, and it then sets nothing. Uninstall boots both agents out, unsets the variable, and deletes
+  the plists; the keychain item stays.
+
+Install copies both programs into `tools/libexec` with mode 0755 and writes the plists with mode 0644
+whatever the umask, since launchd refuses a group- or world-writable plist. The tests
+(`tests/uninstall_edges.sh`) replace `launchctl` and `security` with recording stubs. They prove the
+plists' contents, modes, and records, which `launchctl` and `security` calls install, rerun, and
+uninstall make, and that `claude-token-env` passes the keychain value to `launchctl setenv` without
+printing or writing it. They do not prove that launchd's environment on a real Mac carries the variable,
+or that a T3 Code Claude session started afterward does; that is checked by hand on the Mac after
+installing.
+
 Language servers are found on `PATH` by Helix; `config/helix/languages.toml` holds the overrides.
 
 ## Uninstall
 
 `./install.sh uninstall` signs gh out of every account (removing keyring tokens), stops Herdr
 and tmux servers it started, and purges the system packages it installed. Then it removes its
-blocks and links, restores backups, deletes caches and directories it created, and deletes the
-bootstrap root. Packages and files that existed before install are left alone, and so is a file
-you put in place of one of its links. Use `--yes` when not on a terminal.
+blocks and links, unloads and deletes its macOS LaunchAgents, restores backups, deletes caches
+and directories it created, and deletes the bootstrap root. Packages and files that existed before
+install are left alone, and so is a file you put in place of one of its links. Use `--yes` when not on a terminal.
 
 Package removal comes first and never cascades: if something installed since depends on a
 package, or the account can no longer run sudo, uninstall stops before changing anything else.
