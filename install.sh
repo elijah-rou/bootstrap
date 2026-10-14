@@ -137,6 +137,8 @@ package_remove() {
 #   own PATH                      absent before install; deleted with its contents
 #   package BACKEND NAME          system package that install added
 #   select GROUP NAME             persisted selection
+#   agent PLIST                   macOS LaunchAgent; booted out and deleted
+#   launchenv NAME                variable set in launchd's user environment; unset
 record() {
     local line
     line="$(printf '%s\t' "$@")"
@@ -525,7 +527,55 @@ step_claude() {
     done <"$kit/claude/skills.txt"
     # Claude Code discovers the Mod's plugin manifest under its skills directory.
     link_skill "$kit/claude/mods/trial-tools" "$home/skills/trial-tools" || return 1
-    render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$home/settings.json"
+    render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$home/settings.json" || return 1
+    [[ "$(uname -s)" == Darwin ]] || return 0
+    # launchd runs these programs, so they are copies with an explicit mode, not links into the checkout.
+    mkdir -p "$TOOLS/libexec" && install -m 0755 "$ROOT/repo/bin/agent-kit-watchdog" "$TOOLS/libexec/agent-kit-watchdog" &&
+        load_agent watchdog StartInterval=900 "$TOOLS/libexec/agent-kit-watchdog" "$ROOT" || return 1
+    # The keychain item holding Claude's long-lived token is the opt-in; only its existence is checked here.
+    security find-generic-password -s claude-code-oauth >/dev/null 2>&1 || return 0
+    record launchenv CLAUDE_CODE_OAUTH_TOKEN
+    install -m 0755 "$ROOT/repo/bin/claude-token-env" "$TOOLS/libexec/claude-token-env" &&
+        load_agent claude-token RunAtLoad "$TOOLS/libexec/claude-token-env"
+}
+
+xml_escape() {
+    local text="${1//&/&amp;}"
+    text="${text//</&lt;}"
+    printf '%s' "${text//>/&gt;}"
+}
+
+# Writes the macOS LaunchAgent io.github.elijah-rou.bootstrap.NAME, which runs PROGRAM [ARGUMENT...] at login (RunAtLoad) or
+# every SECONDS (StartInterval=SECONDS), and loads it into the login session. A rerun with the same
+# plist and the agent loaded changes nothing; a changed plist is booted out and loaded again. Outside
+# a login session (over ssh) loading fails, and launchd loads the plist at the next login instead.
+load_agent() {
+    local label="io.github.elijah-rou.bootstrap.$1" schedule="$2" argument domain plist
+    shift 2
+    domain="gui/$(id -u)"
+    plist="$HOME/Library/LaunchAgents/$label.plist"
+    {
+        printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+            '<plist version="1.0">' '<dict>'
+        printf '\t<key>Label</key>\n\t<string>%s</string>\n\t<key>ProgramArguments</key>\n\t<array>\n' "$label"
+        for argument in "$@"; do printf '\t\t<string>%s</string>\n' "$(xml_escape "$argument")"; done
+        printf '\t</array>\n'
+        case "$schedule" in
+            RunAtLoad) printf '\t<key>RunAtLoad</key>\n\t<true/>\n' ;;
+            StartInterval=*) printf '\t<key>StartInterval</key>\n\t<integer>%d</integer>\n' "${schedule#*=}" ;;
+            *) die "unknown LaunchAgent schedule: $schedule" ;;
+        esac
+        printf '</dict>\n</plist>\n'
+    } >"$ROOT/tmp/agent"
+    make_dirs "$(dirname "$plist")"
+    # Recorded first: if interrupted after the copy, uninstall still boots it out and deletes it.
+    record agent "$plist"
+    if cmp -s "$ROOT/tmp/agent" "$plist" && launchctl print "$domain/$label" >/dev/null 2>&1; then return 0; fi
+    launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
+    # launchd refuses a group- or world-writable plist, so the mode is set here, not left to the umask.
+    install -m 0644 "$ROOT/tmp/agent" "$plist" || return 1
+    launchctl bootstrap "$domain" "$plist" || warn "could not load $label now; launchd loads it at the next login"
 }
 
 step_herdr() {
@@ -807,6 +857,10 @@ cmd_uninstall() {
                 fi ;;
             link) undo_link "$path" "$value" || failed=1 ;;
             own) rm -rf "$path" || failed=1 ;;
+            agent)
+                launchctl bootout "gui/$(id -u)/$(basename "$path" .plist)" >/dev/null 2>&1 || true
+                rm -f "$path" || failed=1 ;;
+            launchenv) launchctl unsetenv "$path" || warn "could not unset $path in launchd's environment; logging out clears it" ;;
             dir|package|select) ;;
             *) warn "ignoring unknown state record: $kind" ;;
         esac
