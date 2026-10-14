@@ -250,6 +250,22 @@ link() {
     ln -s "$source" "$target"
 }
 
+# Undoes a recorded link: removes it if it still points into the root, then restores the backup it
+# replaced when nothing has taken its place.
+undo_link() {
+    local path="$1" backup="$2"
+    if [[ -L "$path" && "$(readlink "$path")" == "$ROOT/"* ]]; then rm -f "$path" || return 1; fi
+    if [[ "$backup" != - && ( -e "$backup" || -L "$backup" ) && ! -e "$path" && ! -L "$path" ]]; then mv "$backup" "$path" || return 1; fi
+}
+
+# Rewrites the state without the link records for PATHS (newline-separated) and, when given, the line LINE.
+forget_links() {
+    UNDONE="$1" awk -F '\t' -v line="${2:-}" '
+        BEGIN { n = split(ENVIRON["UNDONE"], paths, "\n"); for (i = 1; i <= n; i++) if (paths[i] != "") undone[paths[i]] = 1 }
+        !($1 == "link" && ($2 in undone)) && !(line != "" && $0 == line)
+    ' "$STATE" >"$ROOT/tmp/state" && mv "$ROOT/tmp/state" "$STATE"
+}
+
 # Links inside the private or tools root need no record: uninstall deletes the root.
 link_private() {
     mkdir -p "$(dirname "$2")"
@@ -614,17 +630,30 @@ retire_codex() {
     info "retiring the codex selection"
     while IFS=$'\t' read -r kind path backup; do
         [[ "$kind" == link && -L "$path" && "$(readlink "$path")" == "$TOOLS/agent-kit/codex/"* ]] || continue
-        if ! rm -f "$path"; then failed=1; continue; fi
-        if [[ "$backup" != - && ( -e "$backup" || -L "$backup" ) ]] && ! mv "$backup" "$path"; then failed=1; continue; fi
-        undone="$undone$path"$'\n'
+        if undo_link "$path" "$backup"; then undone="$undone$path"$'\n'; else failed=1; fi
     done <"$STATE"
-    if [[ "$failed" == 1 ]]; then warn "could not undo every codex link; keeping the codex selection so the next run retries"; fi
-    if ! UNDONE="$undone" awk -F '\t' -v selection="$selection" -v keep="$failed" '
-        BEGIN { n = split(ENVIRON["UNDONE"], paths, "\n"); for (i = 1; i <= n; i++) if (paths[i] != "") undone[paths[i]] = 1 }
-        !($1 == "link" && ($2 in undone)) && !(keep == 0 && $0 == selection)
-    ' "$STATE" >"$ROOT/tmp/state" || ! mv "$ROOT/tmp/state" "$STATE"; then
-        warn "could not update $STATE; the next run retires codex again"
-    fi
+    if [[ "$failed" == 1 ]]; then warn "could not undo every codex link; keeping the codex selection so the next run retries"; selection=''; fi
+    forget_links "$undone" "$selection" || warn "could not update $STATE; the next run retires codex again"
+}
+
+# A pin that drops a file from a tools checkout (agent-kit removing a skill) leaves the recorded links to
+# it dangling. Each one is undone as uninstall would and its record dropped; links bootstrap did not
+# record, and links whose target exists, are left alone. It runs only after every step succeeded, so a
+# checkout that failed midway never reads as removed files. It never fails the run: a link it could not
+# undo keeps its record, and the next run or uninstall finishes it.
+prune_links() {
+    local kind path backup undone='' failed=0
+    while IFS=$'\t' read -r kind path backup; do
+        [[ "$kind" == link && -L "$path" && ! -e "$path" && "$(readlink "$path")" == "$TOOLS/"* ]] || continue
+        if undo_link "$path" "$backup"; then
+            undone="$undone$path"$'\n'
+            info "removed $path; its target is gone from $TOOLS"
+        else
+            failed=1
+        fi
+    done <"$STATE"
+    if [[ "$failed" == 1 ]]; then warn "could not undo every dangling link; the next run retries"; fi
+    [[ -z "$undone" ]] || forget_links "$undone" || warn "could not update $STATE; the next run prunes again"
 }
 
 # Relinks configuration without downloading or installing anything.
@@ -641,6 +670,7 @@ cmd_link() {
         esac
     done < <(awk -F '\t' '$1 == "select"' "$STATE")
     [[ -z "$FAILURES" ]] || die "configuration incomplete:$FAILURES"
+    prune_links
     info "configuration linked"
 }
 
@@ -684,6 +714,7 @@ cmd_install() {
     done
 
     [[ -z "$FAILURES" ]] || die "incomplete:$FAILURES"
+    prune_links
     info "installed; start a new shell to use it"
 }
 
@@ -774,9 +805,7 @@ cmd_uninstall() {
                         warn "$path has an unterminated bootstrap block; remove it by hand"; failed=1
                     fi
                 fi ;;
-            link)
-                if [[ -L "$path" && "$(readlink "$path")" == "$ROOT/"* ]]; then rm -f "$path" || failed=1; fi
-                if [[ "$value" != - && ( -e "$value" || -L "$value" ) && ! -e "$path" && ! -L "$path" ]]; then mv "$value" "$path" || failed=1; fi ;;
+            link) undo_link "$path" "$value" || failed=1 ;;
             own) rm -rf "$path" || failed=1 ;;
             dir|package|select) ;;
             *) warn "ignoring unknown state record: $kind" ;;

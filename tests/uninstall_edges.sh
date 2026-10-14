@@ -129,6 +129,43 @@ if grep -q "^link"$'\t'"$home/.codex/" "$root/state.tsv"; then fail 'a codex age
 [[ -L "$home/.agents/skills/mine" ]] || fail 'retiring codex removed a skill link'
 [[ -f "$home/.codex/config.toml" ]] || fail 'retiring codex removed an owned file'
 
+# A recorded link whose target a new pin removed from the tools tree is undone and its record dropped,
+# restoring what it replaced. An unrecorded dangling link, a recorded live link, and a recorded link
+# dangling outside the tools tree stay. A run that fails prunes nothing; a prune that fails warns, keeps
+# the record, and does not fail link.
+skills="$home/.agents/skills"
+mkdir -p "$skills/gone.bootstrap-backup"
+printf 'user skill\n' >"$skills/gone.bootstrap-backup/SKILL.md"
+ln -s "$root/tools/agent-kit/skills/gone" "$skills/gone"
+ln -s "$root/tools/agent-kit/skills/also-gone" "$skills/also-gone"
+ln -s "$root/tools/agent-kit/skills/gone" "$skills/stray"
+ln -s "$root/repo/gone" "$skills/outside"
+{
+    printf 'link\t%s\t%s\n' "$skills/gone" "$skills/gone.bootstrap-backup"
+    printf 'link\t%s\t-\n' "$skills/also-gone" "$skills/outside"
+} >>"$root/state.tsv"
+link_recorded() { grep -q "^link"$'\t'"$1"$'\t' "$root/state.tsv"; }
+printf 'select\ttools\tclaude\n' >>"$root/state.tsv"
+if env -i HOME="$home" PATH="$PATH" TERM=dumb BOOTSTRAP_AGENT_KIT="$work/not-a-kit" CLAUDE_CONFIG_DIR="$home/.claude" \
+    /bin/bash "$repo/install.sh" link >/dev/null 2>&1; then fail 'link accepted a missing agent-kit'; fi
+sed -i.bak '/^select\ttools\tclaude$/d' "$root/state.tsv" && rm -f "$root/state.tsv.bak"
+[[ -L "$skills/gone" ]] && link_recorded "$skills/gone" || fail 'a failed link run pruned a dangling link'
+chmod a-w "$skills"
+link_kit >/dev/null 2>"$work/prune.err" || fail 'link failed when pruning failed'
+chmod u+w "$skills"
+grep -q 'could not undo every dangling link' "$work/prune.err" || fail 'a failed prune did not warn'
+[[ -L "$skills/gone" ]] && link_recorded "$skills/gone" || fail 'a failed prune dropped its record'
+link_kit >/dev/null 2>&1 || fail 'link with dangling links failed'
+[[ ! -L "$skills/gone" && "$(cat "$skills/gone/SKILL.md")" == 'user skill' ]] || fail 'the replaced skill was not restored'
+[[ ! -e "$skills/also-gone" && ! -L "$skills/also-gone" ]] || fail 'a recorded dangling link was kept'
+if link_recorded "$skills/gone" || link_recorded "$skills/also-gone"; then fail 'a pruned link kept its record'; fi
+[[ "$(readlink "$skills/stray")" == "$root/tools/agent-kit/skills/gone" ]] || fail 'an unrecorded dangling link was removed'
+[[ "$(readlink "$skills/outside")" == "$root/repo/gone" ]] && link_recorded "$skills/outside" ||
+    fail 'a recorded link dangling outside the tools tree was pruned'
+[[ -L "$skills/mine" && -e "$skills/mine" ]] && link_recorded "$skills/mine" || fail 'a recorded live link was pruned'
+# Created by this test's fixtures, not by install.
+rm -r "$skills/gone" "$skills/stray"
+
 # A failed uninstall keeps its state, and a rerun completes it.
 chmod a-w "$home/.bashrc"
 if run uninstall --yes >/dev/null 2>&1; then fail 'uninstall ignored a failed step'; fi
