@@ -52,7 +52,12 @@ installed; uninstall still removes it with everything else bootstrap recorded.
 Claude Code's configuration directory defaults to the private root, so uninstall also deletes its
 macOS keychain login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
 (rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` runs agent-kit's Jev task-class
-hint on each prompt in a public repository; it never blocks a prompt. At session start,
+hint on each prompt in a public repository; it never blocks a prompt. Before each Bash, Monitor, or
+PowerShell call it runs agent-kit's git guard (`agentic/tools/git-guard`), the policy Pi's
+`git-interceptor` extension applies: it refuses skipping git hooks, and publishing (push, merge, rebase,
+`gh pr merge`, and the like) from subagents other than `autopilot-owner`. From Claude Code 2.1.295 the
+guard fails closed: when it cannot run (no agent-kit checkout, no Bun, or a pin without the guard),
+Claude Code refuses those calls until `install.sh` restores it. At session start,
 `bin/agent-kit-lag` warns in one line when the installed agent-kit is behind its `origin/main`; the
 fix is a bootstrap pull request that bumps agent-kit's pin in `catalog.tsv`. It reads only local refs;
 at most hourly it refreshes `origin/main` in the background, so a newly merged commit shows from a

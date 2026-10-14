@@ -24,6 +24,19 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Monitor|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun --cwd @AGENT_KIT@ @AGENT_KIT@/agentic/tools/git-guard/cli.ts --claude-hook",
+            "timeout": 5,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [

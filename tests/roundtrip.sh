@@ -52,13 +52,29 @@ if grep -qx "select	tools	claude" "$HOME/.local/share/bootstrap/state.tsv"; then
     # The rendered settings keep no unreplaced token, and the SessionStart command, run under sh -c as
     # Claude runs it, warns once the installed agent-kit is a commit behind origin/main. A fresh stamp
     # keeps the hook from fetching, and the kit goes back to its pinned commit afterwards.
+    # The PreToolUse entry runs the installed kit's git guard, fails closed, and, run under sh -c from
+    # outside the kit with an event on stdin, refuses a subagent push and allows the main session's git
+    # status. The same command pointed at a missing file must not exit 0, which Claude reads as allow.
     bash -c '. "$HOME/.local/share/bootstrap/repo/shell/env.sh"
         set -euo pipefail
         fail() { printf "FAIL: %s\n" "$1" >&2; exit 1; }
         settings="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
         ! grep -Eq "@[A-Z_]+@" "$settings" || fail "$settings keeps an unreplaced token: $(grep -Eo "@[A-Z_]+@" "$settings" | sort -u | tr "\n" " ")"
-        command="$(jq -er ".hooks.SessionStart[0].hooks[0].command" "$settings")"
         kit="$BOOTSTRAP_ROOT/tools/agent-kit"
+        guard="$(jq -ec ".hooks.PreToolUse[] | select(.matcher == \"Bash|Monitor|PowerShell\") | .hooks[0]" "$settings")" ||
+            fail "$settings has no PreToolUse entry for Bash|Monitor|PowerShell"
+        jq -e ".type == \"command\" and .timeout == 5 and .onFailure == \"block\"" <<<"$guard" >/dev/null ||
+            fail "the git guard hook does not fail closed with a 5 second timeout: $guard"
+        command="$(jq -r .command <<<"$guard")"
+        [[ "$command" == "bun --cwd $kit $kit/agentic/tools/git-guard/cli.ts --claude-hook" ]] || fail "unexpected git guard command: $command"
+        hook() { (cd / && printf "%s" "$1" | sh -c "$2"); }
+        push="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push origin HEAD\"},\"agent_id\":\"roundtrip\",\"agent_type\":\"build\"}"
+        output="$(hook "$push" "$command")" || fail "the git guard failed on a subagent push: $command"
+        [[ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" == deny ]] || fail "the git guard did not refuse a subagent push: $output"
+        output="$(hook "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git status\"}}" "$command")" && [[ -z "$output" ]] ||
+            fail "the git guard did not allow the main session git status: $output"
+        ! hook "$push" "${command/cli.ts/missing.ts}" >/dev/null 2>&1 || fail "a missing git guard exited 0"
+        command="$(jq -er ".hooks.SessionStart[0].hooks[0].command" "$settings")"
         pinned="$(git -C "$kit" rev-parse HEAD)"
         restore() { git -C "$kit" -c advice.detachedHead=false checkout --quiet --detach "$pinned"; rm -f "$kit/.git/bootstrap-kit-lag"; }
         trap restore EXIT
