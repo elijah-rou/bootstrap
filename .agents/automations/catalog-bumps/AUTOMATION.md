@@ -1,6 +1,6 @@
 # Catalog bumps
 
-An outer loop on the Benny pattern (design slice 11): find a pinned download with a newer upstream release, move the pin, prove the install in a container, and open a pull request, or report why not. One name per run. It never merges.
+An outer loop on the Benny pattern (design slice 11): find a pinned download with a newer upstream release, move the pin, prove the install in a container, and open a pull request, or report why not. One name per run. It never merges. agent-kit's pin is a commit, not a release: `scripts/pin-agent-kit` moves it (see `../agent-kit-pin/`).
 
 ## Trigger
 
@@ -31,7 +31,7 @@ pi -p "Run the catalog-bumps automation in .agents/automations/catalog-bumps/AUT
 ## Boundaries
 
 - A catalog bump is low-risk work fully decided by the checks above: launch no reviewer. The pull request is where the user reviews it.
-- This run never records a verdict. Landing needs one from a fresh verifier: a separate session, not this run, re-runs the container check on the pull request's head and records it in the local ledger with `agentic verify record`. Whoever lands the pull request runs `agentic verify status <pr>` with the installed `agentic` right before merging; it must exit 0 for the current head.
+- This run never records a verdict. Landing needs one from a fresh verifier, a separate session and not this run, that re-runs the container check on the pull request's head; whoever lands the pull request follows the verdict gate in the installed `babysit-and-ship` skill.
 - One name per run. Never merge, deploy, or release; the user lands, or a run the user invoked in the ship mode.
 - Subagents may run checks, but they hold no publish credentials and never push, comment, or open pull requests.
 - Fail closed: if a gate or check cannot be evaluated, stop and report.
