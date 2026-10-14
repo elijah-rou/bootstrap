@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Claude Code's SessionStart hook (claude/settings.json): prints one warning, as hook JSON, when the
+# installed agent-kit is behind its origin/main. The check reads only local refs and never waits on
+# the network. At most once an hour it then refreshes origin/main in the background, bounded by a
+# watchdog, so a later session sees new commits. Every failure is silent; the hook always exits 0.
+# Usage: agent-kit-lag BOOTSTRAP_ROOT
+set -u
+root="${1:?usage: agent-kit-lag BOOTSTRAP_ROOT}"
+kit="$root/tools/agent-kit"
+stamp="$kit/.git/bootstrap-kit-lag"
+refresh_minutes=60
+fetch_seconds=30
+
+# A development checkout linked with BOOTSTRAP_AGENT_KIT is the developer's own: never checked or fetched.
+[[ ! -L "$kit" && -d "$kit/.git" ]] || exit 0
+
+behind="$(git -C "$kit" rev-list --count HEAD..refs/remotes/origin/main 2>/dev/null)"
+if [[ "$behind" =~ ^[0-9]+$ && "$behind" -gt 0 ]]; then
+    installed="$(git -C "$kit" rev-parse HEAD 2>/dev/null)"
+    main="$(git -C "$kit" rev-parse refs/remotes/origin/main 2>/dev/null)"
+    pin="$(awk -F '\t' '$0 !~ /^#/ && $1 == "agent-kit" { print $3; exit }' "$root/repo/catalog.tsv" 2>/dev/null)"
+    repo="$root/repo"
+    if [[ "$repo" == "$HOME"/* ]]; then repo="~${repo#"$HOME"}"; fi
+    # A catalog pin that is not the installed commit or one before it means bootstrap moved the pin
+    # forward and install.sh has not run since.
+    if [[ -n "$pin" ]] && ! git -C "$kit" merge-base --is-ancestor "$pin" HEAD 2>/dev/null; then
+        update="$repo/install.sh"
+    else
+        update="cd $repo && scripts/pin agent-kit $main && ./install.sh"
+    fi
+    commits=commits
+    if [[ "$behind" == 1 ]]; then commits=commit; fi
+    message="agent-kit is $behind $commits behind origin/main (installed ${installed:0:7}, main ${main:0:7}). Update: $update"
+    message="${message//\\/\\\\}"
+    printf '{"systemMessage": "%s"}\n' "${message//\"/\\\"}"
+fi
+
+# The stamp is taken before the fetch starts, so sessions starting together fetch once and an
+# unreachable remote is retried an hour later rather than on every session.
+[[ -z "$(find "$stamp" -mmin "-$refresh_minutes" 2>/dev/null)" ]] || exit 0
+touch "$stamp" 2>/dev/null || exit 0
+# Job control gives the refresh its own process group, so it outlives the hook's.
+set -m
+(
+    set +m
+    GIT_TERMINAL_PROMPT=0 git -C "$kit" -c credential.helper= -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10 \
+        fetch --quiet --no-tags --no-write-fetch-head origin +refs/heads/main:refs/remotes/origin/main &
+    fetch=$!
+    (
+        sleep "$fetch_seconds" &
+        sleeper=$!
+        trap 'kill "$sleeper"; exit 0' TERM
+        wait "$sleeper" && kill "$fetch"
+    ) &
+    watchdog=$!
+    wait "$fetch"
+    kill "$watchdog"
+) </dev/null >/dev/null 2>&1 &
+exit 0
