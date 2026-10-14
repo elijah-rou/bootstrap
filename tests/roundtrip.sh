@@ -49,6 +49,23 @@ for agent in pi claude codex herdr; do
 done
 if grep -qx "select	tools	claude" "$HOME/.local/share/bootstrap/state.tsv"; then
     bash -ic 'cd "$(mktemp -d)" && claude --print /tps --output-format json --no-session-persistence --max-budget-usd 0.01' | grep -q '"total_cost_usd":0'
+    # The rendered settings keep no unreplaced token, and the SessionStart command, run under sh -c as
+    # Claude runs it, warns once the installed agent-kit is a commit behind origin/main. A fresh stamp
+    # keeps the hook from fetching, and the kit goes back to its pinned commit afterwards.
+    bash -c '. "$HOME/.local/share/bootstrap/repo/shell/env.sh"
+        set -euo pipefail
+        fail() { printf "FAIL: %s\n" "$1" >&2; exit 1; }
+        settings="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+        ! grep -Eq "@[A-Z_]+@" "$settings" || fail "$settings keeps an unreplaced token: $(grep -Eo "@[A-Z_]+@" "$settings" | sort -u | tr "\n" " ")"
+        command="$(jq -er ".hooks.SessionStart[0].hooks[0].command" "$settings")"
+        kit="$BOOTSTRAP_ROOT/tools/agent-kit"
+        pinned="$(git -C "$kit" rev-parse HEAD)"
+        git -C "$kit" -c advice.detachedHead=false checkout --quiet --detach HEAD~1
+        touch "$kit/.git/bootstrap-kit-lag"
+        output="$(sh -c "$command")" || fail "the SessionStart command failed: $command"
+        git -C "$kit" -c advice.detachedHead=false checkout --quiet --detach "$pinned"
+        rm "$kit/.git/bootstrap-kit-lag"
+        [[ "$output" == *"behind origin/main"* ]] || fail "the SessionStart command did not warn: $output"'
 fi
 
 # A signed-in gh (file storage) must be signed out without stalling uninstall.
