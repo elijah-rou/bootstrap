@@ -422,14 +422,15 @@ place() {
     if [[ "$2" == "$ROOT"/* ]]; then link_private "$1" "$2"; else link "$1" "$2"; fi
 }
 
-# Renders BASE merged with OVERLAY into TARGET, with @AGENT_KIT@ replaced by the agent-kit checkout.
+# Renders BASE merged with OVERLAY into TARGET, with @AGENT_KIT@ replaced by the agent-kit checkout and
+# @BOOTSTRAP_ROOT@ by the bootstrap root.
 # Agents rewrite their settings at runtime (model choice, packages), so TARGET is replaced only when
 # the rendering itself changed; the replaced copy is kept as .bak.
 render_config() {
     local base="$1" overlay="$2" target="$3" stamp
     stamp="$(dirname "$target")/.$(basename "$target").rendered"
     if [[ "$target" != "$ROOT"/* ]]; then own "$target" "$stamp" "$target.bak"; fi
-    node "$REPO/bin/merge-json.mjs" "$base" "$overlay" "@AGENT_KIT@=$TOOLS/agent-kit" >"$ROOT/tmp/render" ||
+    node "$REPO/bin/merge-json.mjs" "$base" "$overlay" "@AGENT_KIT@=$TOOLS/agent-kit" "@BOOTSTRAP_ROOT@=$ROOT" >"$ROOT/tmp/render" ||
         die "could not render $target; a Node-compatible runtime is required"
     if [[ ! -f "$target" ]] || ! cmp -s "$ROOT/tmp/render" "$stamp"; then
         if [[ -f "$target" ]]; then cp "$target" "$target.bak"; fi
