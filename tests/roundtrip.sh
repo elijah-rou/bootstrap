@@ -44,7 +44,7 @@ if grep -qx "select	tools	zsh" "$HOME/.local/share/bootstrap/state.tsv"; then
 fi
 # Selected agents must start from an interactive shell; Claude also runs a Mod command, which writes its
 # caches, at zero model cost.
-for agent in pi claude codex herdr; do
+for agent in pi claude herdr; do
     if grep -qx "select	tools	$agent" "$HOME/.local/share/bootstrap/state.tsv"; then bash -ic "$agent --version" >/dev/null; fi
 done
 if grep -qx "select	tools	claude" "$HOME/.local/share/bootstrap/state.tsv"; then

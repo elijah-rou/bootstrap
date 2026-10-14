@@ -26,9 +26,9 @@ export EDITOR=hx VISUAL=hx PAGER=less BAT_PAGER='less -RF' MANPAGER=less
 # Machine-specific environment, for example from the private dotfiles repository.
 if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap/env.sh" ]; then . "${XDG_CONFIG_HOME:-$HOME/.config}/bootstrap/env.sh"; fi
 
-# Defaults that the machine-specific file may set first. An existing CODEX_HOME, such as a
-# workstation's ~/.codex or ~/.claude, is kept; uninstall then removes only the links bootstrap put there.
-export CODEX_HOME="${CODEX_HOME:-$_private/codex}" CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$_private/claude}"
+# A default that the machine-specific file may set first. An existing CLAUDE_CONFIG_DIR, such as a
+# workstation's ~/.claude, is kept; uninstall then removes only the links bootstrap put there.
+export CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$_private/claude}"
 # Claude Code keys its keychain login to any explicit CLAUDE_CONFIG_DIR, so its default home stays
 # implicit; otherwise an existing ~/.claude login would no longer be found.
 if [ "$CLAUDE_CONFIG_DIR" = "$HOME/.claude" ]; then unset CLAUDE_CONFIG_DIR; fi

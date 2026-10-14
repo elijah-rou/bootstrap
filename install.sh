@@ -417,7 +417,7 @@ link_skill() {
     if [[ "$target" == "$ROOT"/* ]]; then link_private "$source" "$target"; else link "$source" "$target"; fi
 }
 
-# Links inside the root need no record; anything outside it (an existing ~/.codex or ~/.claude) does.
+# Links inside the root need no record; anything outside it (an existing ~/.claude) does.
 place() {
     if [[ "$2" == "$ROOT"/* ]]; then link_private "$1" "$2"; else link "$1" "$2"; fi
 }
@@ -489,22 +489,6 @@ step_pi() {
     while IFS= read -r source; do
         if [[ "$source" != /* ]]; then pi install "$source" >/dev/null || { warn "Pi package failed: $source"; return 1; }; fi
     done < <(node -e 'for (const p of require(process.argv[1]).packages ?? []) console.log(typeof p === "string" ? p : p.source)' "$agent/settings.json")
-}
-
-step_codex() {
-    local kit="$TOOLS/agent-kit" name file
-    ensure_agent_kit || return 1
-    link_private "$ROOT/repo/bin/codex" "$TOOLS/bin/codex" || return 1
-    if [[ "$CODEX_HOME" != "$ROOT"/* ]]; then make_dirs "$CODEX_HOME"; else mkdir -p "$CODEX_HOME"; fi
-    for file in AGENTS.md native-tools.md; do place "$kit/codex/$file" "$CODEX_HOME/$file" || return 1; done
-    if [[ ! -e "$CODEX_HOME/config.toml" ]]; then
-        own "$CODEX_HOME/config.toml"
-        cp "$REPO/codex/config.toml" "$CODEX_HOME/config.toml" || return 1
-    fi
-    # Codex discovers skills in the shared agents directory, outside the private root.
-    while IFS= read -r name; do
-        if [[ -n "$name" ]]; then link_skill "$kit/skills/$name" "$HOME/.agents/skills/$name" || return 1; fi
-    done <"$kit/codex/skills.txt"
 }
 
 # Claude Code's configuration directory defaults to the private root (see shell/env.sh).
@@ -615,6 +599,32 @@ prepare_root() {
     ln -sfn "$REPO" "$ROOT/repo"
     load_environment
     record_package_changes
+    retire_codex
+}
+
+# Codex was a tools selection until bootstrap dropped it, and agent-kit no longer ships the codex/
+# files its links pointed at. On a machine that selected it, this undoes those links as uninstall
+# would, then drops the selection. Everything else Codex left (the tools/bin/codex link, the Codex
+# package, its skill links, and own and dir records) stays for uninstall. It never fails the run: on
+# an error it warns and keeps the selection, so the next run retries. Delete it, and the skip in
+# cmd_install, once no machine's state.tsv has the codex selection.
+retire_codex() {
+    local selection="select"$'\t'"tools"$'\t'"codex" kind path backup undone='' failed=0
+    grep -qxF "$selection" "$STATE" || return 0
+    info "retiring the codex selection"
+    while IFS=$'\t' read -r kind path backup; do
+        [[ "$kind" == link && -L "$path" && "$(readlink "$path")" == "$TOOLS/agent-kit/codex/"* ]] || continue
+        if ! rm -f "$path"; then failed=1; continue; fi
+        if [[ "$backup" != - && ( -e "$backup" || -L "$backup" ) ]] && ! mv "$backup" "$path"; then failed=1; continue; fi
+        undone="$undone$path"$'\n'
+    done <"$STATE"
+    if [[ "$failed" == 1 ]]; then warn "could not undo every codex link; keeping the codex selection so the next run retries"; fi
+    if ! UNDONE="$undone" awk -F '\t' -v selection="$selection" -v keep="$failed" '
+        BEGIN { n = split(ENVIRON["UNDONE"], paths, "\n"); for (i = 1; i <= n; i++) if (paths[i] != "") undone[paths[i]] = 1 }
+        !($1 == "link" && ($2 in undone)) && !(keep == 0 && $0 == selection)
+    ' "$STATE" >"$ROOT/tmp/state" || ! mv "$ROOT/tmp/state" "$STATE"; then
+        warn "could not update $STATE; the next run retires codex again"
+    fi
 }
 
 # Relinks configuration without downloading or installing anything.
@@ -626,7 +636,7 @@ cmd_link() {
     OFFLINE=1
     while IFS=$'\t' read -r _ group name; do
         case "$name" in
-            pi|codex|claude|herdr|zsh|tmux) "step_$name" - || FAILURES="$FAILURES $name" ;;
+            pi|claude|herdr|zsh|tmux) "step_$name" - || FAILURES="$FAILURES $name" ;;
             *) ;;
         esac
     done < <(awk -F '\t' '$1 == "select"' "$STATE")
@@ -665,6 +675,8 @@ cmd_install() {
     configure_apps
 
     while IFS=$'\t' read -r _ group name; do
+        # A codex selection is left only while retire_codex is retrying; it installs nothing.
+        if [[ "$group/$name" == tools/codex ]]; then continue; fi
         install_selection "$group" "$name"
     done < <(awk -F '\t' '$1 == "select"' "$STATE")
     for name in $requested; do
