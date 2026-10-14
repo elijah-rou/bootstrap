@@ -93,7 +93,7 @@ if [[ "$dry_run" == 0 ]]; then
     pin_prs="$(gh pr list --repo "$github_repo" --state open --limit 1000 \
         --json headRefName,url,isCrossRepository,headRepository \
         --jq ".[] | select(.isCrossRepository == false and .headRepository.nameWithOwner == \"$github_repo\"
-            and (.headRefName | startswith(\"agent/pin-agent-kit-\"))) | [.headRefName, .url] | @tsv")"
+            and (.headRefName | test(\"^agent/pin-agent-kit-[0-9a-f]{12}$\"))) | [.headRefName, .url] | @tsv")"
     # Every pin rewrites the same catalog row, so a second open pin conflicts with the first once
     # either lands. Pin once, after a landing run's last agent-kit merge.
     reuse=

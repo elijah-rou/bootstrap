@@ -137,9 +137,10 @@ grep -qF 'https://github.invalid/bootstrap/pull/5' "$work/err" || fail "other op
 [[ "$(worktrees)" == 1 ]] || fail 'other open pin left a worktree'
 
 # The real run with no argument pins agent-kit's main. A fork's pull request on the same branch
-# name is not this repository's pin and is ignored.
+# name is not this repository's pin, and neither is a branch that only shares the prefix.
 : >"$work/gh.log"
-printf '[%s]\n' "$(open_pr_json "$branch" https://github.invalid/bootstrap/pull/6 true someone/bootstrap)" >"$work/open-prs.json"
+printf '[%s, %s]\n' "$(open_pr_json "$branch" https://github.invalid/bootstrap/pull/6 true someone/bootstrap)" \
+    "$(open_pr_json agent/pin-agent-kit-script https://github.invalid/bootstrap/pull/4 false elijah-rou/bootstrap)" >"$work/open-prs.json"
 output="$("$script")" || fail 'pin exited nonzero'
 [[ "${output##*$'\n'}" == https://github.invalid/bootstrap/pull/7 ]] || fail "last line is not the URL: $output"
 grep -q '^pr list .*--repo elijah-rou/bootstrap' "$work/gh.log" || fail "gh pr list: $(cat "$work/gh.log")"
