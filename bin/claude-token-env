@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # macOS LaunchAgent program (install.sh step_claude): at login, copies the Claude Code OAuth token from
-# the keychain item claude-code-oauth into launchd's user environment, so apps started from the Dock,
-# such as T3 Code, pass CLAUDE_CODE_OAUTH_TOKEN to their Claude sessions. The value is never printed,
+# the keychain item claude-code-oauth into launchd's user environment as CLAUDE_CODE_OAUTH_TOKEN, for apps
+# started from the Dock, such as T3 Code, to pass to their Claude sessions. The value is never printed,
 # logged, or written to a file: both commands' output is discarded, and the exit status alone reports a
 # failure (launchctl print shows it). launchctl takes the value only as an argument, so the process list
 # shows it to any local account while that command runs. Takes no arguments.

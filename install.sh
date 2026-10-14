@@ -513,12 +513,13 @@ step_claude() {
     link_skill "$kit/claude/mods/trial-tools" "$home/skills/trial-tools" || return 1
     render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$home/settings.json" || return 1
     [[ "$(uname -s)" == Darwin ]] || return 0
-    link_private "$ROOT/repo/bin/agent-kit-watchdog" "$TOOLS/libexec/agent-kit-watchdog" &&
+    # launchd runs these programs, so they are copies with an explicit mode, not links into the checkout.
+    mkdir -p "$TOOLS/libexec" && install -m 0755 "$ROOT/repo/bin/agent-kit-watchdog" "$TOOLS/libexec/agent-kit-watchdog" &&
         load_agent watchdog StartInterval=900 "$TOOLS/libexec/agent-kit-watchdog" "$ROOT" || return 1
     # The keychain item holding Claude's long-lived token is the opt-in; only its existence is checked here.
     security find-generic-password -s claude-code-oauth >/dev/null 2>&1 || return 0
     record launchenv CLAUDE_CODE_OAUTH_TOKEN
-    link_private "$ROOT/repo/bin/claude-token-env" "$TOOLS/libexec/claude-token-env" &&
+    install -m 0755 "$ROOT/repo/bin/claude-token-env" "$TOOLS/libexec/claude-token-env" &&
         load_agent claude-token RunAtLoad "$TOOLS/libexec/claude-token-env"
 }
 
@@ -556,7 +557,8 @@ load_agent() {
     record agent "$plist"
     if cmp -s "$ROOT/tmp/agent" "$plist" && launchctl print "$domain/$label" >/dev/null 2>&1; then return 0; fi
     launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
-    cp "$ROOT/tmp/agent" "$plist" || return 1
+    # launchd refuses a group- or world-writable plist, so the mode is set here, not left to the umask.
+    install -m 0644 "$ROOT/tmp/agent" "$plist" || return 1
     launchctl bootstrap "$domain" "$plist" || warn "could not load $label now; launchd loads it at the next login"
 }
 

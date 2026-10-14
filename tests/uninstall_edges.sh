@@ -202,8 +202,10 @@ kernel=Linux link_kit >/dev/null 2>&1 || fail 'link with claude selected failed 
 [[ -z "$(find "$agents" -name 'io.github.elijah-rou.*')" && ! -e "$root/tools/libexec" ]] || fail 'Linux link wrote a login agent'
 if grep -Eq '^(agent|launchenv)'$'\t' "$root/state.tsv"; then fail 'Linux link recorded a login agent'; fi
 
+# The macOS installs run under umask 002, which would leave files group-writable; launchd refuses a
+# group- or world-writable plist, so install sets every mode itself.
 rm "$work/keychain"
-kernel=Darwin link_kit >/dev/null 2>&1 || fail 'link with claude selected failed on macOS'
+(umask 002 && kernel=Darwin link_kit >/dev/null 2>&1) || fail 'link with claude selected failed on macOS'
 [[ -f "$agents/$watchdog.plist" ]] || fail 'the watchdog agent was not written'
 [[ ! -e "$agents/$token_agent.plist" ]] || fail 'the token agent was written without the keychain item'
 grep -qxF "bootstrap $domain $agents/$watchdog.plist" "$work/launchctl.log" || fail 'the watchdog agent was not loaded'
@@ -212,8 +214,15 @@ if grep -q '^launchenv' "$root/state.tsv"; then fail 'a launchenv record was wri
 
 printf '%s\n' "$sentinel" >"$work/keychain"
 rm -f "$work/launchctl.log"
-kernel=Darwin link_kit >/dev/null 2>&1 || fail 'link with the keychain item failed'
+(umask 002 && kernel=Darwin link_kit >/dev/null 2>&1) || fail 'link with the keychain item failed'
 plist="$agents/$token_agent.plist"
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+for file in "$plist" "$agents/$watchdog.plist"; do
+    [[ "$(mode "$file")" == 644 ]] || fail "plist mode is $(mode "$file"), not 644: $file"
+done
+for file in "$root/tools/libexec/claude-token-env" "$root/tools/libexec/agent-kit-watchdog"; do
+    [[ -f "$file" && ! -L "$file" && "$(mode "$file")" == 755 ]] || fail "login agent program is not a 755 file: $(ls -l "$file")"
+done
 [[ -f "$plist" ]] || fail 'the token agent was not written'
 [[ "$(cat "$work/launchctl.log")" == "print $domain/$watchdog"$'\n'"bootout $domain/$token_agent"$'\n'"bootstrap $domain $plist" ]] ||
     fail "unexpected launchctl calls: $(tr '\n' ';' <"$work/launchctl.log")"
