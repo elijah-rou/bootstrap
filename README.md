@@ -81,7 +81,8 @@ On macOS, the claude selection also installs per-user LaunchAgents labeled
   checks that the item exists and never reads it. At each login, `bin/claude-token-env` copies the item into
   launchd's user environment as `CLAUDE_CODE_OAUTH_TOKEN`, so apps started from the Dock pass it to
   their Claude sessions. The value is never written to a file, but any process running as your user can
-  read launchd's environment, and an app started before the agent ran needs one restart to see it.
+  read launchd's environment, and any local account can see it in `launchctl setenv`'s arguments for
+  the moment that command runs. An app started before the agent ran needs one restart to see it.
   An item created later is picked up by the next `install.sh` or `install.sh link`. Deleting the item
   leaves the agent in place, and it then sets nothing. Uninstall boots both agents out, unsets the
   variable, and deletes the plists; the keychain item stays.
