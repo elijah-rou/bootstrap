@@ -60,11 +60,11 @@ if grep -qx "select	tools	claude" "$HOME/.local/share/bootstrap/state.tsv"; then
         command="$(jq -er ".hooks.SessionStart[0].hooks[0].command" "$settings")"
         kit="$BOOTSTRAP_ROOT/tools/agent-kit"
         pinned="$(git -C "$kit" rev-parse HEAD)"
+        restore() { git -C "$kit" -c advice.detachedHead=false checkout --quiet --detach "$pinned"; rm -f "$kit/.git/bootstrap-kit-lag"; }
+        trap restore EXIT
         git -C "$kit" -c advice.detachedHead=false checkout --quiet --detach HEAD~1
         touch "$kit/.git/bootstrap-kit-lag"
         output="$(sh -c "$command")" || fail "the SessionStart command failed: $command"
-        git -C "$kit" -c advice.detachedHead=false checkout --quiet --detach "$pinned"
-        rm "$kit/.git/bootstrap-kit-lag"
         [[ "$output" == *"behind origin/main"* ]] || fail "the SessionStart command did not warn: $output"'
 fi
 
