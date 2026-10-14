@@ -18,12 +18,13 @@ behind="$(git -C "$kit" rev-list --count HEAD..refs/remotes/origin/main 2>/dev/n
 installed="$(git -C "$kit" rev-parse HEAD 2>/dev/null)"
 main="$(git -C "$kit" rev-parse refs/remotes/origin/main 2>/dev/null)"
 # The message holds only a count and two commit ids, so it is valid JSON without escaping.
-# The fix is a pin bump reviewed in bootstrap: running scripts/pin in $root/repo would edit whatever
-# checkout that links to, such as another repository's detached copy of bootstrap.
+# The fix is a pin pull request reviewed in bootstrap, opened by scripts/pin-agent-kit from a clone of
+# bootstrap. The advice names no path under $root: $root/repo may link to any checkout, such as
+# another repository's detached copy of bootstrap.
 if [[ "$behind" =~ ^[1-9][0-9]*$ && "$installed" =~ ^[0-9a-f]{40,64}$ && "$main" =~ ^[0-9a-f]{40,64}$ ]]; then
     commits=commits
     if [[ "$behind" == 1 ]]; then commits=commit; fi
-    advice="Bump agent-kit's pin in bootstrap's catalog.tsv through a bootstrap PR."
+    advice="Run scripts/pin-agent-kit from a bootstrap clone to open the pin PR."
     printf '{"systemMessage": "agent-kit is %s %s behind origin/main (installed %s, main %s). %s"}\n' \
         "$behind" "$commits" "${installed:0:7}" "${main:0:7}" "$advice"
 fi

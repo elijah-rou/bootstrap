@@ -34,8 +34,9 @@ run_hook() {
     printf '%s' "$output"
 }
 
-# Behind: one JSON line with both commits and the advice to bump the pin, never a command to run.
-expected="{\"systemMessage\": \"agent-kit is 2 commits behind origin/main (installed ${first:0:7}, main ${main:0:7}). Bump agent-kit's pin in bootstrap's catalog.tsv through a bootstrap PR.\"}"
+# Behind: one JSON line with both commits and the advice to pin through scripts/pin-agent-kit from a
+# bootstrap clone, never a path under the install root.
+expected="{\"systemMessage\": \"agent-kit is 2 commits behind origin/main (installed ${first:0:7}, main ${main:0:7}). Run scripts/pin-agent-kit from a bootstrap clone to open the pin PR.\"}"
 output="$(run_hook)"
 [[ "$output" == "$expected" ]] || fail "behind printed: $output"
 
