@@ -81,6 +81,8 @@ chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
 branch="agent/pin-agent-kit-${new:0:12}"
 remote_branch() { git -C "$work/origin.git" rev-parse --verify --quiet "refs/heads/$1" || true; }
+# The PR body's line for the Pi role pinned at commit $1: regenerated, with its diff left to the reviewer.
+role_line() { printf -- "- \`pi/agents/autopilot-owner.md\`: regenerated from agent-kit's \`claude/agents/autopilot-owner.md\` at %s, with the Pi escalation line" "${1:0:12}"; }
 worktrees() { git -C "$checkout" worktree list --porcelain | grep -c '^worktree '; }
 
 # Usage errors and commits main does not reach: exit 2, nothing pushed, no GitHub call.
@@ -166,7 +168,7 @@ git -C "$work/origin.git" show "$head:catalog.tsv" | grep -q "^agent-kit	interna
 expected="$(printf -- '---\nname: autopilot-owner\ntools: read, contact_supervisor\n%s\n---\n\nNew charter. Report code-ready, and escalate anything outside the brief through the supervisor.' "$(marker "$new")")"
 [[ "$(git -C "$work/origin.git" show "$head:pi/agents/autopilot-owner.md")" == "$expected" ]] || fail 'Pi role not synced'
 grep -q -- "--head $branch --title Pin agent-kit ${new:0:12}" "$work/gh.log" || fail "gh pr create: $(cat "$work/gh.log")"
-for section in '## Why' '## What changed' '## Verification' '## Revert' "elijah-rou/agent-kit@${new:0:7} New charter (elijah-rou/agent-kit#2)"; do
+for section in '## Why' '## What changed' '## Verification' '## Revert' "elijah-rou/agent-kit@${new:0:7} New charter (elijah-rou/agent-kit#2)" "$(role_line "$new")"; do
     grep -qF -- "$section" "$work/pr-body.md" || fail "PR body lacks $section"
 done
 # agent-kit's issue numbers would resolve against bootstrap in this repository's pull request.
@@ -193,7 +195,7 @@ output="$("$script")" || fail 'resume exited nonzero'
 [[ "$(remote_branch "$branch")" == "$head" ]] || fail 'resume rewrote the branch'
 grep -q '^pr create' "$work/gh.log" || fail 'resume did not open the pull request'
 [[ -s "$PIN_TEST_VALIDATED" ]] || fail 'resume did not validate the pushed branch'
-grep -qF 'body synced from agent-kit' "$work/pr-body.md" || fail 'resume body misses the role change'
+grep -qF -- "$(role_line "$new")" "$work/pr-body.md" || fail "resume body lacks the role line: $(cat "$work/pr-body.md")"
 
 # A branch of that name that pins something else is left alone.
 git -C "$work/origin.git" update-ref "refs/heads/$branch" main
@@ -209,8 +211,8 @@ output="$("$script" "$old")" || fail 'older commit exited nonzero'
 [[ "$output" == "agent-kit pin is current: origin/main pins $new, which contains $old" ]] || fail "older commit printed: $output"
 [[ "$(worktrees)" == 1 ]] || fail 'older commit left a worktree'
 
-# An agent-kit commit that leaves the role alone moves only the marker line, and the body says the
-# Pi body is unchanged, on the fresh path and on the resume path.
+# An agent-kit commit that leaves the role alone moves only the marker line. The body still names the
+# role as regenerated and leaves the diff to the reviewer, on the fresh path and on the resume path.
 git -C "$kit" commit --quiet --allow-empty -m 'Unrelated'
 same="$(git -C "$kit" rev-parse HEAD)"
 : >"$work/gh.log"
@@ -220,7 +222,7 @@ same_head="$(remote_branch "agent/pin-agent-kit-${same:0:12}")"
 [[ "$(git -C "$work/origin.git" diff "$same_head^" "$same_head" -- pi/agents/autopilot-owner.md | grep -c '^[-+][^-+]')" == 2 ]] ||
     fail "marker-only pin changed more than the marker: $(git -C "$work/origin.git" diff "$same_head^" "$same_head")"
 for path in fresh resume; do
-    grep -qF 'already matches agent-kit' "$work/pr-body.md" && ! grep -qF 'body synced' "$work/pr-body.md" ||
+    grep -qF -- "$(role_line "$same")" "$work/pr-body.md" && ! grep -qE 'already matches|body synced' "$work/pr-body.md" ||
         fail "marker-only pin ($path) body: $(cat "$work/pr-body.md")"
     rm "$work/pr-body.md"
     [[ "$path" == resume ]] || "$script" >/dev/null || fail 'marker-only resume exited nonzero'
