@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# macOS LaunchAgent program (install.sh step_claude): at login, copies the Claude Code OAuth token from
+# the keychain item claude-code-oauth into launchd's user environment, so apps started from the Dock,
+# such as T3 Code, pass CLAUDE_CODE_OAUTH_TOKEN to their Claude sessions. The value is never printed,
+# logged, or written to a file: both commands' output is discarded, and the exit status alone reports a
+# failure (launchctl print shows it). Takes no arguments.
+set -u
+token="$(security find-generic-password -s claude-code-oauth -w 2>/dev/null)" || exit 1
+[[ -n "$token" ]] || exit 1
+launchctl setenv CLAUDE_CODE_OAUTH_TOKEN "$token" >/dev/null 2>&1

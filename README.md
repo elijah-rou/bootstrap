@@ -72,15 +72,29 @@ together. Most come from user-space
 downloads; a few (C/C++ compilers, Elixir, clangd on Linux, tmux, zsh) need the system package
 manager and therefore root, sudo, or Homebrew. Without those they are reported as unavailable.
 
+On macOS, the claude selection also installs per-user LaunchAgents labeled
+`io.github.elijah-rou.bootstrap.*` in `~/Library/LaunchAgents` and loads them into the login session:
+
+- `watchdog` runs agent-kit's run watchdog (`skills/background-run/scripts/watchdog.ts scan`) every
+  15 minutes through `bin/agent-kit-watchdog`, which does nothing while the pinned agent-kit lacks it.
+- `claude-token` exists only when the keychain holds an item with service `claude-code-oauth`; install
+  checks that the item exists and never reads it. At each login, `bin/claude-token-env` copies the item into
+  launchd's user environment as `CLAUDE_CODE_OAUTH_TOKEN`, so apps started from the Dock pass it to
+  their Claude sessions. The value is never written to a file, but any process running as your user can
+  read launchd's environment, and an app started before the agent ran needs one restart to see it.
+  An item created later is picked up by the next `install.sh` or `install.sh link`. Deleting the item
+  leaves the agent in place, and it then sets nothing. Uninstall boots both agents out, unsets the
+  variable, and deletes the plists; the keychain item stays.
+
 Language servers are found on `PATH` by Helix; `config/helix/languages.toml` holds the overrides.
 
 ## Uninstall
 
 `./install.sh uninstall` signs gh out of every account (removing keyring tokens), stops Herdr
 and tmux servers it started, and purges the system packages it installed. Then it removes its
-blocks and links, restores backups, deletes caches and directories it created, and deletes the
-bootstrap root. Packages and files that existed before install are left alone, and so is a file
-you put in place of one of its links. Use `--yes` when not on a terminal.
+blocks and links, unloads and deletes its macOS LaunchAgents, restores backups, deletes caches
+and directories it created, and deletes the bootstrap root. Packages and files that existed before
+install are left alone, and so is a file you put in place of one of its links. Use `--yes` when not on a terminal.
 
 Package removal comes first and never cascades: if something installed since depends on a
 package, or the account can no longer run sudo, uninstall stops before changing anything else.

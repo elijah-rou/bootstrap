@@ -8,7 +8,7 @@ git diff --check
 python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
 
-shell_files=(install.sh bin/pi bin/node bin/pi-workspace bin/agent-kit-lag shell/env.sh shell/bashrc shell/common.sh
+shell_files=(install.sh bin/pi bin/node bin/pi-workspace bin/agent-kit-lag bin/agent-kit-watchdog bin/claude-token-env shell/env.sh shell/bashrc shell/common.sh
     shell/open.sh tests/roundtrip.sh tests/container.sh tests/uninstall_edges.sh tests/agent_kit_lag.sh scripts/pin scripts/validate
     .agents/skills/verify-bootstrap/scripts/verify.sh .agents/skills/verify-bootstrap/scripts/inside.sh)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
