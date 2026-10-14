@@ -145,11 +145,17 @@ ln -s "$root/repo/gone" "$skills/outside"
     printf 'link\t%s\t-\n' "$skills/also-gone" "$skills/outside"
 } >>"$root/state.tsv"
 link_recorded() { grep -q "^link"$'\t'"$1"$'\t' "$root/state.tsv"; }
+# A plain offline link removes the BOOTSTRAP_AGENT_KIT checkout link, so every recorded link into
+# agent-kit dangles, then its step fails into FAILURES (not die) because no checkout is at the pin.
 printf 'select\ttools\tclaude\n' >>"$root/state.tsv"
-if env -i HOME="$home" PATH="$PATH" TERM=dumb BOOTSTRAP_AGENT_KIT="$work/not-a-kit" CLAUDE_CONFIG_DIR="$home/.claude" \
-    /bin/bash "$repo/install.sh" link >/dev/null 2>&1; then fail 'link accepted a missing agent-kit'; fi
+if env -i HOME="$home" PATH="$PATH" TERM=dumb CLAUDE_CONFIG_DIR="$home/.claude" /bin/bash "$repo/install.sh" link \
+    >/dev/null 2>"$work/failed-run.err"; then fail 'link passed without an agent-kit checkout at the pin'; fi
+grep -q 'configuration incomplete: claude' "$work/failed-run.err" || fail "the failed link run did not fail its step: $(cat "$work/failed-run.err")"
 sed -i.bak '/^select\ttools\tclaude$/d' "$root/state.tsv" && rm -f "$root/state.tsv.bak"
 [[ -L "$skills/gone" ]] && link_recorded "$skills/gone" || fail 'a failed link run pruned a dangling link'
+[[ -L "$skills/mine" ]] && link_recorded "$skills/mine" || fail 'a failed link run pruned a link its checkout failure left dangling'
+# Put back the checkout link the plain run removed, as install_git does for BOOTSTRAP_AGENT_KIT.
+ln -s "$kit" "$root/tools/agent-kit"
 chmod a-w "$skills"
 link_kit >/dev/null 2>"$work/prune.err" || fail 'link failed when pruning failed'
 chmod u+w "$skills"
