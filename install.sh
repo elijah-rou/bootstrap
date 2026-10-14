@@ -417,7 +417,7 @@ link_skill() {
     if [[ "$target" == "$ROOT"/* ]]; then link_private "$source" "$target"; else link "$source" "$target"; fi
 }
 
-# Links inside the root need no record; anything outside it (an existing ~/.codex or ~/.claude) does.
+# Links inside the root need no record; anything outside it (an existing ~/.claude) does.
 place() {
     if [[ "$2" == "$ROOT"/* ]]; then link_private "$1" "$2"; else link "$1" "$2"; fi
 }
@@ -488,22 +488,6 @@ step_pi() {
     while IFS= read -r source; do
         if [[ "$source" != /* ]]; then pi install "$source" >/dev/null || { warn "Pi package failed: $source"; return 1; }; fi
     done < <(node -e 'for (const p of require(process.argv[1]).packages ?? []) console.log(typeof p === "string" ? p : p.source)' "$agent/settings.json")
-}
-
-step_codex() {
-    local kit="$TOOLS/agent-kit" name file
-    ensure_agent_kit || return 1
-    link_private "$ROOT/repo/bin/codex" "$TOOLS/bin/codex" || return 1
-    if [[ "$CODEX_HOME" != "$ROOT"/* ]]; then make_dirs "$CODEX_HOME"; else mkdir -p "$CODEX_HOME"; fi
-    for file in AGENTS.md native-tools.md; do place "$kit/codex/$file" "$CODEX_HOME/$file" || return 1; done
-    if [[ ! -e "$CODEX_HOME/config.toml" ]]; then
-        own "$CODEX_HOME/config.toml"
-        cp "$REPO/codex/config.toml" "$CODEX_HOME/config.toml" || return 1
-    fi
-    # Codex discovers skills in the shared agents directory, outside the private root.
-    while IFS= read -r name; do
-        if [[ -n "$name" ]]; then link_skill "$kit/skills/$name" "$HOME/.agents/skills/$name" || return 1; fi
-    done <"$kit/codex/skills.txt"
 }
 
 # Claude Code's configuration directory defaults to the private root (see shell/env.sh).
@@ -614,6 +598,23 @@ prepare_root() {
     ln -sfn "$REPO" "$ROOT/repo"
     load_environment
     record_package_changes
+    retire_codex || die "could not remove the retired Codex package; rerun once bun works"
+}
+
+# Codex was a tools selection until bootstrap dropped it. A machine that selected it loses the
+# selection, the codex wrapper, and the Codex package in the root. Links Codex made outside the
+# root stay recorded, so uninstall still removes them and restores what they replaced; Codex's
+# private home (login, sessions) goes when uninstall deletes the root. The selection is dropped
+# last, so an interrupted run retries.
+retire_codex() {
+    local selection="select"$'\t'"tools"$'\t'"codex"
+    grep -qxF "$selection" "$STATE" || return 0
+    info "removing the retired codex selection"
+    if [[ -L "$TOOLS/bin/codex" ]]; then rm -f "$TOOLS/bin/codex" || return 1; fi
+    if [[ -d "$BUN_INSTALL/install/global/node_modules/@openai/codex" ]]; then
+        bun remove --global @openai/codex >/dev/null || return 1
+    fi
+    awk -v line="$selection" '$0 != line' "$STATE" >"$ROOT/tmp/state" && mv "$ROOT/tmp/state" "$STATE"
 }
 
 # Relinks configuration without downloading or installing anything.
@@ -625,7 +626,7 @@ cmd_link() {
     OFFLINE=1
     while IFS=$'\t' read -r _ group name; do
         case "$name" in
-            pi|codex|claude|herdr|zsh|tmux) "step_$name" - || FAILURES="$FAILURES $name" ;;
+            pi|claude|herdr|zsh|tmux) "step_$name" - || FAILURES="$FAILURES $name" ;;
             *) ;;
         esac
     done < <(awk -F '\t' '$1 == "select"' "$STATE")

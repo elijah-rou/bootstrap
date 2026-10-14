@@ -137,10 +137,8 @@ just	tools	1.58.0	darwin-arm64	50ae3e996c974a0bf32ea7d10f495070df33f1b43e0616b27
 shellcheck	tools	0.11.0	linux-x86_64	b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6	https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.gz	shellcheck
 shellcheck	tools	0.11.0	linux-aarch64	68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc	https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.aarch64.tar.gz	shellcheck
 shellcheck	tools	0.11.0	darwin-arm64	339b930feb1ea764467013cc1f72d09cd6b869ebf1013296ba9055ab2ffbd26f	https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.aarch64.tar.gz	shellcheck
-codex	tools	latest	any	-	npm:@openai/codex	codex
-codex	tools	-	any	-	step:codex	codex
 claude	tools	latest	any	-	npm:@anthropic-ai/claude-code	claude
 claude	tools	-	any	-	step:claude	claude
 
-# Instructions, skills, Pi extensions, and Claude mods for the pi, codex, and claude selections.
+# Instructions, skills, Pi extensions, and Claude mods for the pi and claude selections.
 agent-kit	internal	14659cbe18e8f2d9573d2e730f854681520b3c68	any	-	git:https://github.com/elijah-rou/agent-kit	-

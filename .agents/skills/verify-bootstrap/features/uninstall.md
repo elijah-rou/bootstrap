@@ -33,5 +33,5 @@ Preconditions:
 
 - Container deletion alone does not prove uninstall. Observe equality while the container still exists, then delete it.
 - Root can write supposedly unwritable files; using root invalidates the recovery test.
-- Provider-side sessions and external `CODEX_HOME` are outside the installer’s purge promise.
+- Provider-side sessions and an external `CLAUDE_CONFIG_DIR` are outside the installer’s purge promise.
 - Cleanup must never remove host evidence or containers belonging to other runs.

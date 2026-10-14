@@ -23,7 +23,7 @@ Preconditions:
 
 - **Link from clean state.** `verify.sh drive RUN_ID link` runs `./install.sh link`, saves state.tsv and the Bash block, asserts the Helix symlink destination, and captures a complete account snapshot.
 - **Relink.** The same target runs `./install.sh link` again. Require byte-identical state.tsv and equal linked/relinked HOME snapshots. Docker has no network, package snapshots remain equal, and no tool files were downloaded.
-- **Protect user files.** After restoring HOME with `uninstall --yes`, the same target invokes `bash -x tests/uninstall_edges.sh`. Require `PASS install link and uninstall edge cases`, then `PASS link:` and exit 0; its xtrace covers malformed blocks, unsafe roots, user replacement git-ignore files, and existing skill links.
+- **Protect user files.** After restoring HOME with `uninstall --yes`, the same target invokes `bash -x tests/uninstall_edges.sh`. Require `PASS install link and uninstall edge cases`, then `PASS link:` and exit 0; its xtrace covers malformed blocks, unsafe roots, user replacement git-ignore files, existing skill links, and retiring a remembered codex selection.
 - **Relink after installation.** The bridge run's `install` target also invokes real `install.sh link` after both installs; capture `configuration linked` and subsequent doctor success.
 - **Proof.** Keep `artifacts/link/` and `drive-link.stderr`. Do not infer offline behavior only from the command's name.
 

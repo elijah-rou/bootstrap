@@ -27,9 +27,9 @@ curl, tar, gzip, and sha256sum or shasum. No sudo is needed for the core install
 - Records each change in `~/.local/share/bootstrap/state.tsv`.
 
 Rerunning `install.sh` converges: it updates to the pinned versions in `catalog.tsv` and
-reinstalls recorded selections. The Pi, Claude Code, and Codex CLIs are the exception: they release
+reinstalls recorded selections. The Pi and Claude Code CLIs are the exception: they release
 often, so every run installs their newest version. Claude Code also updates itself between runs;
-Pi and Codex change only when `install.sh` runs. `install.sh link` reapplies only the configuration, offline.
+Pi changes only when `install.sh` runs. `install.sh link` reapplies only the configuration, offline.
 
 ## Selections
 
@@ -39,12 +39,15 @@ Pi and Codex change only when `install.sh` runs. `install.sh link` reapplies onl
 
 `./install.sh --help` lists every name. Selections are remembered.
 
-Agents and Herdr are selections too: `--tools pi claude codex herdr`. Their instructions, skills, Pi
+Agents and Herdr are selections too: `--tools pi claude herdr`. Their instructions, skills, Pi
 extensions, and Claude mods come from [agent-kit](https://github.com/elijah-rou/agent-kit), pinned
 by commit in `catalog.tsv` and checked out once under `tools/agent-kit`. Pi loads it as a package;
-Codex and Claude link from it, including Claude's subagent roles (`claude/agents/*.md`, in pins
+Claude links from it, including its subagent roles (`claude/agents/*.md`, in pins
 that have them) into its `agents/` directory. This repository keeps their configuration: `pi/`
-(settings, models, routers, subagent definitions), `codex/config.toml`, and `claude/settings.json`.
+(settings, models, routers, subagent definitions) and `claude/settings.json`.
+Codex was a selection until it was removed; `install.sh` and `install.sh link` drop a remembered
+`codex` selection with its wrapper and Bun package, and uninstall still removes the links it made
+outside the bootstrap root, such as in an existing `~/.codex`.
 Claude Code's configuration directory defaults to the private root, so uninstall also deletes its
 macOS keychain login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
 (rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` runs agent-kit's Jev task-class
@@ -70,8 +73,8 @@ Any failure keeps `state.tsv`, so fixing the cause and rerunning finishes the jo
 
 Uninstall cannot reach copies made by others with access to the machine, provider-side sessions,
 or machine snapshots. On a machine you do not control, prefer short-lived or narrowly scoped
-credentials. A `CODEX_HOME` set before install is used as is, so Codex credentials there are not
-purged. Worktrees made with `piw` (under `~/piw-worktrees`) are your work and are kept.
+credentials. A `CLAUDE_CONFIG_DIR` set before install, such as `~/.claude`, is used as is, so
+Claude Code credentials there are not purged. Worktrees made with `piw` (under `~/piw-worktrees`) are your work and are kept.
 
 ## Local customization
 

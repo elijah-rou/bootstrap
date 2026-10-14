@@ -24,7 +24,7 @@ This is the source of truth for user-path verification of `install.sh`. Read the
 - For uninstall require before/after HOME and package equality, then removal of the run-owned container. Export evidence before deletion and list surviving files afterward.
 - Each target passes only with exit 0 and its `PASS TARGET:` line, which the CLI checks. Expected negative commands are asserted inside the helper, not mistaken for harness failures.
 - Report network/timeouts and unmet prerequisites with their transcripts. A skipped path stays skipped even if a related path passes. Public downloads are real; edge-test fixtures do not prove agent downloads or live-auth cleanup.
-- Not covered by the current smoke: bare no-option installation as a distinct invocation, selection short aliases (`-l`, `-s`, `-t`), successful language/LSP selections, no-option replay of remembered selections, root/package-manager transactions, interactive uninstall confirmation, external `CODEX_HOME`, macOS/keychain, and other distro/architecture matrices. Map these as additional proofs when relevant; do not claim them from `--tools just`.
+- Not covered by the current smoke: bare no-option installation as a distinct invocation, selection short aliases (`-l`, `-s`, `-t`), successful language/LSP selections, no-option replay of remembered selections, root/package-manager transactions, interactive uninstall confirmation, external `CLAUDE_CONFIG_DIR`, macOS/keychain, and other distro/architecture matrices. Map these as additional proofs when relevant; do not claim them from `--tools just`.
 
 ## Features
 
