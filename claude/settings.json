@@ -12,6 +12,18 @@
     "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test ! -x \"@BOOTSTRAP_ROOT@/repo/bin/agent-kit-lag\" || \"@BOOTSTRAP_ROOT@/repo/bin/agent-kit-lag\" \"@BOOTSTRAP_ROOT@\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [

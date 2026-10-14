@@ -8,8 +8,8 @@ git diff --check
 python3 scripts/check-public-safety --index
 python3 scripts/check-public-safety --worktree
 
-shell_files=(install.sh bin/pi bin/node bin/pi-workspace shell/env.sh shell/bashrc shell/common.sh
-    shell/open.sh tests/roundtrip.sh tests/container.sh tests/uninstall_edges.sh scripts/pin scripts/validate
+shell_files=(install.sh bin/pi bin/node bin/pi-workspace bin/agent-kit-lag shell/env.sh shell/bashrc shell/common.sh
+    shell/open.sh tests/roundtrip.sh tests/container.sh tests/uninstall_edges.sh tests/agent_kit_lag.sh scripts/pin scripts/validate
     .agents/skills/verify-bootstrap/scripts/verify.sh .agents/skills/verify-bootstrap/scripts/inside.sh)
 for file in "${shell_files[@]}"; do bash -n "$file"; done
 if command -v zsh >/dev/null; then zsh -n shell/zshrc; fi
@@ -28,6 +28,7 @@ awk -F '\t' '
 [[ "$(bin/node -p 'process.argv.slice(1).join(",")' a b)" == a,b ]] || { echo "bin/node -p drops arguments" >&2; exit 1; }
 
 bash tests/uninstall_edges.sh
+bash tests/agent_kit_lag.sh
 
 # Pi configuration contract tests; Bun runs their node:test suites.
 bun test pi/tests

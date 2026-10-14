@@ -52,7 +52,11 @@ installed; uninstall still removes it with everything else bootstrap recorded.
 Claude Code's configuration directory defaults to the private root, so uninstall also deletes its
 macOS keychain login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
 (rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` runs agent-kit's Jev task-class
-hint on each prompt in a public repository; it never blocks a prompt.
+hint on each prompt in a public repository; it never blocks a prompt. At session start,
+`bin/agent-kit-lag` warns in one line when the installed agent-kit is behind its `origin/main`; the
+fix is a bootstrap pull request that bumps agent-kit's pin in `catalog.tsv`. It reads only local refs;
+at most hourly it refreshes `origin/main` in the background, so a newly merged commit shows from a
+later session. A linked `BOOTSTRAP_AGENT_KIT` is not checked.
 Set `BOOTSTRAP_AGENT_KIT` to a local agent-kit checkout to develop both
 together. Most come from user-space
 downloads; a few (C/C++ compilers, Elixir, clangd on Linux, tmux, zsh) need the system package
@@ -86,8 +90,8 @@ Install reads optional files from `~/.config/bootstrap/`: `env.sh`, `bashrc`, `z
 ## Maintenance
 
 - `scripts/pin NAME VERSION` moves a catalog entry to a new version and records its checksums.
-- `scripts/validate` runs static checks, the offline link and uninstall edge cases, and the Pi
-  configuration tests (needs Bun, shellcheck, and Python).
+- `scripts/validate` runs static checks, the offline link and uninstall edge cases, the agent-kit
+  lag hook test, and the Pi configuration tests (needs Bun, shellcheck, and Python).
 - `tests/container.sh IMAGE root|user [install arguments...]` runs the install, rerun, doctor,
   and uninstall round-trip in a container and fails if HOME or the package list changed.
   `tests/roundtrip.sh` does the same on the current machine for a disposable account.
