@@ -55,9 +55,14 @@ macOS keychain login for that directory. agent-kit's locked dependencies are ins
 hint on each prompt in a public repository; it never blocks a prompt. Before each Bash, Monitor, or
 PowerShell call it runs agent-kit's git guard (`agentic/tools/git-guard`), the policy Pi's
 `git-interceptor` extension applies: it refuses skipping git hooks, and publishing (push, merge, rebase,
-`gh pr merge`, and the like) from subagents other than `autopilot-owner`. From Claude Code 2.1.295 the
-guard fails closed: when it cannot run (no agent-kit checkout, no Bun, or a pin without the guard),
-Claude Code refuses those calls until `install.sh` restores it. At session start,
+`gh pr merge`, and the like) from subagents other than `autopilot-owner`. The hook runs the guard with
+bootstrap's own Bun (`tools/bin/bun`), not one from Claude Code's `PATH`. It fails open when the guard
+file is absent: with no agent-kit checkout (as after uninstall), or a pin or linked `BOOTSTRAP_AGENT_KIT`
+checkout without `agentic/tools/git-guard/cli.ts`, it allows the call. It fails closed when the guard
+runs and errors (bootstrap's Bun missing, a crash, or a run past its 5-second timeout): the hook exits
+nonzero and sets `"onFailure": "block"`, which tells Claude Code to refuse the call. bootstrap's tests run
+the rendered command as Claude Code would and check its output and exit status; they do not observe
+Claude Code honoring `onFailure`. At session start,
 `bin/agent-kit-lag` warns in one line when the installed agent-kit is behind its `origin/main`; the
 fix is a bootstrap pull request that bumps agent-kit's pin in `catalog.tsv`. It reads only local refs;
 at most hourly it refreshes `origin/main` in the background, so a newly merged commit shows from a

@@ -62,6 +62,34 @@ link_kit >/dev/null 2>&1 || fail 'link with claude selected failed'
 [[ "$(readlink "$home/.claude/skills/mine")" == "$root/tools/agent-kit/skills/mine" ]] || fail 'a new skill was not linked'
 [[ -z "$(find "$home/.claude/skills" -name '*.bootstrap-backup')" ]] || fail 'a backup was left in the skill directory'
 rm "$home/.claude/skills/theirs"
+
+# Claude's git guard hook, rendered under this HOME with a space and run under sh -c from elsewhere as
+# Claude runs it. With no guard in the kit it allows (exit 0, no output). With one, it runs bootstrap's
+# own Bun, here a fixture that checks it got the kit and guard paths whole and denies a --no-verify
+# commit (the round trip runs agent-kit's guard with the real Bun). Without that Bun the hook exits
+# nonzero, which onFailure block turns into a refusal.
+guard_command="$(node -e 'const settings = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const entry = (settings.hooks?.PreToolUse ?? []).find((entry) => entry.matcher === "Bash|Monitor|PowerShell");
+    if (!entry) process.exit(1);
+    console.log(entry.hooks[0].command);' "$home/.claude/settings.json")" || fail 'the rendered Claude settings have no git guard hook'
+guard() { (cd / && printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$1" | sh -c "$guard_command") 2>"$work/guard.err"; }
+output="$(guard 'git commit --no-verify -m x')" && [[ -z "$output" ]] ||
+    fail "the git guard without a kit guard did not allow: $output $(cat "$work/guard.err")"
+mkdir -p "$kit/agentic/tools/git-guard" && touch "$kit/agentic/tools/git-guard/cli.ts"
+cat >"$root/tools/bin/bun" <<FIXTURE
+#!/bin/sh
+[ "\$#" = 4 ] && [ "\$1" = --cwd ] && [ "\$2" = "$root/tools/agent-kit" ] && [ "\$3" = "$root/tools/agent-kit/agentic/tools/git-guard/cli.ts" ] &&
+    [ "\$4" = --claude-hook ] && cd "\$2" && [ -f "\$3" ] || { echo "unexpected bun arguments: \$*" >&2; exit 1; }
+if grep -q -- --no-verify; then echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}'; fi
+exit 0
+FIXTURE
+chmod +x "$root/tools/bin/bun"
+output="$(guard 'git commit --no-verify -m x')" || fail "the git guard failed under a root with a space: $(cat "$work/guard.err")"
+[[ "$output" == *'"permissionDecision":"deny"'* ]] || fail "the git guard did not deny a --no-verify commit: $output"
+output="$(guard 'git status')" && [[ -z "$output" ]] || fail "the git guard did not allow git status: $output $(cat "$work/guard.err")"
+rm "$root/tools/bin/bun"
+if guard 'git status' >/dev/null; then fail 'the git guard exited 0 without bootstrap Bun'; fi
+rm -r "$kit/agentic"
 # Undo the test selection so the uninstall below covers only what install recorded.
 sed -i.bak '/^select\ttools\tclaude$/d' "$root/state.tsv" && rm -f "$root/state.tsv.bak"
 
