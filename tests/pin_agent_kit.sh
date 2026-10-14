@@ -46,11 +46,18 @@ git clone --quiet "$work/origin.git" "$checkout"
 script="$checkout/scripts/pin-agent-kit"
 export PIN_TEST_VALIDATED="$work/validated"
 
-# gh stub: `pr list` applies the script's --jq filter (with jq) to $work/open-prs.json, the open
-# pull requests as gh's JSON lists them; `pr create` saves its body and prints a URL.
+# gh stub: `pr list` keeps only the fields the script asks for with --json, as gh does, and applies
+# its --jq filter (with jq) to $work/open-prs.json, the open pull requests; `pr create` saves its
+# body and prints a URL.
 printf '[]\n' >"$work/open-prs.json"
-open_pr_json() { # BRANCH URL CROSS_REPOSITORY HEAD_REPOSITORY
-    printf '{"headRefName": "%s", "url": "%s", "isCrossRepository": %s, "headRepository": {"name": "bootstrap", "nameWithOwner": "%s"}}' "$@"
+# One pull request in the shape gh 2.102.0 (catalog.tsv's pin) returns, captured from
+# `gh pr list -R elijah-rou/bootstrap --state all --limit 2 --json number,headRefName,isCrossRepository,headRepositoryOwner,headRepository`.
+open_pr_json() { # BRANCH URL CROSS_REPOSITORY HEAD_OWNER
+    printf '{"headRefName": "%s", "url": "%s", "isCrossRepository": %s, "headRepository": {"id": "R_kgDOUQdX2w", "name": "bootstrap", "nameWithOwner": "%s/bootstrap"}, "headRepositoryOwner": {"id": "MDQ6VXNlcjE1MTI3NzM1", "name": "Owner Name", "login": "%s"}, "number": 5}' "$1" "$2" "$3" "$4" "$4"
+}
+# gh before 2.89 (cli/cli 5ed8cf0) queried headRepository{id,name}: no nameWithOwner.
+older_gh_pr_json() { # BRANCH URL CROSS_REPOSITORY HEAD_OWNER
+    open_pr_json "$@" | jq -c 'del(.headRepository.nameWithOwner)'
 }
 mkdir -p "$work/bin"
 cat >"$work/bin/gh" <<STUB
@@ -58,8 +65,12 @@ cat >"$work/bin/gh" <<STUB
 printf '%s\n' "\$*" >>"$work/gh.log"
 case "\$1 \$2" in
     'pr list')
-        while [[ \$# -gt 0 ]]; do [[ "\$1" == --jq ]] && filter="\$2"; shift; done
-        jq -r "\$filter" "$work/open-prs.json" ;;
+        while [[ \$# -gt 0 ]]; do
+            [[ "\$1" == --json ]] && fields="\$2"
+            [[ "\$1" == --jq ]] && filter="\$2"
+            shift
+        done
+        jq -c "map({\$fields})" "$work/open-prs.json" | jq -r "\$filter" ;;
     'pr create')
         while [[ \$# -gt 0 ]]; do [[ "\$1" == --body-file ]] && cp "\$2" "$work/pr-body.md"; shift; done
         printf 'Creating pull request\nhttps://github.invalid/bootstrap/pull/7\n' ;;
@@ -126,21 +137,23 @@ grep -q 'nothing was committed or pushed' "$work/err" || fail "failing validate:
 rm "$PIN_TEST_VALIDATED.fail"
 
 # Another open pin pull request from this repository would conflict with this one on the agent-kit
-# row: refuse, name it, and change nothing.
-printf '[%s]\n' "$(open_pr_json agent/pin-agent-kit-0123456789ab https://github.invalid/bootstrap/pull/5 false elijah-rou/bootstrap)" >"$work/open-prs.json"
-: >"$work/gh.log"
-status=0; "$script" >/dev/null 2>"$work/err" || status=$?
-[[ "$status" == 1 ]] || fail "other open pin exited $status"
-grep -qF 'https://github.invalid/bootstrap/pull/5' "$work/err" || fail "other open pin: $(cat "$work/err")"
-[[ -z "$(remote_branch "$branch")" ]] || fail 'other open pin pushed'
-! grep -q '^pr create' "$work/gh.log" || fail 'other open pin opened a pull request'
-[[ "$(worktrees)" == 1 ]] || fail 'other open pin left a worktree'
+# row: refuse, name it, and change nothing, in the shape current gh returns and the older one.
+for shape in open_pr_json older_gh_pr_json; do
+    printf '[%s]\n' "$("$shape" agent/pin-agent-kit-0123456789ab https://github.invalid/bootstrap/pull/5 false elijah-rou)" >"$work/open-prs.json"
+    : >"$work/gh.log"
+    status=0; "$script" >/dev/null 2>"$work/err" || status=$?
+    [[ "$status" == 1 ]] || fail "other open pin ($shape) exited $status"
+    grep -qF 'https://github.invalid/bootstrap/pull/5' "$work/err" || fail "other open pin ($shape): $(cat "$work/err")"
+    [[ -z "$(remote_branch "$branch")" ]] || fail "other open pin ($shape) pushed"
+    ! grep -q '^pr create' "$work/gh.log" || fail "other open pin ($shape) opened a pull request"
+    [[ "$(worktrees)" == 1 ]] || fail "other open pin ($shape) left a worktree"
+done
 
 # The real run with no argument pins agent-kit's main. A fork's pull request on the same branch
 # name is not this repository's pin, and neither is a branch that only shares the prefix.
 : >"$work/gh.log"
-printf '[%s, %s]\n' "$(open_pr_json "$branch" https://github.invalid/bootstrap/pull/6 true someone/bootstrap)" \
-    "$(open_pr_json agent/pin-agent-kit-script https://github.invalid/bootstrap/pull/4 false elijah-rou/bootstrap)" >"$work/open-prs.json"
+printf '[%s, %s]\n' "$(open_pr_json "$branch" https://github.invalid/bootstrap/pull/6 true someone)" \
+    "$(open_pr_json agent/pin-agent-kit-script https://github.invalid/bootstrap/pull/4 false elijah-rou)" >"$work/open-prs.json"
 output="$("$script")" || fail 'pin exited nonzero'
 [[ "${output##*$'\n'}" == https://github.invalid/bootstrap/pull/7 ]] || fail "last line is not the URL: $output"
 grep -q '^pr list .*--repo elijah-rou/bootstrap' "$work/gh.log" || fail "gh pr list: $(cat "$work/gh.log")"
@@ -163,12 +176,14 @@ done
 [[ -z "$(git -C "$checkout" branch --list 'agent/*')" ]] || fail 'pin left a local branch'
 
 # An open pull request on the branch from this repository is reused: its URL, no push, no new one.
-printf '[%s]\n' "$(open_pr_json "$branch" https://github.invalid/bootstrap/pull/7 false elijah-rou/bootstrap)" >"$work/open-prs.json"
-: >"$work/gh.log"
-output="$("$script" "$new")" || fail 'reuse exited nonzero'
-[[ "${output##*$'\n'}" == https://github.invalid/bootstrap/pull/7 ]] || fail "reuse printed: $output"
-[[ "$(remote_branch "$branch")" == "$head" ]] || fail 'reuse pushed'
-! grep -q '^pr create' "$work/gh.log" || fail 'reuse opened another pull request'
+for shape in open_pr_json older_gh_pr_json; do
+    printf '[%s]\n' "$("$shape" "$branch" https://github.invalid/bootstrap/pull/7 false elijah-rou)" >"$work/open-prs.json"
+    : >"$work/gh.log"
+    output="$("$script" "$new")" || fail "reuse ($shape) exited nonzero"
+    [[ "${output##*$'\n'}" == https://github.invalid/bootstrap/pull/7 ]] || fail "reuse ($shape) printed: $output"
+    [[ "$(remote_branch "$branch")" == "$head" ]] || fail "reuse ($shape) pushed"
+    ! grep -q '^pr create' "$work/gh.log" || fail "reuse ($shape) opened another pull request"
+done
 printf '[]\n' >"$work/open-prs.json"
 
 # A pushed branch with no open pull request: validate it and open the pull request, never rewrite it.
@@ -194,8 +209,25 @@ output="$("$script" "$old")" || fail 'older commit exited nonzero'
 [[ "$output" == "agent-kit pin is current: origin/main pins $new, which contains $old" ]] || fail "older commit printed: $output"
 [[ "$(worktrees)" == 1 ]] || fail 'older commit left a worktree'
 
-# Text added to the Pi body by hand would be erased by the next pin: stop and name it instead.
+# An agent-kit commit that leaves the role alone moves only the marker line, and the body says the
+# Pi body is unchanged, on the fresh path and on the resume path.
 git -C "$kit" commit --quiet --allow-empty -m 'Unrelated'
+same="$(git -C "$kit" rev-parse HEAD)"
+: >"$work/gh.log"
+"$script" >/dev/null || fail 'marker-only pin exited nonzero'
+same_head="$(remote_branch "agent/pin-agent-kit-${same:0:12}")"
+[[ -n "$same_head" ]] || fail 'marker-only pin pushed no branch'
+[[ "$(git -C "$work/origin.git" diff "$same_head^" "$same_head" -- pi/agents/autopilot-owner.md | grep -c '^[-+][^-+]')" == 2 ]] ||
+    fail "marker-only pin changed more than the marker: $(git -C "$work/origin.git" diff "$same_head^" "$same_head")"
+for path in fresh resume; do
+    grep -qF 'already matches agent-kit' "$work/pr-body.md" && ! grep -qF 'body synced' "$work/pr-body.md" ||
+        fail "marker-only pin ($path) body: $(cat "$work/pr-body.md")"
+    rm "$work/pr-body.md"
+    [[ "$path" == resume ]] || "$script" >/dev/null || fail 'marker-only resume exited nonzero'
+done
+[[ "$(remote_branch "agent/pin-agent-kit-${same:0:12}")" == "$same_head" ]] || fail 'marker-only resume rewrote the branch'
+
+# Text added to the Pi body by hand would be erased by the next pin: stop and name it instead.
 git clone --quiet "$work/origin.git" "$work/edit"
 printf 'Ask through contact_supervisor before rebasing.\n' >>"$work/edit/pi/agents/autopilot-owner.md"
 git -C "$work/edit" commit --quiet -am 'Pi-only text' && git -C "$work/edit" push --quiet origin HEAD:main
