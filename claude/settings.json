@@ -35,6 +35,16 @@
             "onFailure": "block"
           }
         ]
+      },
+      {
+        "matcher": "Edit|MultiEdit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test ! -f \"@AGENT_KIT@/agentic/tools/skill-reminder/cli.ts\" || \"@BOOTSTRAP_ROOT@/tools/bin/bun\" --cwd \"@AGENT_KIT@\" \"@AGENT_KIT@/agentic/tools/skill-reminder/cli.ts\" --claude-hook",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

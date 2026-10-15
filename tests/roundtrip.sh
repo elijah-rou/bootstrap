@@ -83,6 +83,26 @@ if grep -qx "select	tools	claude" "$HOME/.local/share/bootstrap/state.tsv"; then
             fail "the git guard with the kit gone did not allow: $output"
         ! hook "$push" "${command//"$bun"/$bun-missing}" >/dev/null 2>&1 ||
             fail "the git guard without Bun exited 0"
+        # The skill reminder fails open: no onFailure. Its first file edit in a session gets the reminder
+        # as additionalContext and the next gets nothing; with the kit gone it allows.
+        reminder="$(jq -ec ".hooks.PreToolUse[] | select(.matcher == \"Edit|MultiEdit|Write|NotebookEdit\") | .hooks[0]" "$settings")" ||
+            fail "$settings has no PreToolUse entry for Edit|MultiEdit|Write|NotebookEdit"
+        jq -e ".type == \"command\" and .timeout == 5 and (has(\"onFailure\") | not)" <<<"$reminder" >/dev/null ||
+            fail "the skill reminder hook is not a fail-open command with a 5 second timeout: $reminder"
+        command="$(jq -r .command <<<"$reminder")"
+        cli="$kit/agentic/tools/skill-reminder/cli.ts"
+        [[ "$command" == "test ! -f \"$cli\" || \"$bun\" --cwd \"$kit\" \"$cli\" --claude-hook" ]] ||
+            fail "unexpected skill reminder command: $command"
+        edit="{\"session_id\":\"roundtrip-$$\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"/tmp/a.ts\"}}"
+        state="$(mktemp -d)"
+        output="$(export XDG_STATE_HOME="$state"; hook "$edit" "$command")" || fail "the skill reminder failed on a first edit: $command"
+        [[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" == *code-design* ]] ||
+            fail "the skill reminder did not remind on a first edit: $output"
+        output="$(export XDG_STATE_HOME="$state"; hook "$edit" "$command")" && [[ -z "$output" ]] ||
+            fail "the skill reminder reminded twice in one session: $output"
+        output="$(export XDG_STATE_HOME="$state"; hook "$edit" "${command//"$kit"/$BOOTSTRAP_ROOT/tools/no-agent-kit}")" && [[ -z "$output" ]] ||
+            fail "the skill reminder with the kit gone did not allow: $output"
+        rm -rf "$state"
         command="$(jq -er ".hooks.SessionStart[0].hooks[0].command" "$settings")"
         pinned="$(git -C "$kit" rev-parse HEAD)"
         restore() { git -C "$kit" -c advice.detachedHead=false checkout --quiet --detach "$pinned"; rm -f "$kit/.git/bootstrap-kit-lag"; }
