@@ -511,7 +511,7 @@ step_pi() {
 
 # Claude Code's configuration directory defaults to the private root (see shell/env.sh).
 step_claude() {
-    local kit="$TOOLS/agent-kit" entry home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+    local kit="$TOOLS/agent-kit" entry home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}" settings="$REPO/claude/settings.json"
     ensure_agent_kit || return 1
     # Claude Code keeps per-project logs in the platform cache, which CLAUDE_CONFIG_DIR does not move.
     own "$CACHE_HOME/claude-cli-nodejs" "$HOME/Library/Caches/claude-cli-nodejs"
@@ -527,7 +527,14 @@ step_claude() {
     done <"$kit/claude/skills.txt"
     # Claude Code discovers the Mod's plugin manifest under its skills directory.
     link_skill "$kit/claude/mods/trial-tools" "$home/skills/trial-tools" || return 1
-    render_config "$REPO/claude/settings.json" "$CONFIG_HOME/bootstrap/claude-settings.json" "$home/settings.json" || return 1
+    # Claude Code exits rather than start in bypassPermissions as root, so root keeps permission prompts.
+    if [[ "$(id -u)" == 0 ]]; then
+        node -e 'const settings = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+            delete settings.permissions?.defaultMode;
+            process.stdout.write(`${JSON.stringify(settings, null, 2)}\n`);' "$settings" >"$ROOT/tmp/claude-settings.json" || return 1
+        settings="$ROOT/tmp/claude-settings.json"
+    fi
+    render_config "$settings" "$CONFIG_HOME/bootstrap/claude-settings.json" "$home/settings.json" || return 1
     [[ "$(uname -s)" == Darwin ]] || return 0
     # launchd runs these programs, so they are copies with an explicit mode, not links into the checkout.
     mkdir -p "$TOOLS/libexec" && install -m 0755 "$ROOT/repo/bin/agent-kit-watchdog" "$TOOLS/libexec/agent-kit-watchdog" &&
