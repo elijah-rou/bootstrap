@@ -54,7 +54,12 @@ When a new pin drops a file that a recorded link points to (agent-kit removing a
 replaced, and drops its record. Links bootstrap did not record, and links whose target exists, stay.
 Claude Code's configuration directory defaults to the private root, so uninstall also deletes its
 macOS keychain login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
-(rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` runs agent-kit's Jev task-class
+(rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` starts Claude Code in
+`bypassPermissions` mode, as `--dangerously-skip-permissions` does: no permission prompts, though its hooks
+still run. Claude Code asks you to accept that mode, and asks again after an install rewrites its settings.
+Claude Code refuses that mode as root, so a root install leaves it out and keeps the prompts. To keep
+prompts elsewhere, set `permissions.defaultMode` in `~/.config/bootstrap/claude-settings.json` (see Local
+customization). It also runs agent-kit's Jev task-class
 hint on each prompt in a public repository; it never blocks a prompt. Before each Bash, Monitor, or
 PowerShell call it runs agent-kit's git guard (`agentic/tools/git-guard`), the policy Pi's
 `git-interceptor` extension applies: it refuses skipping git hooks, and publishing (push, merge, rebase,
