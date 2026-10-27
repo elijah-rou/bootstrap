@@ -97,6 +97,11 @@ link_kit >/dev/null 2>&1 || fail 'link with claude selected failed'
 [[ -z "$(find "$home/.claude/skills" -name '*.bootstrap-backup')" ]] || fail 'a backup was left in the skill directory'
 rm "$home/.claude/skills/theirs"
 
+# Claude starts without permission prompts unless the local overlay says otherwise.
+[[ "$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).permissions?.defaultMode' \
+    "$home/.claude/settings.json")" == bypassPermissions ]] ||
+    fail 'the rendered Claude settings do not default to bypassPermissions'
+
 # Claude's git guard hook, rendered under this HOME with a space and run under sh -c from elsewhere as
 # Claude runs it. With no guard in the kit it allows (exit 0, no output). With one, it runs bootstrap's
 # own Bun, here a fixture that checks it got the kit and guard paths whole and denies a --no-verify
