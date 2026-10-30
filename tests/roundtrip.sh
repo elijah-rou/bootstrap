@@ -64,6 +64,9 @@ if grep -qx "select	tools	claude" "$HOME/.local/share/bootstrap/state.tsv"; then
         mode="$(jq -r ".permissions.defaultMode // \"unset\"" "$settings")"
         if [[ "$(id -u)" == 0 ]]; then [[ "$mode" == unset ]]; else [[ "$mode" == bypassPermissions ]]; fi ||
             fail "$settings sets defaultMode $mode for uid $(id -u)"
+        skip="$(jq -r ".skipDangerousModePermissionPrompt // \"unset\"" "$settings")"
+        if [[ "$(id -u)" == 0 ]]; then [[ "$skip" == unset ]]; else [[ "$skip" == true ]]; fi ||
+            fail "$settings sets skipDangerousModePermissionPrompt $skip for uid $(id -u)"
         kit="$BOOTSTRAP_ROOT/tools/agent-kit"
         guard="$(jq -ec ".hooks.PreToolUse[] | select(.matcher == \"Bash|Monitor|PowerShell\") | .hooks[0]" "$settings")" ||
             fail "$settings has no PreToolUse entry for Bash|Monitor|PowerShell"

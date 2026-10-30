@@ -56,10 +56,11 @@ Claude Code's configuration directory defaults to the private root, so uninstall
 macOS keychain login for that directory. agent-kit's locked dependencies are installed with Bun, and its `agentic` CLI
 (rulesets, verdicts, the PR watcher) goes on `PATH`. `claude/settings.json` starts Claude Code in
 `bypassPermissions` mode, as `--dangerously-skip-permissions` does: no permission prompts, though its hooks
-still run. Claude Code asks you to accept that mode, and asks again after an install rewrites its settings.
-Claude Code refuses that mode as root, so a root install leaves it out and keeps the prompts. To keep
-prompts elsewhere, set `permissions.defaultMode` in `~/.config/bootstrap/claude-settings.json` (see Local
-customization). It also runs agent-kit's Jev task-class
+still run. The settings also record that you accept that mode, so Claude Code does not ask. They run
+Rex's SessionStart hook when `rex` is on `PATH`, and do nothing otherwise.
+Claude Code refuses that mode as root, so a root install leaves out the mode and its acceptance and keeps
+the prompts. To keep prompts elsewhere, set `permissions.defaultMode` in
+`~/.config/bootstrap/claude-settings.json` (see Local customization). It also runs agent-kit's Jev task-class
 hint on each prompt in a public repository; it never blocks a prompt. Before each Bash, Monitor, or
 PowerShell call it runs agent-kit's git guard (`agentic/tools/git-guard`), the policy Pi's
 `git-interceptor` extension applies: it refuses skipping git hooks, and publishing (push, merge, rebase,
