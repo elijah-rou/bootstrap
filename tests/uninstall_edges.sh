@@ -100,6 +100,14 @@ rm "$home/.claude/skills/theirs"
 # Claude starts without permission prompts unless the local overlay says otherwise.
 claude_mode() { node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).permissions?.defaultMode' "$home/.claude/settings.json"; }
 [[ "$(claude_mode)" == bypassPermissions ]] || fail 'the rendered Claude settings do not default to bypassPermissions'
+# The base records Claude's acceptance of that mode and Rex's SessionStart hook exactly as `rex skill
+# setup` writes it, so neither depends on the rendered file a re-render replaces.
+node -e 'const settings = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const rex = JSON.stringify({ hooks: [{ type: "command",
+        command: "/bin/sh -c '\''rex __internal session-start --agent claude 2>/dev/null || true'\''", timeout: 5 }] });
+    process.exit(settings.skipDangerousModePermissionPrompt === true &&
+        (settings.hooks?.SessionStart ?? []).some((entry) => JSON.stringify(entry) === rex) ? 0 : 1)' \
+    "$home/.claude/settings.json" || fail 'the rendered Claude settings lack the bypass acceptance or the Rex SessionStart hook'
 mkdir -p "$home/.config/bootstrap" && printf '{"permissions":{"defaultMode":"default"}}\n' >"$home/.config/bootstrap/claude-settings.json"
 link_kit >/dev/null 2>&1 || fail 'link with a Claude overlay failed'
 [[ "$(claude_mode)" == default ]] || fail "the Claude overlay did not override the permission mode: $(claude_mode)"
