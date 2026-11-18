@@ -9,7 +9,8 @@
     "refreshInterval": 60
   },
   "env": {
-    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
+    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1",
+    "CLAUDE_CODE_EXPERIMENTAL_CODE_MODE": "1"
   },
   "hooks": {
     "SessionStart": [
