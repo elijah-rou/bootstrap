@@ -527,10 +527,12 @@ step_claude() {
     done <"$kit/claude/skills.txt"
     # Claude Code discovers the Mod's plugin manifest under its skills directory.
     link_skill "$kit/claude/mods/trial-tools" "$home/skills/trial-tools" || return 1
-    # Claude Code exits rather than start in bypassPermissions as root, so root keeps permission prompts.
+    # Claude Code exits rather than start in bypassPermissions as root, so root keeps permission prompts
+    # and records no acceptance of that mode.
     if [[ "$(id -u)" == 0 ]]; then
         node -e 'const settings = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
             delete settings.permissions?.defaultMode;
+            delete settings.skipDangerousModePermissionPrompt;
             process.stdout.write(`${JSON.stringify(settings, null, 2)}\n`);' "$settings" >"$ROOT/tmp/claude-settings.json" || return 1
         settings="$ROOT/tmp/claude-settings.json"
     fi
