@@ -16,7 +16,8 @@ elif command -v pacman >/dev/null
 then
     # The pacman syscall sandbox fails under emulated containers; real hosts keep it.
     sed -i "s/^\[options\]/[options]\nDisableSandbox/" /etc/pacman.conf
-    pacman -Sy --noconfirm --needed git curl tar gzip xz diffutils >/dev/null
+    # Arch supports only full upgrades (wiki: System maintenance#Partial upgrades are unsupported); -Sy with targets breaks on a soname bump.
+    pacman -Syu --noconfirm --needed git curl tar gzip xz diffutils >/dev/null
 fi'
 
 case "$account" in
